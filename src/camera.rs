@@ -35,7 +35,7 @@ impl Camera {
     
     #[allow(dead_code)]
     pub fn look_at(&mut self, from: hcm::Point3, target: hcm::Point3, up: hcm::Vec3) {
-        let forward = hcm::normalize(target - from);  // new z-axis
+        let forward = (target - from).hat();  // new z-axis
         let right = up.cross(forward).hat();          // new x-axis, equals to cross(y, z)
         let up = forward.cross(right);                // adjusted y-axis, equals to cross(z, x)
         

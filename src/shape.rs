@@ -3,10 +3,12 @@ use crate::ray::Ray;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interaction {
-    pos: Point3,
-    ray_t: f32,
-    normal: Vec3,
-    albedo: Vec3,
+    pub pos: Point3,
+    pub ray_t: f32,
+    pub normal: Vec3,
+    pub albedo: Vec3,
+    // pub dpdu: Vec3,
+    // pub dpdv: Vec3
 }
 
 #[allow(dead_code)]
@@ -56,7 +58,7 @@ impl Shape for Sphere {
         } else {
             let c = f.norm_squared() - self.radius * self.radius;
             let neg_b = -dir.dot(f);
-            let t0 = neg_b + f32::signum(neg_b) * f32::sqrt(delta);
+            let t0 = neg_b + neg_b.signum() * delta.sqrt();
             let t1 = c / t0;
             if t0 < t1 {
                 (t0, t1)

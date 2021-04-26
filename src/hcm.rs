@@ -1,5 +1,7 @@
-use std::{f32::consts::PI, fmt, ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub}};
-
+use std::{
+    fmt,
+    ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub},
+};
 
 /// Represents a 3D vector. Each component is a `f32` number.
 /// Components can be accessed using `v.x` `v.y` `v.z`,
@@ -7,16 +9,16 @@ use std::{f32::consts::PI, fmt, ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub}}
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub struct Vec3 {
-    x: f32,
-    y: f32,
-    z: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct Point3 {
-    x: f32,
-    y: f32,
-    z: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -28,13 +30,13 @@ pub struct Degree(pub f32);
 impl From<Degree> for Radian {
     fn from(d: Degree) -> Self {
         let Degree(deg) = d;
-        Radian(deg * std::f32::consts::PI / 180.0)
+        Radian(deg.to_radians())
     }
 }
 impl Degree {
     pub fn to_radian(self) -> Radian {
         let Degree(d) = self;
-        Radian(d * PI / 180.0)
+        Radian(d.to_radians())
     }
 }
 
@@ -109,6 +111,13 @@ impl Vec3 {
             self * inv_sqrt
         }
     }
+    // Returns the index to the element with minimum magnitude.
+    pub fn abs_min_dimension(self) -> usize {
+        let abs = [self.x.abs(), self.y.abs(), self.z.abs()];
+        let res = if abs[0] < abs[1] {0} else {1};
+        let res = if abs[res] < abs[2] {res} else {2};
+        res
+    }
 }
 
 impl Add for Vec3 {
@@ -153,7 +162,7 @@ impl IndexMut<usize> for Vec3 {
             0 => &mut self.x,
             1 => &mut self.y,
             2 => &mut self.z,
-            _ => panic!("invalid index")
+            _ => panic!("invalid index"),
         }
     }
 }
@@ -175,10 +184,6 @@ impl Div<f32> for Vec3 {
     fn div(self, s: f32) -> Vec3 {
         Vec3::new(self.x / s, self.y / s, self.z / s)
     }
-}
-
-pub fn normalize(v: Vec3) -> Vec3 {
-    v.hat()
 }
 
 // Implementation of Points
@@ -314,7 +319,7 @@ impl IndexMut<usize> for Vec4 {
     }
 }
 
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Mat4 {
     cols: [Vec4; 4],
 }
@@ -338,7 +343,7 @@ impl Mat4 {
         mat.cols[3] = Vec4::new(t.x, t.y, t.z, 1.0);
         mat
     }
-    pub fn nonuniform_scale(s : Vec3) -> Mat4 {
+    pub fn nonuniform_scale(s: Vec3) -> Mat4 {
         let mut mat = Self::identity();
         mat.cols[0][0] = s[0];
         mat.cols[1][1] = s[1];
@@ -371,7 +376,7 @@ impl Mat4 {
         let mut mat = Self::zero();
         for i in 0..4 {
             for j in 0..4 {
-               mat.cols[i][j] = self.cols[j][i]; 
+                mat.cols[i][j] = self.cols[j][i];
             }
         }
         mat
@@ -412,6 +417,83 @@ impl Mul<Point3> for Mat4 {
             Point3::new(v4.x, v4.y, v4.z)
         } else {
             Point3::new(v4.x / v4.w, v4.y / v4.w, v4.z / v4.w)
+        }
+    }
+}
+
+// Mod-level functions
+#[allow(dead_code)]
+pub fn normalize(x: f32, y: f32, z: f32) -> Vec3 {
+    Vec3::new(x, y, z).hat()
+}
+
+pub fn make_coord_system(v: Vec3) -> (Vec3, Vec3) {
+    let i0 = v.abs_min_dimension();
+    let (i1, i2) = ((i0 + 1) % 3, (i0 + 2) % 3);
+    let mut v1 = Vec3::zero();
+    // v = [x, y, z] -> [x, 0, z], v1 = [-z, 0, x]
+    v1[i1] = v[i2];
+    v1[i2] = -v[i1];
+    assert_eq!(v1.dot(v), 0.0);
+    let v2 = v.cross(v1);
+    (v1.hat(), v2.hat())
+}
+
+pub fn reflect(normal: Vec3, wi: Vec3) -> Vec3 {
+    let perp = wi.dot(normal) * normal / normal.norm_squared();
+    let parallel = wi - perp;
+    wi - 2.0 * parallel
+}
+
+pub enum Refract {
+    FullReflect(Vec3),
+    Transmit(Vec3),
+}
+
+pub use Refract::FullReflect;
+pub use Refract::Transmit;
+
+/// Refract incident light `wi` w.r.t. normal.
+/// `normal` is assumed to be unit-length and forms an obtuse angle with `wi`.
+/// `ni` and `no` are refraction indices.
+/// If `ni`/`no` < 1 (e.g., from water to air), there is a chance of full reflection.
+pub fn refract(normal: Vec3, wi: Vec3, ni_over_no: f32) -> Refract {
+    let wi = wi.hat();
+    let normal = normal.hat();
+    let cos_theta_i = wi.dot(normal);
+    let sin2_theta_i = (1.0 - cos_theta_i.powi(2)).max(0.0);
+    // sin_i * ni = sin_o * no => sino = sin_i * ni_over_no
+    let sin2_theta_o = sin2_theta_i * ni_over_no.powi(2);
+    if sin2_theta_o >= 1.0 {
+        FullReflect(reflect(normal, wi))
+    } else {
+        let cos_theta_o = (1.0 - sin2_theta_o).sqrt();
+        let refracted = ni_over_no * -wi + (ni_over_no * cos_theta_i - cos_theta_o) * normal;
+        Transmit(refracted)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    type Vec3 = super::Vec3;
+    #[test]
+    fn test_reflect() {
+        let normal = Vec3::ybase();
+        let wi = Vec3::new(2.0, 1.0, 0.5);
+        let wo = Vec3::new(-2.0, 1.0, -0.5);
+        let reflect_wi = super::reflect(normal, wi);
+        eprintln!("reflect_wi = {}", reflect_wi);
+        assert!((reflect_wi - wo).norm_squared() < std::f32::EPSILON);
+    }
+    #[test]
+    fn test_refract() {
+        let normal = Vec3::ybase() * 6.0;
+        let wi = Vec3::new(1.0, 1.0, 0.0).hat();
+        let wo = Vec3::new(-0.5, -0.5 * 3.0f32.sqrt(), 0.0);
+        let refract_wo = super::refract(normal, wi, 0.5f32.sqrt());
+        match refract_wo {
+            super::FullReflect(_) => panic!(""),
+            super::Transmit(v) => assert!((wo - v).norm_squared() < std::f32::EPSILON, "{} vs {}", v, wo),
         }
     }
 }
