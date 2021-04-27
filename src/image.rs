@@ -30,6 +30,9 @@ impl Color {
     pub fn rgb(r: u8, g: u8, b: u8) -> Color {
         Color::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
     }
+    pub fn gamma_encode(&self) -> Self {
+        Color::new(self.r.sqrt(), self.g.sqrt(), self.b.sqrt())
+    }
     pub fn to_u8(&self) -> [u8; 3] {
         [
             saturate_cast_u8(self.r),
@@ -57,5 +60,19 @@ impl std::ops::Mul<Color> for f32 {
     type Output = Color;
     fn mul(self, c: Color) -> Color {
         c * self
+    }
+}
+
+impl std::ops::Mul for Color {
+    type Output = Color;
+    fn mul(self, rhs: Color) -> Self::Output {
+        Color::new(self.r * rhs.r, self.g * rhs.g, self.b * rhs.b)
+    }
+}
+
+impl std::ops::Div<f32> for Color {
+    type Output = Color;
+    fn div(self, rhs: f32) -> Self::Output {
+        Color::new(self.r / rhs, self.g / rhs, self.b / rhs)
     }
 }

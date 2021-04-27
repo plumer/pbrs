@@ -17,7 +17,7 @@ impl Ray {
     /// Returns `None` if the given `t` is outside the ray's extent [0.0, `r.t_max`).
     /// `Some(t)` otherwise.
     pub fn truncated_t(&self, t: f32) -> Option<f32> {
-        if t < 0.0 || t >= self.t_max {
+        if t < f32::EPSILON || t >= self.t_max {
             None
         } else {
             Some(t)

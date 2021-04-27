@@ -79,7 +79,7 @@ impl Shape for Sphere {
             Some(t) => Some(Interaction {
                 pos: origin + dir * t,
                 ray_t: t,
-                normal: origin + dir * t - self.center,
+                normal: (origin + dir * t - self.center).hat(),
                 albedo: Vec3::zero(),
             }),
         }

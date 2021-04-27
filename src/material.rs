@@ -12,15 +12,34 @@ pub trait Material {
 }
 
 pub struct Lambertian {
-    albedo: Color,
+    pub albedo: Color,
+}
+
+impl Lambertian {
+    pub fn new(albedo: Color) -> Self {
+        Lambertian{albedo}
+    }
 }
 pub struct Metal {
-    albedo: Color,
-    fuzziness: f32,
+    pub albedo: Color,
+    pub fuzziness: f32,
+}
+impl Metal {
+    pub fn new(albedo: Color, fuzziness: f32) -> Self {
+        Self{albedo, fuzziness}
+    }
 }
 pub struct Dielectric {
-    refract_index: f32,
+    pub refract_index: f32,
 }
+impl Dielectric {
+    pub fn new(refract_index: f32) -> Self {
+        Self{refract_index}
+    }
+}
+
+// Utility functions
+// ------------------------------------------------------------------------------------------------
 
 pub fn uniform_sphere() -> Vec3 {
     let u = rand::random::<f32>();
@@ -43,6 +62,9 @@ pub fn uniform_hemisphere() -> Vec3 {
     let phi = v.acos();
     Vec3::new(phi.sin() * theta.cos(), phi.sin() * theta.sin(), v)
 }
+
+// Implements the Material trait for muliple materials.
+// ------------------------------------------------------------------------------------------------
 
 impl Material for Lambertian {
     fn scatter(&self, _: Vec3, isect: &Interaction) -> (Ray, Color) {
@@ -83,12 +105,29 @@ impl Material for Dielectric {
     }
 }
 
-
 fn schlick(cosine: f32, ref_index: f32) -> f32 {
     let r0 = (1.0 - ref_index) / (1.0 + ref_index);
     let r0 = r0 * r0;
     r0 + (1.0 - r0) * (1.0 - cosine).powi(5)
 }
 
-//		*scattered = Ray{ r.o, random_in_unit_sphere() };
-// *attenuation = albedo->value(rec.u, rec.v, rec.pos);
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_random_unit_sphere() {
+        for _ in 0..64 {
+            let v = super::uniform_sphere();
+            let diff = v.norm_squared() - 1.0;
+            assert!(diff.abs() < f32::EPSILON * 3.0, "{}", v.norm_squared());
+        }
+    }
+
+    #[test]
+    fn test_random_unit_hemisphere() {
+        for _ in 0..64 {
+            let v = super::uniform_hemisphere();
+            let diff = v.norm_squared() - 1.0;
+            assert!(diff.abs() < f32::EPSILON * 3.0, "{}", v.norm_squared());
+        }
+    }
+}

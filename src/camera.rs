@@ -43,12 +43,21 @@ impl Camera {
         self.center = from;
     }
 
-    pub fn shoot_ray(&self, row: u32, col: u32) -> Option<ray::Ray> {
+    pub fn shoot_ray(&self, row: u32, col: u32, (dx, dy): (f32, f32)) -> Option<ray::Ray> {
+        let x = col as f32 + dx.fract();
+        let y = row as f32 + dy.fract();
+        let c = Self::matvec(&self.orientation, self.c);
+        let a = Self::matvec(&self.orientation, self.a);
+        let b = Self::matvec(&self.orientation, self.b);
         if row >= self.height || col >= self.width {
             None
         } else {
-            let dir = self.c + self.a * col as f32 + self.b * row as f32;
-            Some(ray::Ray::new(hcm::Point3::origin(), dir))
+            let dir = c + a * x + b * y;
+            Some(ray::Ray::new(self.center, dir))
         }
+    }
+    
+    fn matvec(m: &[hcm::Vec3; 3], v: hcm::Vec3) -> hcm::Vec3{
+        m[0] * v[0] + m[1] * v[1] + m[2] * v[2]
     }
 }
