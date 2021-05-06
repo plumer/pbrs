@@ -2,7 +2,7 @@ use crate::hcm;
 use crate::ray::Ray;
 use crate::shape::Interaction;
 use crate::{hcm::Vec3, image::Color};
-pub trait Material {
+pub trait Material : Sync + Send{
     /// Computes the scattering of a ray on a given surface interation.
     /// Returns the scattered ray and radiance carried.
     fn scatter(&self, wi: Vec3, isect: &Interaction) -> (Ray, Color);

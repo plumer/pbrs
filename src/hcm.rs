@@ -118,6 +118,11 @@ impl Vec3 {
         let res = if abs[res] < abs[2] {res} else {2};
         res
     }
+    
+    pub fn max_dimension(self) -> usize {
+        let res = if self.x > self.y {0} else {1};
+        if self[2] > self[res] {2} else {res}
+    }
 }
 
 impl Add for Vec3 {
@@ -217,6 +222,27 @@ impl Sub<Vec3> for Point3 {
     type Output = Point3;
     fn sub(self, t: Vec3) -> Point3 {
         Point3::new(self.x - t.x, self.y - t.y, self.z - t.z)
+    }
+}
+impl Index<usize> for Point3 {
+    type Output = f32;
+    fn index(&self, i: usize) -> &f32 {
+        match i {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            _ => panic!("invalid index"),
+        }
+    }
+}
+impl IndexMut<usize> for Point3 {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        match index {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            2 => &mut self.z,
+            _ => panic!("invalid index"),
+        }
     }
 }
 

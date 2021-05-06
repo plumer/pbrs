@@ -8,11 +8,11 @@ mod ray;
 mod shape;
 
 use rayon::prelude::*;
-use std::fs::File;
 use std::io::{self, BufWriter};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Instant};
+use std::time::Instant;
+use std::{fs::File, mem::size_of};
 
 use hcm::{Point3, Vec3};
 use image::Color;
@@ -20,12 +20,14 @@ use instance::Instance;
 use io::Write;
 use material::{Dielectric, Lambertian, Metal};
 
+use crate::bvh::BvhNode;
+
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
 const MSAA: usize = 12;
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
-fn radiance_in(scene: &[Instance], mut ray: ray::Ray, depth: i32) -> Color {
+fn radiance_in(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32) -> Color {
     let bg_color_top = Color::new(0.5, 0.7, 1.0);
     let bg_color_bottom = Color::white();
 
@@ -33,26 +35,14 @@ fn radiance_in(scene: &[Instance], mut ray: ray::Ray, depth: i32) -> Color {
         return Color::black();
     }
 
-    let mut closest_hit = None;
-    let mut mtl = &scene[0].mtl;
-    for inst in scene.iter() {
-        let isect = inst.shape.intersect(&ray);
-        match isect {
-            None => (),
-            Some(hit) => {
-                ray.set_extent(hit.ray_t);
-                closest_hit = isect;
-                mtl = &inst.mtl;
-            }
-        }
-    }
+    let hit_info = scene.intersect(&mut ray);
 
-    match closest_hit {
+    match hit_info {
         None => {
             let y = (ray.dir.hat().y + 1.0) * 0.5;
             bg_color_top * y + bg_color_bottom * (1.0 - y)
         }
-        Some(hit) => {
+        Some((hit, mtl)) => {
             // let diffuse = hit.normal.dot(-directional_light).max(0.1);
             // sphere_color * diffuse
             // hit.normal + material::uniform_hemisphere();
@@ -90,7 +80,11 @@ pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
 }
 
 fn main() {
-    println!("Hello, world!");
+    println!(
+        "Hello, world! BvhNode size = {}, BBox size = {}",
+        size_of::<BvhNode>(),
+        size_of::<bvh::BBox>()
+    );
     let half_right_angle = hcm::Degree(45.0);
     println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
@@ -103,7 +97,7 @@ fn main() {
     );
 
     let mut spheres = vec![
-        shape::Sphere::new(Point3::new(0.0, -1000.5, 1.0), 1000.0),
+        shape::Sphere::new(Point3::new(0.0, -1000.0, 1.0), 1000.0),
         shape::Sphere::new(Point3::new(0.0, 1.0, 0.0), 1.0),
         shape::Sphere::new(Point3::new(-4.0, 1.0, 0.0), 1.0),
         shape::Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0),
@@ -147,9 +141,18 @@ fn main() {
         .map(|(mtl, sphere)| Instance::new(sphere, mtl))
         .collect();
 
+    let boxed_instances: Vec<Box<Instance>> =
+        instances.iter().map(|x| Box::from(x.clone())).collect();
+    let bvh = bvh::build_bvh(boxed_instances);
+    println!(
+        "building bvh success: {}, height = {}",
+        bvh.geometric_sound(),
+        bvh.height()
+    );
+
     let start_render = Instant::now();
 
-    let color_data: Vec<_> = (0..HEIGHT)
+    let image_map: Vec<_> = (0..HEIGHT)
         .into_par_iter()
         .map(|row| {
             if (row % 10) == 0 {
@@ -161,13 +164,13 @@ fn main() {
                 let mut color_sum = Color::black();
 
                 for i in 0..MSAA * MSAA {
-                    let jitter = (
-                        ((i / MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
-                        ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
-                    );
+                    // let jitter = (
+                    //     ((i / MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
+                    //     ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
+                    // );
                     let jitter = (rand::random::<f32>(), rand::random::<f32>());
                     let ray = camera.shoot_ray(row, col, jitter).unwrap();
-                    color_sum = color_sum + radiance_in(&instances, ray, 50);
+                    color_sum = color_sum + radiance_in(&bvh, ray, 50);
                 }
 
                 let color = color_sum / (SAMPLES_PER_PIXEL as f32);
@@ -175,25 +178,14 @@ fn main() {
             }
             colors_for_row
         })
+        .flatten()
         .collect();
 
-    // let mut image_map = vec![];
-    // for mut row in color_data.into_iter() {
-    //     image_map.append(&mut row);
-    // }
-
-    let image_map = color_data
-        .into_iter()
-        .fold(vec![], |mut partial_image, mut row| {
-            partial_image.append(&mut row);
-            partial_image
-        });
-    let image_data = image_map
+    let image_data: Vec<_> = image_map
         .iter()
-        .fold(Vec::<u8>::new(), |mut partial_data, color| {
-            partial_data.append(&mut color.gamma_encode().to_u8().to_vec());
-            partial_data
-        });
+        .map(|color| color.gamma_encode().to_u8().to_vec())
+        .flatten()
+        .collect();
 
     let whole_render_time = Instant::now().duration_since(start_render);
 

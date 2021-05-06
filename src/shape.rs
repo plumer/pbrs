@@ -1,3 +1,4 @@
+use crate::bvh::BBox;
 use crate::hcm::{Point3, Vec3};
 use crate::ray::Ray;
 
@@ -11,13 +12,18 @@ pub struct Interaction {
     // pub dpdv: Vec3
 }
 
-#[allow(dead_code)]
-pub struct BBox {
-    p_min: Point3,
-    p_max: Point3,
+impl Interaction {
+    pub fn new(pos: Point3, ray_t: f32, normal: Vec3, albedo: Vec3) -> Interaction {
+        Interaction {
+            pos,
+            ray_t,
+            normal,
+            albedo,
+        }
+    }
 }
 
-pub trait Shape {
+pub trait Shape: Send + Sync {
     fn intersect(&self, r: &Ray) -> Option<Interaction>;
     fn bbox(&self) -> BBox;
 }
@@ -29,16 +35,14 @@ pub struct Sphere {
 
 impl Sphere {
     pub fn new(center: Point3, radius: f32) -> Sphere {
-        Sphere{center, radius}
+        Sphere { center, radius }
     }
 }
 
 impl Shape for Sphere {
     fn bbox(&self) -> BBox {
-        BBox {
-            p_min: Point3::new(-self.radius, -self.radius, -self.radius),
-            p_max: Point3::new(self.radius, self.radius, self.radius),
-        }
+        let half_diagonal = Vec3::new(1.0, 1.0, 1.0) * self.radius;
+        BBox::new(self.center - half_diagonal, self.center + half_diagonal)
     }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         // r = o + td
@@ -49,7 +53,7 @@ impl Shape for Sphere {
         let Ray { origin, dir, .. } = r.clone();
 
         let dir = dir.hat();
-        
+
         let f = origin - self.center; // vector connecting the sphere center to ray origin.
         let q = f.dot(dir) * dir; // r.o + q gives the point closest to sphere center.
         let delta = self.radius * self.radius - (f - q).norm_squared();
@@ -76,12 +80,14 @@ impl Shape for Sphere {
         // print!("{:?}", best_t);
         match best_t {
             None => None,
-            Some(t) => Some(Interaction {
-                pos: origin + dir * t,
-                ray_t: t,
-                normal: (origin + dir * t - self.center).hat(),
-                albedo: Vec3::zero(),
-            }),
+            Some(ray_t) => {
+                let pos = origin + dir * ray_t;
+                let normal = (pos - self.center).hat();
+                // When ray intersects from inside, the reflected ray should be spawn from inside.
+                let pos = self.center + normal * self.radius * 1.00001;
+                assert!(pos.distance_to(self.center) >= self.radius, "{} >= {}", pos.distance_to(self.center), self.radius);
+                Some(Interaction::new(pos, ray_t, normal, Vec3::zero()))
+            }
         }
     }
 }
