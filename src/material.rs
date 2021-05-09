@@ -1,10 +1,14 @@
-use crate::hcm;
+use crate::{hcm, texture::{self, *}};
 use crate::ray::Ray;
 use crate::shape::Interaction;
 use crate::{hcm::Vec3, image::Color};
+use std::sync::Arc;
 pub trait Material : Sync + Send{
     /// Computes the scattering of a ray on a given surface interation.
     /// Returns the scattered ray and radiance carried.
+    ///
+    /// If the returned color is black, then there's a possibility that the
+    /// material is emissive.
     fn scatter(&self, wi: Vec3, isect: &Interaction) -> (Ray, Color);
     fn emission(&self) -> Color {
         Color::black()
@@ -12,12 +16,17 @@ pub trait Material : Sync + Send{
 }
 
 pub struct Lambertian {
-    pub albedo: Color,
+    pub albedo: Arc<dyn Texture>,
 }
 
 impl Lambertian {
-    pub fn new(albedo: Color) -> Self {
+    pub fn textured(albedo: Arc<dyn Texture>) -> Self {
         Lambertian{albedo}
+    }
+    
+    pub fn solid(c: Color) -> Self {
+        let albedo = Arc::new(texture::Solid::new(c));
+        Self::textured(albedo)
     }
 }
 pub struct Metal {
@@ -35,6 +44,16 @@ pub struct Dielectric {
 impl Dielectric {
     pub fn new(refract_index: f32) -> Self {
         Self{refract_index}
+    }
+}
+
+pub struct DiffuseLight {
+    emit: Color
+}
+
+impl DiffuseLight {
+    pub fn new(emit: Color) -> Self {
+        DiffuseLight{emit}
     }
 }
 
@@ -70,9 +89,9 @@ impl Material for Lambertian {
     fn scatter(&self, _: Vec3, isect: &Interaction) -> (Ray, Color) {
         let h = uniform_hemisphere();
         let (nx, ny) = hcm::make_coord_system(isect.normal);
-        let wo = isect.normal + nx * h.x + ny * h.y + isect.normal * h.z;
+        let wo = nx * h.x + ny * h.y + isect.normal * h.z;
         let ray_out = Ray::new(isect.pos, wo);
-        (ray_out, self.albedo)
+        (ray_out, self.albedo.value(isect.uv, isect.pos))
     }
 }
 
@@ -102,6 +121,17 @@ impl Material for Dielectric {
             wo = reflected;
         }
         (Ray::new(isect.pos, wo), Color::white())
+    }
+}
+
+impl Material for DiffuseLight {
+    fn scatter(&self, wi: Vec3, isect: &Interaction) -> (Ray, Color) {
+        let wo = hcm::reflect(isect.normal, wi);
+        let pos = isect.normal * 0.0001 + isect.pos;
+        (Ray::new(pos, wo), Color::black())
+    }
+    fn emission(&self) -> Color {
+        self.emit
     }
 }
 

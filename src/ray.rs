@@ -23,4 +23,8 @@ impl Ray {
             Some(t)
         }
     }
+
+    pub fn position_at(&self, t: f32) -> hcm::Point3 {
+        self.origin + t * self.dir
+    }
 }

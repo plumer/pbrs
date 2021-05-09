@@ -27,11 +27,17 @@ impl Color {
     pub fn white() -> Color {
         Color::new(1.0, 1.0, 1.0)
     }
+    pub fn gray(level: f32) -> Color {
+        Color::new(level, level, level)
+    }
     pub fn rgb(r: u8, g: u8, b: u8) -> Color {
         Color::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
     }
     pub fn gamma_encode(&self) -> Self {
         Color::new(self.r.sqrt(), self.g.sqrt(), self.b.sqrt())
+    }
+    pub fn is_black(&self) -> bool {
+        self.r <= 0.0 && self.g <= 0.0 && self.b <= 0.0
     }
     pub fn to_u8(&self) -> [u8; 3] {
         [
@@ -74,5 +80,55 @@ impl std::ops::Div<f32> for Color {
     type Output = Color;
     fn div(self, rhs: f32) -> Self::Output {
         Color::new(self.r / rhs, self.g / rhs, self.b / rhs)
+    }
+}
+
+pub struct PixelCoordIter {
+    width: u32,
+    height: u32,
+    ix: u32,
+    iy: u32,
+}
+
+#[allow(dead_code)]
+impl PixelCoordIter {
+    pub fn new(width: u32, height: u32) -> PixelCoordIter {
+        PixelCoordIter{width, height, ix: 0, iy: 0}
+    }
+}
+
+impl Iterator for PixelCoordIter {
+    type Item = (u32, u32);
+    fn next(&mut self) -> Option<Self::Item> {
+        let current_position = (self.iy, self.ix);
+        
+        self.ix += 1;
+        if self.ix >= self.width {
+            self.ix = 0;
+            self.iy += 1;
+        }
+        if current_position.0 >= self.height {
+            None
+        } else {
+            Some(current_position)
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn test_pixel_coord_iter() {
+        let px_iter = super::PixelCoordIter::new(3, 2);
+        let all_coords : Vec<_> = px_iter.collect();
+        let expected_coords = vec![(0u32, 0u32), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)];
+        assert_eq!(all_coords, expected_coords);
+    }
+    
+    #[test]
+    fn test_black() {
+        assert!(super::Color::black().is_black());
     }
 }

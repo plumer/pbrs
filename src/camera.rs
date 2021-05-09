@@ -57,6 +57,11 @@ impl Camera {
         }
     }
     
+    /// Returns resolution (width x height) of the camera film.
+    pub fn resolution(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+    
     fn matvec(m: &[hcm::Vec3; 3], v: hcm::Vec3) -> hcm::Vec3{
         m[0] * v[0] + m[1] * v[1] + m[2] * v[2]
     }

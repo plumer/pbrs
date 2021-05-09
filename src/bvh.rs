@@ -8,21 +8,14 @@ use crate::{
     instance::Instance,
     ray::Ray,
     shape::Interaction,
-    material::Material
+    material::Material,
+    float::min_max
 };
 
 #[derive(Debug, Clone, Copy)]
 pub struct BBox {
     min: Point3,
     max: Point3,
-}
-
-fn min_max(a: f32, b: f32) -> (f32, f32) {
-    if a < b {
-        (a, b)
-    } else {
-        (b, a)
-    }
 }
 
 impl BBox {
@@ -65,7 +58,7 @@ impl BBox {
             // Shrinks [t_min, t_max] by intersecting it with [t0, t1].
             t_min = t_min.max(t0);
             t_max = t_max.min(t1);
-            if t_max <= t_min {
+            if t_max < t_min {
                 return false;
             }
         }
@@ -212,12 +205,22 @@ pub fn build_bvh(mut instances: Vec<Box<Instance>>) -> Box<BvhNode> {
         let span = bbox_all.max - bbox_all.min;
         let max_span_axis = span.max_dimension();
         let split_plane = bbox_all.midpoint()[max_span_axis];
-        let (left, right): (Vec<_>, Vec<_>) = instances
+        let (mut left, mut right): (Vec<_>, Vec<_>) = instances
             .into_iter()
             .partition(|inst| inst.shape.bbox().midpoint()[max_span_axis] < split_plane);
+            
+        if left.is_empty() {
+            for _ in 0..num_all/2 {
+                left.push(right.pop().unwrap());
+            }
+        } else if right.is_empty() {
+            for _ in 0..num_all / 2 {
+                right.push(left.pop().unwrap());
+            }
+        }
 
-        assert!(left.len() < num_all);
-        assert!(right.len() < num_all);
+        assert!(left.len() < num_all, "{:?}", left);
+        assert!(right.len() < num_all, "{:?}", right);
 
         let left_bvh = build_bvh(left);
         let right_bvh = build_bvh(right);
