@@ -53,12 +53,12 @@ impl fmt::Display for Radian {
 
 impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {}, {})", self.x, self.y, self.z)
+        write!(f, "({:.2}, {:.2}, {:.2})", self.x, self.y, self.z)
     }
 }
 impl fmt::Display for Point3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}, {}, {}]", self.x, self.y, self.z)
+        write!(f, "[{:.2}, {:.2}, {:.2}]", self.x, self.y, self.z)
     }
 }
 

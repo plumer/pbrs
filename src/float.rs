@@ -3,7 +3,7 @@ pub struct Interval {
     pub max: f32,
 }
 
-pub const ONE_PLUS_EPSILON : f32 = 1.0 + f32::EPSILON;
+pub const ONE_PLUS_EPSILON: f32 = 1.0 + f32::EPSILON;
 pub const ONE_MINUS_EPSILON: f32 = 1.0 - f32::EPSILON;
 
 /// Represents a non-empty interval on the real-number axis.
@@ -20,11 +20,11 @@ impl Interval {
         assert!(self.max >= self.min);
         self.max - self.min
     }
-    
+
     pub fn contains(&self, x: f32) -> bool {
         x >= self.min && x <= self.max
     }
-    
+
     pub fn as_pair(&self) -> (f32, f32) {
         (self.min, self.max)
     }
@@ -49,3 +49,18 @@ where
 }
 
 impl Inside for f32 {}
+
+#[macro_export]
+macro_rules! assert_le {
+    ($left:expr, $right:expr) => {
+        if $left > $right {
+            panic!(
+                "less-than assertion failed: {} < {} (values: {} vs. {})",
+                stringify!($left),
+                stringify! {$right},
+                $left,
+                $right
+            )
+        }
+    };
+}

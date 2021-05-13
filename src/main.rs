@@ -31,7 +31,7 @@ use crate::{
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 12;
+const MSAA: usize = 24;
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -72,7 +72,7 @@ fn main() {
     println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
-    let (bvh, camera, env_light) = scene_cornell_box();
+    let (bvh, camera, env_light) = scene_earth();
     println!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
@@ -101,7 +101,12 @@ fn main() {
                     // let jitter = (rand::random::<f32>(), rand::random::<f32>());
                     let ray = camera.shoot_ray(row, col, jitter).unwrap();
                     // color_sum = color_sum + dummy_integrator(&bvh, ray, 3, env_light);
-                    color_sum = color_sum + radiance_in(&bvh, ray, 50, env_light);
+                    color_sum = color_sum + if (row, col) == (height, 380) {
+                        println!("jitter = {}", i);
+                        debug_pt(&bvh, ray, 5, env_light)
+                    } else {
+                        radiance_in(&bvh, ray, 100, env_light)
+                    };
                 }
 
                 let color = color_sum / (SAMPLES_PER_PIXEL as f32);
@@ -123,21 +128,6 @@ fn main() {
     println!("whole render time = {} us", whole_render_time.as_micros());
 
     write_image(r"output.png", &image_data, camera.resolution());
-
-    // let mut data: Vec<u8> = Vec::new();
-    // data.resize(256 * 256 * 4 as usize, 230);
-    // for (dx, dy) in jitters.iter().take(10000) {
-    //     let ix = (dx * 192.0) as usize + 32;
-    //     let iy = (dy * 192.0) as usize + 32;
-
-    //     let base = (iy * 256 + ix) * 4;
-    //     data[base + 0] = 30;
-    //     data[base + 1] = 30;
-    //     data[base + 2] = 30;
-    //     data[base + 3] = 255;
-    // }
-
-    // write_image(r"samples.png", &data, (256, 256));
 }
 
 // Functions that computes the radiance along a ray. One for computing the radiance correctly and
@@ -160,7 +150,34 @@ fn radiance_in(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: E
                 mtl.emission()
             } else {
                 let (scattered_ray, attenuation) = mtl.scatter(-ray.dir, &hit);
-                attenuation * radiance_in(scene, scattered_ray, depth - 1, env_light)
+                let Li =  radiance_in(scene, scattered_ray, depth - 1, env_light);
+                attenuation * Li
+            }
+        }
+    }
+}
+
+fn debug_pt(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvLight) -> Color {
+    if depth <= 0 {
+        return Color::black();
+    }
+
+    let hit_info = scene.intersect(&mut ray);
+
+    match hit_info {
+        None => env_light(ray),
+        Some((hit, mtl)) => {
+            assert_le!(hit.pos.distance_to(ray.position_at(hit.ray_t)), 0.001);
+            if !mtl.emission().is_black() {
+                // Stops recursive path tracing if the material is emissive, and
+                // returns the emitted radiance.
+                mtl.emission()
+            } else {
+                let (scattered_ray, attenuation) = mtl.scatter(-ray.dir, &hit);
+                println!("depth {}, hit = {}, scat_ray = {}", depth, hit, scattered_ray);
+                let Li =  debug_pt(scene, scattered_ray, depth - 1, env_light);
+                println!("attenuation = {:?}, Li = {:?}", attenuation, Li);
+                attenuation * Li
             }
         }
     }
@@ -174,7 +191,9 @@ fn dummy_integrator(scene: &Box<BvhNode>, mut ray: ray::Ray, _: i32, env_light: 
         None => env_light(ray),
         Some((hit, mtl)) => {
             let (_, albedo) = mtl.scatter(-ray.dir, &hit);
-            albedo
+            (albedo + Color::from(hit.normal)) * 0.5
+            // albedo
+            // (Color::from(hit.normal) + Color::white()) * 0.5
         }
     }
 }
@@ -376,11 +395,17 @@ fn scene_cornell_box() -> Scene {
         Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 0.0)),   // white floor
         Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white ceiling
         Arc::new(shape::QuadXY::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white back
+        
+        Arc::new(shape::Cuboid::from_points(Point3::new(130.0, 0.0, 65.0), Point3::new(295.0, 165.0, 230.0))),
+        Arc::new(shape::Cuboid::from_points(Point3::new(265.0, 0.0, 295.0), Point3::new(430.0, 330.0, 460.0))),
+        Arc::new(shape::Sphere::new(Point3::new(250.0, 250.0, 250.0), 50.0))
     ];
 
     let mtl_seq: Vec<Arc<dyn mtl::Material>> =
         // vec![light];
-        vec![red, green, light, white.clone(), white.clone(), white];
+        vec![red, green, light, white.clone(), white.clone(), white.clone(), 
+             white.clone(), white.clone(), 
+             white];
 
     let instances = shapes
         .into_iter()

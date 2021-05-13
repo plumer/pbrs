@@ -1,4 +1,7 @@
-use std::f32::consts::PI;
+use std::{
+    f32::consts::PI,
+    fmt::{Display, Formatter, Result},
+};
 
 use crate::float;
 use crate::hcm::{Point3, Vec3};
@@ -24,6 +27,17 @@ impl Interaction {
             uv,
             normal,
         }
+    }
+}
+
+impl Display for Interaction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let (u, v) = self.uv;
+        write!(
+            f,
+            "pos = {}, t = {:.2}, uv = ({:.2}, {:.2}), normal = {}",
+            self.pos, self.ray_t, u, v, self.normal
+        )
     }
 }
 
@@ -106,6 +120,24 @@ impl QuadYZ {
             y_interval: Interval::new(y0, y1),
             z_interval: Interval::new(z0, z1),
             x,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Cuboid {
+    min: Point3,
+    max: Point3,
+}
+
+impl Cuboid {
+    pub fn from_points(p0: Point3, p1: Point3) -> Self {
+        let (xmin, xmax) = float::min_max(p0.x, p1.x);
+        let (ymin, ymax) = float::min_max(p0.y, p1.y);
+        let (zmin, zmax) = float::min_max(p0.z, p1.z);
+        Self {
+            min: Point3::new(xmin, ymin, zmin),
+            max: Point3::new(xmax, ymax, zmax),
         }
     }
 }
@@ -255,11 +287,75 @@ impl Shape for QuadYZ {
             let v = (z - self.z_interval.min) / self.z_interval.length();
 
             let pos = Point3::new(self.x, y, z);
-            let normal = Vec3::ybase() * -r.dir.x.signum();
+            let normal = Vec3::xbase() * -r.dir.x.signum();
 
             Some(Interaction::new(pos, t, (u, v), normal))
         } else {
             None
         }
+    }
+}
+
+impl Shape for Cuboid {
+    fn bbox(&self) -> BBox {
+        BBox::new(self.min, self.max)
+    }
+
+    fn intersect(&self, r: &Ray) -> Option<Interaction> {
+        #[derive(Debug, Clone, Copy)]
+        struct HitInfo {
+            t: f32,
+            bound: f32,
+            axis: usize,
+        }
+        impl HitInfo {
+            fn new(t: f32, bound: f32, axis: usize) -> Self {
+                HitInfo { t, bound, axis }
+            }
+        }
+
+        let mut hit_min = HitInfo::new(0.0f32, f32::INFINITY, 0);
+        let mut hit_max = HitInfo::new(r.t_max, -f32::INFINITY, 0);
+
+        // println!("ray = {}, cuboid = {:?}", r, self);
+        for axis in 0..3 {
+            let inv_dir = 1.0 / r.dir[axis];
+            let mut t0 = (self.min[axis] - r.origin[axis]) * inv_dir;
+            let mut t1 = (self.max[axis] - r.origin[axis]) * inv_dir;
+            let mut hit_0 = HitInfo::new(t0, self.min[axis], axis);
+            let mut hit_1 = HitInfo::new(t1, self.max[axis], axis);
+            // println!("axis = {}, hit0 = {:?}, hit1 = {:?}", axis, hit_0, hit_1);
+            if t0 > t1 {
+                std::mem::swap(&mut hit_0, &mut hit_1);
+                std::mem::swap(&mut t0, &mut t1);
+            }
+            std::mem::drop(t0);
+            std::mem::drop(t1);
+            // Shrinks [t_min, t_max] by intersecting it with [t0, t1].
+            if t0 > hit_min.t {
+                hit_min = hit_0;
+            }
+            if t1 < hit_max.t {
+                hit_max = hit_1;
+            }
+            if hit_max.t < hit_min.t {
+                return None;
+            }
+        }
+        let t_interval = Interval::new(hit_min.t, hit_max.t);
+        let HitInfo{t, bound: axis_value, axis} = if t_interval.contains(0.0) {
+            hit_max
+        } else {
+            hit_min
+        };
+        if axis_value.is_infinite() {
+            return None;
+        }
+        assert!(!axis_value.is_infinite(), "hmin {:?} hmax {:?}", &hit_min, &hit_max);
+        let mut hit_pos = r.position_at(t);
+        hit_pos[axis] = axis_value;
+        let mut normal = Vec3::zero();
+        normal[axis] = r.dir[axis].signum() * -1.0;
+        Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal))
     }
 }

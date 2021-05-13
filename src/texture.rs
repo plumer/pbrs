@@ -183,13 +183,10 @@ impl Image {
                 .iter()
                 .map(|gray_u8| Color::gray(*gray_u8 as f32 / 255.0))
                 .collect(),
-            stride @ 3..=4  => {
-                let mut color_data_3 = vec![];
-                for i in 0..num_pixels {
-                    let base = (i * stride) as usize;
-                    color_data_3.push(Color::rgb(buf[base], buf[base+1], buf[base+2]));
-                }
-                color_data_3
+            3 | 4 => {
+                buf.chunks(num_channels as usize)
+                    .map(|rgba| Color::rgb(rgba[0], rgba[1], rgba[2]))
+                    .collect()
             }
             _ => panic!("num channels ({}) should be 1, 3, or 4", num_channels),
         };
@@ -206,10 +203,10 @@ impl Texture for Image {
         let (u, v) = uv;
         let u = u.clamp(0.0, 1.0);
         let v = v.clamp(0.0, 1.0);
-        
+
         let col = (u * self.width as f32) as usize % self.width as usize;
         let row = (v * self.height as f32) as usize % self.height as usize;
-        
+
         let index = row * self.width as usize + col;
         self.data[index]
     }

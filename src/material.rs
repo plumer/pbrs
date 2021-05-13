@@ -90,7 +90,7 @@ impl Material for Lambertian {
         let h = uniform_hemisphere();
         let (nx, ny) = hcm::make_coord_system(isect.normal);
         let wo = nx * h.x + ny * h.y + isect.normal * h.z;
-        let ray_out = Ray::new(isect.pos, wo);
+        let ray_out = Ray::new(isect.pos + isect.normal * 0.001, wo);
         (ray_out, self.albedo.value(isect.uv, isect.pos))
     }
 }
