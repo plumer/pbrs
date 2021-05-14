@@ -23,15 +23,11 @@ use io::Write;
 use material as mtl;
 use texture as tex;
 
-use crate::{
-    bvh::{build_bvh, BvhNode},
-    camera::Camera,
-    texture::Texture,
-};
+use crate::{bvh::{build_bvh, BvhNode}, camera::Camera, texture::Texture};
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 24;
+const MSAA: usize = 12;
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -72,7 +68,7 @@ fn main() {
     println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
-    let (bvh, camera, env_light) = scene_earth();
+    let (bvh, camera, env_light) = scene_cornell_box();
     println!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
@@ -101,12 +97,7 @@ fn main() {
                     // let jitter = (rand::random::<f32>(), rand::random::<f32>());
                     let ray = camera.shoot_ray(row, col, jitter).unwrap();
                     // color_sum = color_sum + dummy_integrator(&bvh, ray, 3, env_light);
-                    color_sum = color_sum + if (row, col) == (height, 380) {
-                        println!("jitter = {}", i);
-                        debug_pt(&bvh, ray, 5, env_light)
-                    } else {
-                        radiance_in(&bvh, ray, 100, env_light)
-                    };
+                    color_sum = color_sum + path_integrator(&bvh, ray, 50, env_light);
                 }
 
                 let color = color_sum / (SAMPLES_PER_PIXEL as f32);
@@ -134,7 +125,7 @@ fn main() {
 // another one for debugging purposes.
 // ------------------------------------------------------------------------------------------------
 
-fn radiance_in(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvLight) -> Color {
+fn path_integrator(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvLight) -> Color {
     if depth <= 0 {
         return Color::black();
     }
@@ -150,13 +141,14 @@ fn radiance_in(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: E
                 mtl.emission()
             } else {
                 let (scattered_ray, attenuation) = mtl.scatter(-ray.dir, &hit);
-                let Li =  radiance_in(scene, scattered_ray, depth - 1, env_light);
-                attenuation * Li
+                let in_radiance =  path_integrator(scene, scattered_ray, depth - 1, env_light);
+                attenuation * in_radiance
             }
         }
     }
 }
 
+#[allow(dead_code)]
 fn debug_pt(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvLight) -> Color {
     if depth <= 0 {
         return Color::black();
@@ -175,9 +167,9 @@ fn debug_pt(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvL
             } else {
                 let (scattered_ray, attenuation) = mtl.scatter(-ray.dir, &hit);
                 println!("depth {}, hit = {}, scat_ray = {}", depth, hit, scattered_ray);
-                let Li =  debug_pt(scene, scattered_ray, depth - 1, env_light);
-                println!("attenuation = {:?}, Li = {:?}", attenuation, Li);
-                attenuation * Li
+                let incident_radiance =  debug_pt(scene, scattered_ray, depth - 1, env_light);
+                println!("attenuation = {:?}, Li = {:?}", attenuation, incident_radiance);
+                attenuation * incident_radiance
             }
         }
     }
@@ -209,8 +201,8 @@ fn blue_sky(r: ray::Ray) -> Color {
 }
 
 fn dark_room(r: ray::Ray) -> Color {
-    let bg_color_top = Color::gray(0.05);
-    let bg_color_bottom = Color::gray(0.02);
+    let bg_color_top = Color::gray(0.0);
+    let bg_color_bottom = Color::gray(0.0);
     let y = (r.dir.hat().y + 1.0) * 0.5;
     bg_color_top * y + bg_color_bottom * (1.0 - y)
 }
@@ -374,6 +366,8 @@ fn scene_quad() -> Scene {
 
 #[allow(dead_code)]
 fn scene_cornell_box() -> Scene {
+    use instance::identity;
+    
     let red = mtl::Lambertian::solid(Color::new(0.65, 0.05, 0.05));
     let white = mtl::Lambertian::solid(Color::gray(0.73));
     let green = mtl::Lambertian::solid(Color::new(0.12, 0.45, 0.15));
@@ -396,22 +390,26 @@ fn scene_cornell_box() -> Scene {
         Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white ceiling
         Arc::new(shape::QuadXY::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white back
         
-        Arc::new(shape::Cuboid::from_points(Point3::new(130.0, 0.0, 65.0), Point3::new(295.0, 165.0, 230.0))),
-        Arc::new(shape::Cuboid::from_points(Point3::new(265.0, 0.0, 295.0), Point3::new(430.0, 330.0, 460.0))),
-        Arc::new(shape::Sphere::new(Point3::new(250.0, 250.0, 250.0), 50.0))
+        Arc::new(shape::Cuboid::from_points(Point3::origin(), Point3::new(165.0, 165.0, 165.0))),
+        Arc::new(shape::Cuboid::from_points(Point3::origin(), Point3::new(165.0, 330.0, 165.0))),
+        // Arc::new(shape::Sphere::new(Point3::new(250.0, 250.0, 250.0), 50.0))
     ];
 
     let mtl_seq: Vec<Arc<dyn mtl::Material>> =
         // vec![light];
         vec![red, green, light, white.clone(), white.clone(), white.clone(), 
-             white.clone(), white.clone(), 
-             white];
+             white.clone(), white.clone()];
 
-    let instances = shapes
+    let mut instances: Vec<_> = shapes
         .into_iter()
         .zip(mtl_seq.into_iter())
         .map(|(shape, mtl)| Box::new(Instance::new(shape, mtl)))
         .collect();
+    instances[6].transform = identity().rotate_y(hcm::Degree(15.0).to_radian()).translate(Vec3::new(265.0, 0.0, 105.0));
+    instances[7].transform = identity().rotate_y(hcm::Degree(-18.0).to_radian()).translate(Vec3::new(130.0, 0.0, 225.0));
+    
+    println!("{:?}, {:?}", instances[6].transform, instances[7].transform);
+    // std::process::exit(0);
         
     let mut cam = Camera::new((600, 600), hcm::Degree(40.0).to_radian());
     cam.look_at(Point3::new(278.0, 278.0, -800.0), Point3::new(278.0, 278.0, 0.0), Vec3::ybase());

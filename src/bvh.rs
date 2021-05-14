@@ -1,15 +1,15 @@
 use std::{
     fmt::{Debug, Display, Formatter, Result},
-    sync::Arc
+    sync::Arc,
 };
 
 use crate::{
-    hcm::{Point3},
+    float::min_max,
+    hcm::{Point3, Vec3},
     instance::Instance,
+    material::Material,
     ray::Ray,
     shape::Interaction,
-    material::Material,
-    float::min_max
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -46,6 +46,30 @@ impl BBox {
 
     pub fn midpoint(self) -> Point3 {
         (self.max - self.min) * 0.5 + self.min
+    }
+
+    pub fn diag(&self) -> Vec3 {
+        self.max - self.min
+    }
+    
+    #[allow(dead_code)]
+    pub fn all_corners(&self) -> [Point3; 8] {
+        let mut res = [Point3::origin(); 8];
+
+        for i in 0..8 {
+            for axis in 0..3 {
+                res[i][axis] = if i & (1 << axis) == 0 {
+                    self.min[axis]
+                } else {
+                    self.max[axis]
+                };
+            }
+        }
+
+        res
+    }
+    pub fn min(&self) -> Point3 {
+        self.min
     }
 
     pub fn intersect(&self, r: &Ray) -> bool {
@@ -130,7 +154,7 @@ impl Debug for BvhNode {
 impl BvhNode {
     pub fn new_leaf(instance: Box<Instance>) -> BvhNode {
         BvhNode {
-            bbox: instance.shape.bbox(),
+            bbox: instance.bbox(),
             content: BvhNodeContent::Leaf(instance),
         }
     }
@@ -152,7 +176,7 @@ impl BvhNode {
                 assert!(self.bbox.encloses(left.bbox));
                 assert!(self.bbox.encloses(right.bbox));
             }
-            BvhNodeContent::Leaf(inst) => assert!(self.bbox.encloses(inst.shape.bbox())),
+            BvhNodeContent::Leaf(inst) => assert!(self.bbox.encloses(inst.bbox())),
         }
         true
     }
@@ -161,7 +185,7 @@ impl BvhNode {
     ///
     /// This method has a similar interface to the same method in `Shape` trait, but the `Shape`
     /// trait is not implemented on `BvhNode` on purpose.
-    pub fn intersect(&self, ray: & mut Ray) -> Option<(Interaction, &Arc<dyn Material>)> {
+    pub fn intersect(&self, ray: &mut Ray) -> Option<(Interaction, &Arc<dyn Material>)> {
         if self.bbox.intersect(ray) == false {
             return None;
         }
@@ -200,17 +224,17 @@ pub fn build_bvh(mut instances: Vec<Box<Instance>>) -> Box<BvhNode> {
         let num_all = instances.len();
         let bbox_all = instances
             .iter()
-            .map(|i| i.shape.bbox())
+            .map(|i| i.bbox())
             .fold(BBox::empty(), |b1, b2| union(b1, b2));
         let span = bbox_all.max - bbox_all.min;
         let max_span_axis = span.max_dimension();
         let split_plane = bbox_all.midpoint()[max_span_axis];
         let (mut left, mut right): (Vec<_>, Vec<_>) = instances
             .into_iter()
-            .partition(|inst| inst.shape.bbox().midpoint()[max_span_axis] < split_plane);
-            
+            .partition(|inst| inst.bbox().midpoint()[max_span_axis] < split_plane);
+
         if left.is_empty() {
-            for _ in 0..num_all/2 {
+            for _ in 0..num_all / 2 {
                 left.push(right.pop().unwrap());
             }
         } else if right.is_empty() {

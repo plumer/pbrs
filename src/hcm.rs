@@ -114,14 +114,18 @@ impl Vec3 {
     // Returns the index to the element with minimum magnitude.
     pub fn abs_min_dimension(self) -> usize {
         let abs = [self.x.abs(), self.y.abs(), self.z.abs()];
-        let res = if abs[0] < abs[1] {0} else {1};
-        let res = if abs[res] < abs[2] {res} else {2};
+        let res = if abs[0] < abs[1] { 0 } else { 1 };
+        let res = if abs[res] < abs[2] { res } else { 2 };
         res
     }
-    
+
     pub fn max_dimension(self) -> usize {
-        let res = if self.x > self.y {0} else {1};
-        if self[2] > self[res] {2} else {res}
+        let res = if self.x > self.y { 0 } else { 1 };
+        if self[2] > self[res] {
+            2
+        } else {
+            res
+        }
     }
 }
 
@@ -246,6 +250,24 @@ impl IndexMut<usize> for Point3 {
     }
 }
 
+// Explicit between Vec3 and Point3.
+// -------------------------------------------------------------------------------------------------
+impl From<Vec3> for Point3 {
+    fn from(v: Vec3) -> Self {
+        Point3::new(v.x, v.y, v.z)
+    }
+}
+
+impl From<Point3> for Vec3 {
+    fn from(p: Point3) -> Self {
+        Vec3::new(p.x, p.y, p.z)
+    }
+}
+
+/// 4-element vector. Supported operations:
+/// - v+v v-v v*s v/s
+/// - Convertible from `Vec3` and `Point3`, with homogeneous coordinate added properly.
+/// -------------------------------------------------------------------------------------------------
 #[derive(Debug, Clone, Copy)]
 struct Vec4 {
     x: f32,
@@ -344,6 +366,130 @@ impl IndexMut<usize> for Vec4 {
         }
     }
 }
+
+// Mat3: implements m * m, m * v, m + m, m - m
+// -------------------------------------------------------------------------------------------------
+#[derive(Debug, Clone, Copy)]
+pub struct Mat3 {
+    pub cols: [Vec3; 3],
+}
+
+#[allow(dead_code)]
+impl Mat3 {
+    pub fn zero() -> Self {
+        Self {
+            cols: [Vec3::zero(); 3],
+        }
+    }
+    pub fn identity() -> Self {
+        let mut mat = Self::zero();
+        for i in 0..3 {
+            mat.cols[i][i] = 1.0
+        }
+        mat
+    }
+    pub fn from_vectors(v0: Vec3, v1: Vec3, v2: Vec3) -> Self {
+        Self { cols: [v0, v1, v2] }
+    }
+    pub fn nonuniform_scale(s: Vec3) -> Self {
+        let mut mat = Self::identity();
+        mat.cols[0][0] = s[0];
+        mat.cols[1][1] = s[1];
+        mat.cols[2][2] = s[2];
+        mat
+    }
+    pub fn scaler(s: f32) -> Self {
+        let mut mat = Self::identity();
+        mat.cols[0][0] = s;
+        mat.cols[1][1] = s;
+        mat.cols[2][2] = s;
+        mat
+    }
+    pub fn rotater_x(angle: Radian) -> Self {
+        let Radian(rad) = angle;
+        let (sin_t, cos_t) = rad.sin_cos();
+        let rot_y = Vec3::new(0.0, cos_t, sin_t);
+        let rot_z = Vec3::new(0.0, -sin_t, cos_t);
+
+        Mat3::from_vectors(Vec3::xbase(), rot_y, rot_z)
+    }
+
+    pub fn rotater_y(angle: Radian) -> Self {
+        let Radian(rad) = angle;
+        let (sin_t, cos_t) = rad.sin_cos();
+        let rot_x = Vec3::new(cos_t, 0.0, -sin_t);
+        let rot_z = Vec3::new(sin_t, 0.0, cos_t);
+
+        Mat3::from_vectors(rot_x, Vec3::ybase(), rot_z)
+    }
+
+    pub fn rotater_z(angle: Radian) -> Self {
+        let Radian(rad) = angle;
+        let (sin_t, cos_t) = rad.sin_cos();
+        let rot_x = Vec3::new(cos_t, sin_t, 0.0);
+        let rot_y = Vec3::new(-sin_t, cos_t, 0.0);
+
+        Mat3::from_vectors(rot_x, rot_y, Vec3::zbase())
+    }
+    pub fn rotater(axis: Vec3, angle: Radian) -> Self {
+        let Radian(rad) = angle;
+        let mut mat = Self::identity();
+        let (sin_t, cos_t) = rad.sin_cos();
+        for i in 0..3 {
+            let mut base = Vec3::zero();
+            base[i] = 1.0;
+            let vc = base.dot(axis) * axis / axis.dot(axis);
+            let v1 = base - vc;
+            let v2 = v1.cross(axis.hat());
+            mat.cols[i] = Vec3::from(vc + v1 * cos_t + v2 * sin_t);
+        }
+        mat
+    }
+    pub fn transpose(&self) -> Self {
+        let mut mat = Self::zero();
+        for i in 0..3 {
+            for j in 0..3 {
+                mat.cols[i][j] = self.cols[j][i];
+            }
+        }
+        mat
+    }
+    pub fn frobenius_norm_squared(&self) -> f32 {
+        (0..3).map(|i| self.cols[i].norm_squared()).sum()
+    }
+}
+
+impl Mul for Mat3 {
+    type Output = Mat3;
+    fn mul(self, m: Self) -> Mat3 {
+        let mut mat = Mat3::zero();
+        for c in 0..3 {
+            mat.cols[c] = self * m.cols[c];
+        }
+        mat
+    }
+}
+
+impl Mul<Vec3> for Mat3 {
+    type Output = Vec3;
+    fn mul(self, v: Vec3) -> Vec3 {
+        self.cols[0] * v[0] + self.cols[1] * v[1] + self.cols[2] * v[2]
+    }
+}
+
+impl Sub for Mat3 {
+    type Output = Mat3;
+    fn sub(self, rhs: Mat3) -> Self::Output {
+        Self::from_vectors(
+            self.cols[0] - rhs.cols[0],
+            self.cols[1] - rhs.cols[1],
+            self.cols[2] - rhs.cols[2],
+        )
+    }
+}
+
+// TODO Quaternion
+// -------------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy)]
 pub struct Mat4 {
@@ -479,7 +625,7 @@ pub enum Refract {
 pub use Refract::FullReflect;
 pub use Refract::Transmit;
 
-/// Refract incident light `wi` w.r.t. normal.
+/// Refracts incident light `wi` w.r.t. normal.
 /// `normal` is assumed to be unit-length and forms an obtuse angle with `wi`.
 /// `ni` and `no` are refraction indices.
 /// If `ni`/`no` < 1 (e.g., from water to air), there is a chance of full reflection.
@@ -519,7 +665,12 @@ mod test {
         let refract_wo = super::refract(normal, wi, 0.5f32.sqrt());
         match refract_wo {
             super::FullReflect(_) => panic!(""),
-            super::Transmit(v) => assert!((wo - v).norm_squared() < std::f32::EPSILON, "{} vs {}", v, wo),
+            super::Transmit(v) => assert!(
+                (wo - v).norm_squared() < std::f32::EPSILON,
+                "{} vs {}",
+                v,
+                wo
+            ),
         }
     }
 }
