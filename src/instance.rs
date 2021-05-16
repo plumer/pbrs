@@ -115,14 +115,17 @@ impl Instance {
             transform: RigidBodyTransform::identity(),
         }
     }
-    pub fn with_transform(
-        shape: Arc<dyn Shape>,
-        mtl: Arc<dyn Material>,
-        transform: RigidBodyTransform,
-    ) -> Self {
+    pub fn from_raw<S: 'static, M: 'static>(shape: S, mtl: M) -> Self
+    where
+        S: Shape,
+        M: Material,
+    {
+        Instance::new(Arc::new(shape), Arc::new(mtl))
+    }
+    pub fn with_transform(self, transform: RigidBodyTransform) -> Self {
         Instance {
-            shape,
-            mtl,
+            shape: self.shape,
+            mtl: self.mtl,
             transform,
         }
     }

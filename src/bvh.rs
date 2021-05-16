@@ -51,7 +51,7 @@ impl BBox {
     pub fn diag(&self) -> Vec3 {
         self.max - self.min
     }
-    
+
     #[allow(dead_code)]
     pub fn all_corners(&self) -> [Point3; 8] {
         let mut res = [Point3::origin(); 8];
@@ -70,6 +70,15 @@ impl BBox {
     }
     pub fn min(&self) -> Point3 {
         self.min
+    }
+    
+    pub fn area(&self) -> f32 {
+        let Vec3{x, y, z} = self.diag();
+        if x.is_sign_positive() && y.is_sign_positive() && z.is_sign_positive() {
+            (x * y + y * z + z * x) * 2.0
+        } else {
+            0.0
+        }
     }
 
     pub fn intersect(&self, r: &Ray) -> bool {

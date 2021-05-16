@@ -1,12 +1,15 @@
 use std::{
     f32::consts::PI,
     fmt::{Display, Formatter, Result},
+    ops::Range,
 };
 
-use crate::float;
+use partition::partition;
+
+use crate::{assert_lt, assert_le, float};
 use crate::hcm::{Point3, Vec3};
 use crate::ray::Ray;
-use crate::{bvh::BBox, float::Interval};
+use crate::{bvh, bvh::BBox, float::Interval};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interaction {
@@ -138,6 +141,173 @@ impl Cuboid {
         Self {
             min: Point3::new(xmin, ymin, zmin),
             max: Point3::new(xmax, ymax, zmax),
+        }
+    }
+}
+
+enum IsoBvhNodeContent {
+    Children([Box<IsoBvhNode>; 2]),
+    Leaf(Range<usize>),
+}
+
+struct IsoBvhNode {
+    bbox: BBox,
+    content: IsoBvhNodeContent,
+}
+
+/// A collection of `Shape`s of same type and organized with a bounding-volume hierarchy.
+pub struct IsoBlas<T>
+where
+    T: Shape,
+{
+    shapes: Vec<T>,
+    bbox: BBox,
+    bvh_root: Option<IsoBvhNode>,
+}
+
+use IsoBvhNodeContent::Children;
+use IsoBvhNodeContent::Leaf;
+
+impl<T> IsoBlas<T>
+where
+    T: Shape,
+{
+    fn new_with_only_shapes(shapes: Vec<T>) -> Self {
+        IsoBlas {
+            shapes,
+            bbox: BBox::empty(),
+            bvh_root: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn build(shapes: Vec<T>) -> Self {
+        let mut raw = Self::new_with_only_shapes(shapes);
+        let tree = raw.recursive_build(0..raw.shapes.len());
+        raw.bbox = tree.bbox;
+        raw.bvh_root = Some(tree);
+        raw
+    }
+
+    fn recursive_build(&mut self, range: Range<usize>) -> IsoBvhNode {
+        if range.len() <= 4 {
+            return Self::new_leaf(&self, range);
+        }
+
+        let mut bboxes: Vec<_> = self.shapes[range.clone()]
+            .iter()
+            .map(|s| s.bbox())
+            .collect();
+        let centroid_bbox = bboxes
+            .iter()
+            .fold(BBox::empty(), |sum, b| sum.union(b.midpoint()));
+        assert!(centroid_bbox.area() > 0.0);
+        let split_axis = centroid_bbox.diag().max_dimension();
+
+        // Computes the plane "axis = pivot_value" that will be used to partition the shapes.
+        // ----------------------------------------------------------------------------------
+
+        // Sorts the bounding boxes according to coordinate value on the computed axis.
+        bboxes.sort_by(|b0, b1| {
+            let axis_pos_0 = b0.midpoint()[split_axis];
+            let axis_pos_1 = b1.midpoint()[split_axis];
+            axis_pos_0.partial_cmp(&axis_pos_1).unwrap()
+        });
+
+        let bbox_area_sum: f32 = bboxes.iter().map(|b| b.area()).sum();
+        let surface_area_heuristic_pivot = bbox_area_sum * 0.5;
+
+        let mut partial_sum = 0.0;
+        let mut split_index = 0;
+        for i in 0..bboxes.len() {
+            partial_sum += bboxes[i].area();
+            if partial_sum >= surface_area_heuristic_pivot {
+                split_index = i;
+                break;
+            }
+        }
+
+        let pivot_value = bboxes[split_index].midpoint()[split_axis];
+
+        // Partitions the set of shapes w.r.t. their bounding box midpoint coordinate on the split axis.
+        let (left, right) = partition(&mut self.shapes[range.clone()], |s| {
+            s.bbox().midpoint()[split_axis] < pivot_value
+        });
+        let mid_point = left.len() + range.start;
+        // This assertion isn't necessary: assert_eq!(mid_point - range.start, left.len());
+        assert_eq!(
+            range.end - mid_point,
+            right.len(),
+            "left = {:?}, right = {:?}, whole_range = {:?}, mid_point = {}",
+            left.len(),
+            right.len(),
+            range,
+            mid_point
+        );
+
+        let left_child = self.recursive_build(range.start..mid_point);
+        let right_child = self.recursive_build(mid_point..range.end);
+
+        self.new_internal(Box::new(left_child), Box::new(right_child))
+    }
+
+    fn intersect_tree(&self, tree: &IsoBvhNode, r: &Ray) -> Option<Interaction> {
+        match &tree.content {
+            Leaf(range) => {
+                let mut hit: Option<Interaction> = None;
+                // Ranges are not `Copy`: https://github.com/rust-lang/rust/pull/27186
+                for shape in self.shapes[range.clone()].iter() {
+                    match (shape.intersect(r), hit) {
+                        (None, _) => (), // Doesn't update `hit` if no new interaction
+                        (Some(isect), None) => hit = Some(isect),
+                        (Some(new_isect), Some(old_isect)) => {
+                            if new_isect.ray_t < old_isect.ray_t {
+                                hit = Some(old_isect);
+                            }
+                        }
+                    }
+                }
+                hit
+            }
+            Children([left, right]) => {
+                let mut ray = r.clone();
+                let left_isect = self.intersect_tree(&**left, &ray);
+                if let Some(isect) = left_isect {
+                    ray.set_extent(isect.ray_t);
+                }
+                let right_isect = self.intersect_tree(&**right, &ray);
+                match (left_isect, right_isect) {
+                    (None, None) => None,
+                    (Some(l), None) => Some(l),
+                    (None, Some(r)) => Some(r),
+                    (Some(l), Some(r)) => {
+                        if l.ray_t < r.ray_t {
+                            Some(l)
+                        } else {
+                            Some(r)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn new_leaf(&self, range: Range<usize>) -> IsoBvhNode {
+        assert_le!(range.end, self.shapes.len());
+        let bbox = self.shapes[range.clone()]
+            .iter()
+            .fold(BBox::empty(), |b, shape| bvh::union(b, shape.bbox()));
+        IsoBvhNode {
+            bbox,
+            content: Leaf(range),
+        }
+    }
+
+    fn new_internal(&self, c0: Box<IsoBvhNode>, c1: Box<IsoBvhNode>) -> IsoBvhNode {
+        let bbox = bvh::union(c0.bbox, c1.bbox);
+        IsoBvhNode {
+            bbox,
+            content: Children([c0, c1]),
         }
     }
 }
@@ -343,7 +513,11 @@ impl Shape for Cuboid {
             }
         }
         let t_interval = Interval::new(hit_min.t, hit_max.t);
-        let HitInfo{t, bound: axis_value, axis} = if t_interval.contains(0.0) {
+        let HitInfo {
+            t,
+            bound: axis_value,
+            axis,
+        } = if t_interval.contains(0.0) {
             hit_max
         } else {
             hit_min
@@ -351,11 +525,30 @@ impl Shape for Cuboid {
         if axis_value.is_infinite() {
             return None;
         }
-        assert!(!axis_value.is_infinite(), "hmin {:?} hmax {:?}", &hit_min, &hit_max);
+        assert!(
+            !axis_value.is_infinite(),
+            "hmin {:?} hmax {:?}",
+            &hit_min,
+            &hit_max
+        );
         let mut hit_pos = r.position_at(t);
         hit_pos[axis] = axis_value;
         let mut normal = Vec3::zero();
         normal[axis] = r.dir[axis].signum() * -1.0;
         Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal))
+    }
+}
+
+impl<T> Shape for IsoBlas<T>
+where
+    T: Shape,
+{
+    fn intersect(&self, r: &Ray) -> Option<Interaction> {
+        let tree = &self.bvh_root.as_ref()?;
+        self.intersect_tree(&tree, r)
+    }
+
+    fn bbox(&self) -> BBox {
+        self.bbox
     }
 }

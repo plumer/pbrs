@@ -1,9 +1,12 @@
-use crate::{hcm, texture::{self, *}};
 use crate::ray::Ray;
 use crate::shape::Interaction;
+use crate::{
+    hcm,
+    texture::{self, *},
+};
 use crate::{hcm::Vec3, image::Color};
 use std::sync::Arc;
-pub trait Material : Sync + Send{
+pub trait Material: Sync + Send {
     /// Computes the scattering of a ray on a given surface interation.
     /// Returns the scattered ray and radiance carried.
     ///
@@ -21,9 +24,9 @@ pub struct Lambertian {
 
 impl Lambertian {
     pub fn textured(albedo: Arc<dyn Texture>) -> Self {
-        Lambertian{albedo}
+        Lambertian { albedo }
     }
-    
+
     pub fn solid(c: Color) -> Self {
         let albedo = Arc::new(texture::Solid::new(c));
         Self::textured(albedo)
@@ -35,7 +38,7 @@ pub struct Metal {
 }
 impl Metal {
     pub fn new(albedo: Color, fuzziness: f32) -> Self {
-        Self{albedo, fuzziness}
+        Self { albedo, fuzziness }
     }
 }
 pub struct Dielectric {
@@ -43,17 +46,17 @@ pub struct Dielectric {
 }
 impl Dielectric {
     pub fn new(refract_index: f32) -> Self {
-        Self{refract_index}
+        Self { refract_index }
     }
 }
 
 pub struct DiffuseLight {
-    emit: Color
+    emit: Color,
 }
 
 impl DiffuseLight {
     pub fn new(emit: Color) -> Self {
-        DiffuseLight{emit}
+        DiffuseLight { emit }
     }
 }
 

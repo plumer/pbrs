@@ -183,11 +183,10 @@ impl Image {
                 .iter()
                 .map(|gray_u8| Color::gray(*gray_u8 as f32 / 255.0))
                 .collect(),
-            3 | 4 => {
-                buf.chunks(num_channels as usize)
-                    .map(|rgba| Color::rgb(rgba[0], rgba[1], rgba[2]))
-                    .collect()
-            }
+            3 | 4 => buf
+                .chunks(num_channels as usize)
+                .map(|rgba| Color::rgb(rgba[0], rgba[1], rgba[2]))
+                .collect(),
             _ => panic!("num channels ({}) should be 1, 3, or 4", num_channels),
         };
         Ok(Image {

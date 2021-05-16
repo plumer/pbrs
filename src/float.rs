@@ -64,3 +64,18 @@ macro_rules! assert_le {
         }
     };
 }
+
+#[macro_export]
+macro_rules! assert_lt {
+    ($left:expr, $right:expr) => {
+        if $left >= $right {
+            panic!(
+                "less-than assertion failed: {} < {} (values: {} vs. {})",
+                stringify!($left),
+                stringify! {$right},
+                $left,
+                $right
+            )
+        }
+    };
+}

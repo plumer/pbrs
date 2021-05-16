@@ -23,11 +23,16 @@ use io::Write;
 use material as mtl;
 use texture as tex;
 
-use crate::{bvh::{build_bvh, BvhNode}, camera::Camera, texture::Texture};
+use crate::{
+    bvh::{build_bvh, BvhNode},
+    camera::Camera,
+    shape::Sphere,
+    texture::Texture,
+};
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 12;
+const MSAA: usize = 96;
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -59,6 +64,8 @@ pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
 }
 
 fn main() {
+    {
+    }
     println!(
         "Hello, world! BvhNode size = {}, BBox size = {}",
         size_of::<BvhNode>(),
@@ -68,7 +75,7 @@ fn main() {
     println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
-    let (bvh, camera, env_light) = scene_cornell_box();
+    let (bvh, camera, env_light) = scene_everything();
     println!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
@@ -125,7 +132,12 @@ fn main() {
 // another one for debugging purposes.
 // ------------------------------------------------------------------------------------------------
 
-fn path_integrator(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvLight) -> Color {
+fn path_integrator(
+    scene: &Box<BvhNode>,
+    mut ray: ray::Ray,
+    depth: i32,
+    env_light: EnvLight,
+) -> Color {
     if depth <= 0 {
         return Color::black();
     }
@@ -141,7 +153,7 @@ fn path_integrator(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_ligh
                 mtl.emission()
             } else {
                 let (scattered_ray, attenuation) = mtl.scatter(-ray.dir, &hit);
-                let in_radiance =  path_integrator(scene, scattered_ray, depth - 1, env_light);
+                let in_radiance = path_integrator(scene, scattered_ray, depth - 1, env_light);
                 attenuation * in_radiance
             }
         }
@@ -166,9 +178,15 @@ fn debug_pt(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvL
                 mtl.emission()
             } else {
                 let (scattered_ray, attenuation) = mtl.scatter(-ray.dir, &hit);
-                println!("depth {}, hit = {}, scat_ray = {}", depth, hit, scattered_ray);
-                let incident_radiance =  debug_pt(scene, scattered_ray, depth - 1, env_light);
-                println!("attenuation = {:?}, Li = {:?}", attenuation, incident_radiance);
+                println!(
+                    "depth {}, hit = {}, scat_ray = {}",
+                    depth, hit, scattered_ray
+                );
+                let incident_radiance = debug_pt(scene, scattered_ray, depth - 1, env_light);
+                println!(
+                    "attenuation = {:?}, Li = {:?}",
+                    attenuation, incident_radiance
+                );
                 attenuation * incident_radiance
             }
         }
@@ -367,7 +385,7 @@ fn scene_quad() -> Scene {
 #[allow(dead_code)]
 fn scene_cornell_box() -> Scene {
     use instance::identity;
-    
+
     let red = mtl::Lambertian::solid(Color::new(0.65, 0.05, 0.05));
     let white = mtl::Lambertian::solid(Color::gray(0.73));
     let green = mtl::Lambertian::solid(Color::new(0.12, 0.45, 0.15));
@@ -385,34 +403,123 @@ fn scene_cornell_box() -> Scene {
             (213.0, 343.0),
             (227.0, 332.0),
             554.0,
-        )),  // light
+        )), // light
         Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 0.0)),   // white floor
         Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white ceiling
         Arc::new(shape::QuadXY::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white back
-        
-        Arc::new(shape::Cuboid::from_points(Point3::origin(), Point3::new(165.0, 165.0, 165.0))),
-        Arc::new(shape::Cuboid::from_points(Point3::origin(), Point3::new(165.0, 330.0, 165.0))),
+        Arc::new(shape::Cuboid::from_points(
+            Point3::origin(),
+            Point3::new(165.0, 165.0, 165.0),
+        )),
+        Arc::new(shape::Cuboid::from_points(
+            Point3::origin(),
+            Point3::new(165.0, 330.0, 165.0),
+        )),
         // Arc::new(shape::Sphere::new(Point3::new(250.0, 250.0, 250.0), 50.0))
     ];
 
     let mtl_seq: Vec<Arc<dyn mtl::Material>> =
         // vec![light];
-        vec![red, green, light, white.clone(), white.clone(), white.clone(), 
-             white.clone(), white.clone()];
+        vec![red, green, light, white.clone(), white.clone(), white.clone(), white.clone(), white.clone()];
 
     let mut instances: Vec<_> = shapes
         .into_iter()
         .zip(mtl_seq.into_iter())
         .map(|(shape, mtl)| Box::new(Instance::new(shape, mtl)))
         .collect();
-    instances[6].transform = identity().rotate_y(hcm::Degree(15.0).to_radian()).translate(Vec3::new(265.0, 0.0, 105.0));
-    instances[7].transform = identity().rotate_y(hcm::Degree(-18.0).to_radian()).translate(Vec3::new(130.0, 0.0, 225.0));
-    
+    instances[6].transform = identity()
+        .rotate_y(hcm::Degree(15.0).to_radian())
+        .translate(Vec3::new(265.0, 0.0, 105.0));
+    instances[7].transform = identity()
+        .rotate_y(hcm::Degree(-18.0).to_radian())
+        .translate(Vec3::new(130.0, 0.0, 225.0));
+
     println!("{:?}, {:?}", instances[6].transform, instances[7].transform);
     // std::process::exit(0);
-        
+
     let mut cam = Camera::new((600, 600), hcm::Degree(40.0).to_radian());
-    cam.look_at(Point3::new(278.0, 278.0, -800.0), Point3::new(278.0, 278.0, 0.0), Vec3::ybase());
-    
+    cam.look_at(
+        Point3::new(278.0, 278.0, -800.0),
+        Point3::new(278.0, 278.0, 0.0),
+        Vec3::ybase(),
+    );
+
+    (build_bvh(instances), cam, dark_room)
+}
+
+#[allow(dead_code)]
+fn scene_everything() -> Scene {
+    let ground = Arc::new(mtl::Lambertian::solid(Color::new(0.48, 0.83, 0.53)));
+
+    const BOXES_PER_SIDE: i32 = 20;
+
+    let mut instances = Vec::<Instance>::new();
+    for i in 0..BOXES_PER_SIDE {
+        for j in 0..BOXES_PER_SIDE {
+            let x0 = -1000.0 + i as f32 * 100.0;
+            let z0 = -1000.0 + j as f32 * 100.0;
+
+            let x1 = x0 + 100.0;
+            let y1 = rand_f32() * 100.0 + 1.0;
+            let z1 = z0 + 100.0;
+
+            instances.push(Instance::new(
+                Arc::new(shape::Cuboid::from_points(
+                    Point3::new(x0, 0.0, z0),
+                    Point3::new(x1, y1, z1),
+                )),
+                ground.clone(),
+            ));
+        }
+    }
+
+    let light = mtl::DiffuseLight::new(Color::gray(7.0));
+    let light_quad = shape::QuadXZ::from_raw((123.0, 423.0), (147.0, 412.0), 554.0);
+    instances.push(Instance::from_raw(light_quad, light));
+
+    let glass_ball = Sphere::new(Point3::new(260.0, 150.0, 45.0), 50.0);
+    let glass_mtl = mtl::Dielectric::new(1.5);
+    instances.push(Instance::from_raw(glass_ball, glass_mtl));
+
+    let metal_ball = Sphere::new(Point3::new(0.0, 150.0, 145.0), 50.0);
+    let metal_mtl = mtl::Metal::new(Color::new(0.8, 0.8, 0.9), 1.0);
+    // instances.push(Instance::new(Arc::new(metal_ball), Arc::new(metal_mtl)));
+    instances.push(Instance::from_raw(metal_ball, metal_mtl));
+
+    let boundary_ball = Sphere::new(Point3::new(360.0, 150.0, 145.0), 70.0);
+    let glass_mtl = mtl::Dielectric::new(1.5);
+    instances.push(Instance::from_raw(boundary_ball, glass_mtl));
+
+    let earth_map = tex::Image::from_file("assets/earthmap.png").unwrap();
+    let earth_mtl = mtl::Lambertian::textured(Arc::new(earth_map));
+    let earth_shape = Sphere::new(Point3::new(400.0, 200.0, 400.0), 100.0);
+    instances.push(Instance::from_raw(earth_shape, earth_mtl));
+
+    let perlin_tex = tex::Perlin::with_freq(10.0);
+    let matte_perlin = mtl::Lambertian::textured(Arc::new(perlin_tex));
+    let noise_ball = Sphere::new(Point3::new(220.0, 280.0, 300.0), 80.0);
+    instances.push(Instance::from_raw(noise_ball, matte_perlin));
+
+    let matte_white = mtl::Lambertian::solid(Color::gray(0.73));
+
+    let rand_165 = || rand_f32() * 165.0;
+    let ping_pong_balls: Vec<_> = (0..1000)
+        .map(|_| Sphere::new(Point3::new(rand_165(), rand_165(), rand_165()), 10.0))
+        .collect();
+    let ping_pong_balls = shape::IsoBlas::build(ping_pong_balls);
+    let pp_trans = instance::identity()
+        .rotate_y(hcm::Degree(15.0).to_radian())
+        .translate(Vec3::new(-100.0, 270.0, 395.0));
+    instances.push(Instance::from_raw(ping_pong_balls, matte_white).with_transform(pp_trans));
+
+    let mut cam = camera::Camera::new((800, 800), hcm::Degree(40.0).to_radian());
+    cam.look_at(
+        Point3::new(478.0, 278.0, -600.0),
+        Point3::new(278.0, 278.0, 0.0),
+        Vec3::ybase(),
+    );
+
+    let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
+
     (build_bvh(instances), cam, dark_room)
 }
