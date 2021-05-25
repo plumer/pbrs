@@ -1,0 +1,221 @@
+use std::fmt;
+
+use crate::hcm::{Degree, Point3, Vec3};
+
+#[derive(Debug)]
+pub enum Parameter {
+    Strings(String, Vec<String>),
+    Numbers(String, Vec<f32>),
+}
+
+impl Parameter {
+    pub fn new_number(key: String, number: f32) -> Self {
+        Parameter::Numbers(key, vec![number])
+    }
+    pub fn new_string(key: String, word: String) -> Self {
+        Parameter::Strings(key, vec![word])
+    }
+    pub fn new_numbers(key: String, numbers: Vec<f32>) -> Self {
+        Parameter::Numbers(key, numbers)
+    }
+    pub fn new_strings(key: String, strings: Vec<String>) -> Self {
+        Parameter::Strings(key, strings)
+    }
+}
+
+pub struct ParameterSet(pub Vec<Parameter>);
+
+pub enum Transform {
+    Identity,
+    Translate(Vec3),
+    Scale(Vec3),
+    Rotate(Vec3, Degree),
+    LookAt(Point3, Point3, Vec3),
+    // CoordSys,
+    // Matrix4x4(Mat4),
+    // CoordSysTransform,
+    // ConcatMatrix4x4(Mat4),
+}
+
+pub enum SceneWideOption {
+    Camera(String, ParameterSet),
+    Film(String, ParameterSet),
+    Filter(String, ParameterSet),
+    Integrator(String, ParameterSet),
+    Accel(String, ParameterSet),
+    Transform(Transform),
+    Sampler(String, ParameterSet),
+}
+
+#[allow(dead_code)]
+pub enum WorldItem {
+    Transform(Transform),
+    Shape(String, ParameterSet),
+    Material(String, ParameterSet),
+    Light(String, ParameterSet),
+    AreaLight(String, ParameterSet),
+    Media(String, ParameterSet),
+    Texture(String, String, String, ParameterSet),
+
+    AttributeBlock(Vec<WorldItem>),
+    ObjectBlock(String, Vec<WorldItem>),
+    TransformBlock(Vec<WorldItem>),
+    MakeMedium(String, ParameterSet),
+    MakeMaterial(String, ParameterSet),
+
+    MediumInstance(String),
+    MaterialInstance(String),
+    ObjectInstance(String),
+
+    ReverseOrientation,
+}
+
+pub struct Scene {
+    pub options: Vec<SceneWideOption>,
+    pub items: Vec<WorldItem>,
+}
+
+// Formatters
+// --------------------------------------------------------------------
+impl fmt::Display for Parameter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Numbers(key, numbers) => write!(f, " {} = {:?}", key, numbers),
+            Self::Strings(key, strings) => write!(f, " {} = {:?}", key, strings),
+        }
+    }
+}
+
+impl fmt::Display for ParameterSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for parameter in self.0.iter() {
+            match parameter {
+                Parameter::Numbers(key, numbers) => write!(f, "    {} = {:?}\n", key, numbers)?,
+                Parameter::Strings(key, strings) => write!(f, "    {} = {:?}\n", key, strings)?,
+            }
+        }
+        write!(f, "")
+    }
+}
+
+impl fmt::Display for Transform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Transform::Identity => write!(f, "Identity"),
+            Transform::Translate(t) => write!(f, " Translate({})", t),
+            Transform::Scale(s) => write!(f, " Scale({})", s),
+            Transform::Rotate(axis, Degree(d)) => write!(f, "Rotate({}, {})", axis, d),
+            Transform::LookAt(e, t, u) => write!(f, "LookAt({} -> {} ^ {})", e, t, u),
+        }
+    }
+}
+
+impl fmt::Display for Scene {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Scene-wide options:\n")?;
+        for option in self.options.iter() {
+            write!(f, "  {}\n", option)?;
+        }
+        write!(f, "World items:\n")?;
+        for item in self.items.iter() {
+            write!(f, "  {}\n", item)?;
+        }
+        write!(f, "\n")
+    }
+}
+
+impl fmt::Display for WorldItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Transform(t) => write!(f, "Trans: {}", t),
+            Self::Shape(r#impl, param_set) => {
+                write!(f, "Shape of {}, parameters: \n{}", r#impl, param_set)
+            }
+            Self::Material(r#impl, param_set) => {
+                write!(f, "Material of {}, parameters: \n{}", r#impl, param_set)
+            }
+            Self::Light(r#impl, param_set) => {
+                write!(f, "Light of {}, parameters: \n{}", r#impl, param_set)
+            }
+            Self::AreaLight(r#impl, param_set) => {
+                write!(f, "AreaLight of {}, parameters: \n{}", r#impl, param_set)
+            }
+            Self::Media(r#impl, param_set) => {
+                write!(f, "Media of {}, parameters: \n{}", r#impl, param_set)
+            }
+            Self::Texture(r#impl, tex_type, tex_name, param_set) => {
+                write!(
+                    f,
+                    "Texture of {}, type {}, named {}, parameters: \n{}",
+                    r#impl, tex_type, tex_name, param_set
+                )
+            }
+            Self::MakeMedium(r#impl, param_set) => {
+                write!(f, "MakeMedium of {}, parameters: \n{}", r#impl, param_set)
+            }
+            Self::MakeMaterial(r#impl, param_set) => {
+                write!(f, "MakeMaterial of {}, parameters: \n{}", r#impl, param_set)
+            }
+            Self::MediumInstance(name) => write!(f, "medium instance named {}", name),
+            Self::ObjectInstance(name) => write!(f, "object instance named {}", name),
+            Self::MaterialInstance(name) => write!(f, "material instance named {}", name),
+            Self::ReverseOrientation => write!(f, "reverse_orientation"),
+            Self::AttributeBlock(items) | Self::TransformBlock(items) => {
+                write!(f, "attribute block \n")?;
+                for item in items.iter() {
+                    write!(f, "    {}\n", item)?;
+                }
+                write!(f, "")
+            }
+            Self::ObjectBlock(name, items) => {
+                write!(f, "object (name = {}) block \n", name)?;
+                for item in items.iter() {
+                    write!(f, "    {}\n", item)?;
+                }
+                write!(f, "")
+            }
+        }
+    }
+}
+
+impl fmt::Display for SceneWideOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Camera(implementation, param_set) => {
+                write!(
+                    f,
+                    "Camera of {}, parameters:\n{}",
+                    implementation, param_set
+                )
+            }
+            Self::Film(implementation, param_set) => {
+                write!(f, "Film of {}, parameters:\n{}", implementation, param_set)
+            }
+            Self::Filter(implementation, param_set) => {
+                write!(
+                    f,
+                    "Filter of {}, parameters:\n{}",
+                    implementation, param_set
+                )
+            }
+            Self::Integrator(implementation, param_set) => {
+                write!(
+                    f,
+                    "Integrator of {}, parameters:\n{}",
+                    implementation, param_set
+                )
+            }
+            Self::Accel(implementation, param_set) => {
+                write!(f, "Accel of {}, parameters:\n{}", implementation, param_set)
+            }
+            Self::Transform(t) => write!(f, "Transform({})", t),
+            Self::Sampler(implementation, param_set) => {
+                write!(
+                    f,
+                    "Sampler of {}, parameters:\n{}",
+                    implementation, param_set
+                )
+            }
+        }
+    }
+}

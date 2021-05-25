@@ -6,7 +6,7 @@ use std::{
 
 use partition::partition;
 
-use crate::{assert_lt, assert_le, float};
+use crate::{assert_le, float};
 use crate::hcm::{Point3, Vec3};
 use crate::ray::Ray;
 use crate::{bvh, bvh::BBox, float::Interval};
@@ -61,6 +61,12 @@ pub struct Sphere {
 impl Sphere {
     pub fn new(center: Point3, radius: f32) -> Sphere {
         Sphere { center, radius }
+    }
+    pub fn from_raw(center: (f32, f32, f32), radius: f32) -> Sphere {
+        let (x, y, z) = center;
+        let has_nan = x.is_nan() || y.is_nan()|| z.is_nan() || radius.is_nan();
+        assert!(!has_nan);
+        Self::new(Point3::new(x, y, z), radius)
     }
 }
 
