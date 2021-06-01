@@ -6,15 +6,16 @@ mod image;
 mod instance;
 mod material;
 mod ray;
+mod scene;
 mod shape;
 mod texture;
 
 use rayon::prelude::*;
+use std::fs::File;
 use std::io::{self, BufWriter};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{fs::File, mem::size_of};
 
 use hcm::{Point3, Vec3};
 use image::Color;
@@ -32,7 +33,7 @@ use crate::{
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 96;
+const MSAA: usize = 16;
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -63,19 +64,37 @@ pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
     writer.write_image_data(&data).unwrap();
 }
 
+#[allow(unreachable_code)]
 fn main() {
+    // estimate_pi();
+    // play_integrator();
     {
+        // let pbrt_file = "assets/bathroom/bathroom.pbrt";
+        let pbrt_file = "assets/killeroos/killeroo-simple.pbrt";
+        scene::build_scene(pbrt_file);
     }
-    println!(
-        "Hello, world! BvhNode size = {}, BBox size = {}",
-        size_of::<BvhNode>(),
-        size_of::<bvh::BBox>()
-    );
+
+    // {
+    //     let ply_file = "assets/bathroom/geometry/mesh_00001.ply";
+    //     scene::load_ply(ply_file);
+    // }
+
+    {
+        let x = ["hello", "world", "rust"];
+        let y = x.iter().map(|s| String::from(*s)).collect::<Vec<_>>();
+
+        for s in y.into_iter() {
+            println!("s = {}", s);
+        }
+    }
+
+    return;
+
     let half_right_angle = hcm::Degree(45.0);
     println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
-    let (bvh, camera, env_light) = scene_everything();
+    let (bvh, camera, env_light) = scene_cornell_box();
     println!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
@@ -235,10 +254,10 @@ fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     );
 
     let mut spheres = vec![
-        shape::Sphere::new(Point3::new(0.0, -1000.0, 1.0), 1000.0),
-        shape::Sphere::new(Point3::new(0.0, 1.0, 0.0), 1.0),
-        shape::Sphere::new(Point3::new(-4.0, 1.0, 0.0), 1.0),
-        shape::Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0),
+        Sphere::from_raw((0.0, -1000.0, 1.0), 1000.0),
+        Sphere::from_raw((0.0, 1.0, 0.0), 1.0),
+        Sphere::from_raw((-4.0, 1.0, 0.0), 1.0),
+        Sphere::from_raw((4.0, 1.0, 0.0), 1.0),
     ];
 
     let mut mtls: Vec<Arc<dyn mtl::Material>> = vec![
@@ -255,7 +274,7 @@ fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
                 Point3::new(a as f32, 0.2, b as f32) + 0.9 * Vec3::new(rand_f32(), 0.0, rand_f32());
 
             if (center - Point3::new(4.0, 0.2, 0.0)).norm() > 0.9 {
-                spheres.push(shape::Sphere::new(center, 0.2));
+                spheres.push(Sphere::new(center, 0.2));
                 let mtl: Arc<dyn mtl::Material> = if choose_mtl < 0.8 {
                     let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
                     Arc::new(mtl::Lambertian::solid(albedo))
@@ -301,8 +320,8 @@ fn scene_two_perlin_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     let mtl = Arc::new(mtl::Lambertian::textured(Arc::new(perlin_tex)));
 
     let shapes = vec![
-        Arc::new(shape::Sphere::new(Point3::new(0.0, -1000.0, 0.0), 1000.0)),
-        Arc::new(shape::Sphere::new(Point3::new(0.0, 2.0, 0.0), 2.0)),
+        Arc::new(Sphere::from_raw((0.0, -1000.0, 0.0), 1000.0)),
+        Arc::new(Sphere::from_raw((0.0, 2.0, 0.0), 2.0)),
     ];
 
     let instances = shapes
@@ -324,7 +343,7 @@ fn scene_earth() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     let earth_tex = Arc::new(tex::Image::from_file("assets/earthmap.png").unwrap());
     let earth_mtl = Arc::new(material::Lambertian::textured(earth_tex));
 
-    let globe = Arc::new(shape::Sphere::new(Point3::origin(), 2.0));
+    let globe = Arc::new(Sphere::new(Point3::origin(), 2.0));
     let instances = vec![Box::new(Instance::new(globe, earth_mtl))];
 
     let mut cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(20.0).to_radian());
@@ -345,8 +364,8 @@ fn scene_quad_light() -> Scene {
     let light = Arc::new(mtl::DiffuseLight::new(Color::gray(4.0)));
 
     let shapes = vec![
-        Arc::new(shape::Sphere::new(Point3::new(0.0, -1000.0, 0.0), 1000.0)),
-        Arc::new(shape::Sphere::new(Point3::new(0.0, 2.0, 0.0), 2.0)),
+        Arc::new(Sphere::from_raw((0.0, -1000.0, 0.0), 1000.0)),
+        Arc::new(Sphere::from_raw((0.0, 2.0, 0.0), 2.0)),
     ];
 
     let mut instances: Vec<_> = shapes
@@ -357,7 +376,7 @@ fn scene_quad_light() -> Scene {
     let xy_quad = shape::QuadXY::from_raw((3.0, 5.0), (1.0, 3.0), 2.1);
     instances.push(Box::new(Instance::new(Arc::new(xy_quad), light.clone())));
     instances.push(Box::new(Instance::new(
-        Arc::new(shape::Sphere::new(Point3::new(0.0, 7.0, 0.0), 2.0)),
+        Arc::new(Sphere::from_raw((0.0, 7.0, 0.0), 2.0)),
         light.clone(),
     )));
 
@@ -415,7 +434,7 @@ fn scene_cornell_box() -> Scene {
             Point3::origin(),
             Point3::new(165.0, 330.0, 165.0),
         )),
-        // Arc::new(shape::Sphere::new(Point3::new(250.0, 250.0, 250.0), 50.0))
+        // Arc::new(Sphere::from_raw((250.0, 250.0, 250.0), 50.0))
     ];
 
     let mtl_seq: Vec<Arc<dyn mtl::Material>> =
@@ -477,34 +496,34 @@ fn scene_everything() -> Scene {
     let light_quad = shape::QuadXZ::from_raw((123.0, 423.0), (147.0, 412.0), 554.0);
     instances.push(Instance::from_raw(light_quad, light));
 
-    let glass_ball = Sphere::new(Point3::new(260.0, 150.0, 45.0), 50.0);
+    let glass_ball = Sphere::from_raw((260.0, 150.0, 45.0), 50.0);
     let glass_mtl = mtl::Dielectric::new(1.5);
     instances.push(Instance::from_raw(glass_ball, glass_mtl));
 
-    let metal_ball = Sphere::new(Point3::new(0.0, 150.0, 145.0), 50.0);
+    let metal_ball = Sphere::from_raw((0.0, 150.0, 145.0), 50.0);
     let metal_mtl = mtl::Metal::new(Color::new(0.8, 0.8, 0.9), 1.0);
     // instances.push(Instance::new(Arc::new(metal_ball), Arc::new(metal_mtl)));
     instances.push(Instance::from_raw(metal_ball, metal_mtl));
 
-    let boundary_ball = Sphere::new(Point3::new(360.0, 150.0, 145.0), 70.0);
+    let boundary_ball = Sphere::from_raw((360.0, 150.0, 145.0), 70.0);
     let glass_mtl = mtl::Dielectric::new(1.5);
     instances.push(Instance::from_raw(boundary_ball, glass_mtl));
 
     let earth_map = tex::Image::from_file("assets/earthmap.png").unwrap();
     let earth_mtl = mtl::Lambertian::textured(Arc::new(earth_map));
-    let earth_shape = Sphere::new(Point3::new(400.0, 200.0, 400.0), 100.0);
+    let earth_shape = Sphere::from_raw((400.0, 200.0, 400.0), 100.0);
     instances.push(Instance::from_raw(earth_shape, earth_mtl));
 
     let perlin_tex = tex::Perlin::with_freq(10.0);
     let matte_perlin = mtl::Lambertian::textured(Arc::new(perlin_tex));
-    let noise_ball = Sphere::new(Point3::new(220.0, 280.0, 300.0), 80.0);
+    let noise_ball = Sphere::from_raw((220.0, 280.0, 300.0), 80.0);
     instances.push(Instance::from_raw(noise_ball, matte_perlin));
 
     let matte_white = mtl::Lambertian::solid(Color::gray(0.73));
 
     let rand_165 = || rand_f32() * 165.0;
     let ping_pong_balls: Vec<_> = (0..1000)
-        .map(|_| Sphere::new(Point3::new(rand_165(), rand_165(), rand_165()), 10.0))
+        .map(|_| Sphere::from_raw((rand_165(), rand_165(), rand_165()), 10.0))
         .collect();
     let ping_pong_balls = shape::IsoBlas::build(ping_pong_balls);
     let pp_trans = instance::identity()
@@ -522,4 +541,94 @@ fn scene_everything() -> Scene {
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
     (build_bvh(instances), cam, dark_room)
+}
+
+// Monte-carlo playground
+// -------------------------------------------------------------------------------------------------
+
+fn rand_f32_uniform(a: f32, b: f32) -> f32 {
+    rand_f32() * (b - a) + a
+}
+fn rand_f64_uniform(a: f64, b: f64) -> f64 {
+    rand::random::<f64>() * (b - a) + a
+}
+
+#[allow(dead_code)]
+fn estimate_pi() {
+    let sqrt_n = 4000i32;
+    let mut count = 0;
+    let mut stratified_count = 0;
+    for trial in 0..sqrt_n.pow(2) {
+        let x = rand_f32_uniform(-1.0, 1.0);
+        let y = rand_f32_uniform(-1.0, 1.0);
+        count += if x * x + y * y < 1.0 { 1 } else { 0 };
+
+        let (i, j) = (trial / sqrt_n, trial % sqrt_n);
+        let x = 2.0 * ((i as f32 + rand_f32()) / sqrt_n as f32) - 1.0;
+        let y = 2.0 * ((j as f32 + rand_f32()) / sqrt_n as f32) - 1.0;
+        // println!("stratified x, y = {}, {}", x, y);
+        stratified_count += if x * x + y * y < 1.0 { 1 } else { 0 };
+    }
+    let tries = sqrt_n.pow(2);
+    println!(
+        "#{:12}, Estimate of Pi = {:.10}, stratified = {:.10}",
+        tries,
+        4.0 * count as f32 / tries as f32,
+        4.0 * stratified_count as f32 / tries as f32,
+    );
+}
+
+#[allow(dead_code)]
+fn play_integrator() {
+    let integrand = |x| x * x;
+    let pdf = |x| x * x * 3.0 / 8.0;
+    let sample_mapper = |x| x;
+    let integral_result = integrate(integrand, pdf, sample_mapper, (0.0, 2.0));
+    println!("area(x*x, 0, 2) = {:10}", integral_result);
+
+    let cosine_squared = |v: Vec3| v.z * v.z;
+    let uniform_sphere_pdf = |_: Vec3| std::f32::consts::FRAC_1_PI * 0.25;
+    // let identity_vec3_mapper = |v: Vec3| v;
+
+    let integral_result = spherical_integrate(cosine_squared, uniform_sphere_pdf, |v| v);
+    println!("spherical_integrate(cos^2(theta)) = {:10}", integral_result);
+}
+
+fn integrate<F, F1, F2>(integrand: F, pdf: F1, sample_mapper: F2, interval: (f64, f64)) -> f64
+where
+    F: Fn(f64) -> f64,
+    F1: Fn(f64) -> f64,
+    F2: Fn(f64) -> f64,
+{
+    let tries = 5_000;
+    let (lb, ub) = interval;
+    let sum: f64 = (0..tries)
+        .map(|_| {
+            let x = rand_f64_uniform(lb, ub);
+            let x = sample_mapper(x);
+            // integrand(x)
+            // let x = sample_mapper(rand_f64());
+            integrand(x) / pdf(x)
+        })
+        .sum();
+
+    sum / tries as f64
+}
+
+fn spherical_integrate<F, F1, M>(integrand: F, pdf: F1, sample_mapper: M) -> f32
+where
+    F: Fn(Vec3) -> f32,
+    F1: Fn(Vec3) -> f32,
+    M: Fn(Vec3) -> Vec3,
+{
+    let tries = 252_000;
+    let sum: f32 = (0..tries)
+        .map(|_| {
+            let x = mtl::uniform_sphere();
+            let x = sample_mapper(x);
+            integrand(x) / pdf(x)
+        })
+        .sum();
+
+    sum / tries as f32
 }

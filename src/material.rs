@@ -41,13 +41,66 @@ impl Metal {
         Self { albedo, fuzziness }
     }
 }
+
+pub struct Mirror {
+    pub albedo: Color,
+}
+impl Mirror {
+    pub fn new(albedo: Color) -> Self {
+        Self { albedo }
+    }
+}
+
+pub struct Plastic {
+    pub diffuse: Color,
+    pub specular: Color,
+    pub roughness: f32,
+    pub remap_roughness: bool
+}
+
 pub struct Dielectric {
     pub refract_index: f32,
+    pub reflect: Color,
+    pub transmit: Color,
 }
 impl Dielectric {
     pub fn new(refract_index: f32) -> Self {
-        Self { refract_index }
+        Self {
+            refract_index,
+            reflect: Color::white(),
+            transmit: Color::white(),
+        }
     }
+    pub fn with_colors(self, reflect: Color, transmit: Color) -> Self {
+        Self {
+            refract_index: self.refract_index,
+            reflect,
+            transmit,
+        }
+    }
+}
+
+pub enum Roughness {
+    Iso(f32),
+    UV((f32, f32)),
+}
+
+pub struct Uber {
+    pub kd: Arc<dyn Texture>,
+    pub ks: Arc<dyn Texture>,
+    pub kr: Option<Arc<dyn Texture>>,
+    pub kt: Option<Arc<dyn Texture>>,
+    pub rough: Roughness,
+    pub eta: f32,
+    pub opacity: f32,
+    pub remap_roughness: bool,
+}
+
+pub struct Substrate {
+    pub kd: Arc<dyn Texture>,
+    pub ks: Arc<dyn Texture>,
+    pub rough: Roughness,
+    pub remap_roughness: bool,
 }
 
 pub struct DiffuseLight {
@@ -91,8 +144,11 @@ pub fn uniform_hemisphere() -> Vec3 {
 impl Material for Lambertian {
     fn scatter(&self, _: Vec3, isect: &Interaction) -> (Ray, Color) {
         let h = uniform_hemisphere();
-        let (nx, ny) = hcm::make_coord_system(isect.normal);
-        let wo = nx * h.x + ny * h.y + isect.normal * h.z;
+        let wo = (h.dot(isect.normal)).signum() * h;
+        // let mut wo = isect.normal + uniform_sphere();
+        // if wo.norm_squared() < 1e-6 {
+        //     wo = isect.normal;
+        // }
         let ray_out = Ray::new(isect.pos + isect.normal * 0.001, wo);
         (ray_out, self.albedo.value(isect.uv, isect.pos))
     }
@@ -102,6 +158,14 @@ impl Material for Metal {
     fn scatter(&self, wi: Vec3, isect: &Interaction) -> (Ray, Color) {
         let reflected = hcm::reflect(isect.normal, wi);
         let ray_out = Ray::new(isect.pos, reflected + uniform_sphere() * self.fuzziness);
+        (ray_out, self.albedo)
+    }
+}
+
+impl Material for Mirror {
+    fn scatter(&self, wi: Vec3, isect: &Interaction) -> (Ray, Color) {
+        let reflected = hcm::reflect(isect.normal, wi);
+        let ray_out = Ray::new(isect.pos, reflected);
         (ray_out, self.albedo)
     }
 }
@@ -116,14 +180,15 @@ impl Material for Dielectric {
             (isect.normal, 1.0 / self.refract_index, isect.normal.dot(wi))
         };
         let reflected = hcm::reflect(outward_normal, wi);
-        let (mut wo, reflect_pr) = match hcm::refract(outward_normal, wi, ni_over_no) {
-            hcm::Transmit(wt) => (wt, schlick(cosine, self.refract_index)),
-            hcm::FullReflect(_) => (reflected, 1.0),
+        let (mut wo, reflect_pr, mut color) = match hcm::refract(outward_normal, wi, ni_over_no) {
+            hcm::Transmit(wt) => (wt, schlick(cosine, self.refract_index), self.transmit),
+            hcm::FullReflect(_) => (reflected, 1.0, self.reflect),
         };
         if rand::random::<f32>() < reflect_pr {
             wo = reflected;
+            color = self.reflect;
         }
-        (Ray::new(isect.pos, wo), Color::white())
+        (Ray::new(isect.pos, wo), color)
     }
 }
 
@@ -135,6 +200,24 @@ impl Material for DiffuseLight {
     }
     fn emission(&self) -> Color {
         self.emit
+    }
+}
+
+impl Material for Uber {
+    fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
+        todo!()
+    }
+}
+
+impl Material for Substrate {
+    fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
+        todo!()
+    }
+}
+
+impl Material for Plastic {
+    fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
+        todo!()
     }
 }
 

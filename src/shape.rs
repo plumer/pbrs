@@ -6,9 +6,9 @@ use std::{
 
 use partition::partition;
 
-use crate::{assert_le, float};
 use crate::hcm::{Point3, Vec3};
 use crate::ray::Ray;
+use crate::{assert_le, float};
 use crate::{bvh, bvh::BBox, float::Interval};
 
 #[derive(Debug, Clone, Copy)]
@@ -64,7 +64,7 @@ impl Sphere {
     }
     pub fn from_raw(center: (f32, f32, f32), radius: f32) -> Sphere {
         let (x, y, z) = center;
-        let has_nan = x.is_nan() || y.is_nan()|| z.is_nan() || radius.is_nan();
+        let has_nan = x.is_nan() || y.is_nan() || z.is_nan() || radius.is_nan();
         assert!(!has_nan);
         Self::new(Point3::new(x, y, z), radius)
     }
@@ -318,6 +318,58 @@ where
     }
 }
 
+pub struct TriangleMesh {
+    positions: Vec<Point3>,
+    normals: Vec<Vec3>,
+    uvs: Vec<(f32, f32)>,
+    indicies: Vec<(i32, i32, i32)>,
+}
+
+impl TriangleMesh {
+    pub fn build_from_raw(raw: &TriangleMeshRaw) -> Self {
+        assert_eq!(raw.indices.len() % 3, 0);
+        let mut mesh = Self {
+            positions: vec![],
+            normals: vec![],
+            uvs: vec![],
+            indicies: raw
+                .indices
+                .chunks_exact(3)
+                .map(|v| (v[0], v[1], v[2]))
+                .collect(),
+        };
+        for vertex in raw.vertices.iter() {
+            let Vertex { pos, normal, uv } = vertex.clone();
+            mesh.positions.push(pos);
+            mesh.normals.push(normal);
+            mesh.uvs.push(uv);
+        }
+        mesh
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Vertex {
+    pub pos: Point3,
+    pub normal: Vec3,
+    pub uv: (f32, f32),
+}
+
+pub struct TriangleMeshRaw {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<i32>,
+}
+
+impl Vertex {
+    pub fn zero() -> Self {
+        Vertex {
+            pos: Point3::origin(),
+            normal: Vec3::zero(),
+            uv: (0.0, 0.0),
+        }
+    }
+}
+
 // Implementation of shapes with regard to trait `Shape`.
 // ------------------------------------------------------------------------------------------------
 
@@ -556,5 +608,14 @@ where
 
     fn bbox(&self) -> BBox {
         self.bbox
+    }
+}
+
+impl Shape for TriangleMesh {
+    fn intersect(&self, r: &Ray) -> Option<Interaction> {
+        todo!()
+    }
+    fn bbox(&self) -> BBox {
+        todo!()
     }
 }

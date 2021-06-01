@@ -210,3 +210,15 @@ impl Texture for Image {
         self.data[index]
     }
 }
+
+pub trait TextureF32: Send + Sync {
+    fn value(&self, uv: (f32, f32), p: Point3) -> f32;
+}
+
+struct Fbm {}
+
+impl TextureF32 for Fbm {
+    fn value(&self, uv: (f32, f32), p: Point3) -> f32 {
+        todo!()
+    }
+}

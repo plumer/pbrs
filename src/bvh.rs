@@ -71,9 +71,9 @@ impl BBox {
     pub fn min(&self) -> Point3 {
         self.min
     }
-    
+
     pub fn area(&self) -> f32 {
-        let Vec3{x, y, z} = self.diag();
+        let Vec3 { x, y, z } = self.diag();
         if x.is_sign_positive() && y.is_sign_positive() && z.is_sign_positive() {
             (x * y + y * z + z * x) * 2.0
         } else {

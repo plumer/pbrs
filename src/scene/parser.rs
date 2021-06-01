@@ -20,7 +20,7 @@ pub struct Parser {
 
 impl Parser {
     // fn dont_call_me(self: &mut Self) {
-    //     let dummy = self.peek;
+    //     let dummy : Token = self.peek.into();
     //     self.peek = self.iter.next().unwrap();
     // }
     #[allow(dead_code)]
@@ -39,7 +39,6 @@ impl Parser {
             items: world_items,
         }
     }
-
 
     fn parse_world_item(&mut self) -> WorldItem {
         match self.peek {
@@ -211,16 +210,15 @@ impl Parser {
                 let parameter_list = self.parse_parameter_list();
                 SceneWideOption::Accel(implementation, parameter_list)
             }
-            Token::KwLookAt => {
-                SceneWideOption::Transform(self.parse_transform())
-            }
+            Token::KwLookAt => SceneWideOption::Transform(self.parse_transform()),
+            ref t if t.starts_transform() => SceneWideOption::Transform(self.parse_transform()),
             _ => raise_syntax_error!("incorrect token to start a scene option: {:?}", self.peek),
         }
     }
 
     /// Parses the next few tokens as a parameter, assuming the next peek is a string literal.
     /// Raises a syntax error otherwise.
-    fn parse_parameter(&mut self) -> Parameter {
+    fn parse_parameter(&mut self) -> (String, ArgValue) {
         let key = if let Token::QuotedString(key) = self.peek.clone() {
             key
         } else {
@@ -228,12 +226,20 @@ impl Parser {
         };
 
         self.goto_next();
-        match self.peek.clone() {
+        let value = match self.peek.take() {
             Token::LBracket => {
                 self.goto_next();
                 let param = match self.peek {
-                    Token::Float(_) => Parameter::new_numbers(key, self.parse_number_list()),
-                    Token::QuotedString(_) => Parameter::new_strings(key, self.parse_string_list()),
+                    Token::Float(_) => {
+                        let number_list = self.parse_number_list();
+                        assert!(number_list.is_empty() == false);
+                        if number_list.len() == 1 {
+                            ArgValue::Number(number_list[0])
+                        } else {
+                            ArgValue::Numbers(number_list)
+                        }
+                    }
+                    Token::QuotedString(_) => ArgValue::String(self.get_next_quoted_string()),
                     _ => self.raise_syntax_error("only numbers or quoted strings allowed"),
                 };
                 self.consume_next(Token::RBracket);
@@ -241,25 +247,26 @@ impl Parser {
             }
             Token::QuotedString(s) => {
                 self.goto_next();
-                Parameter::new_string(key, s)
+                ArgValue::String(s)
             }
             Token::Float(f) => {
                 self.goto_next();
-                Parameter::new_number(key, f)
+                ArgValue::Number(f)
             }
             _ => self.raise_syntax_error("unexpected token after key"),
-        }
+        };
+        (key, value)
     }
 
     /// Collect parameters in the input stream as many as possible and returns the collection as a Vec.
     fn parse_parameter_list(&mut self) -> ParameterSet {
-        let mut parameters = vec![];
+        let mut parameters = std::collections::HashMap::<String, ArgValue>::new();
         while let Token::QuotedString(_) = self.peek {
-            parameters.push(self.parse_parameter());
+            let (k, v) = self.parse_parameter();
+            parameters.insert(k, v);
         }
         ParameterSet(parameters)
     }
-
 
     fn parse_transform(&mut self) -> Transform {
         let keyword = self.peek.clone();
@@ -281,9 +288,9 @@ impl Parser {
                 Transform::Scale(Vec3::new(x, y, z))
             }
             Token::KwRotate => {
-                let raw_numbers = self.get_next_3_numbers();
                 if let Token::Float(angle) = self.peek {
                     self.goto_next();
+                    let raw_numbers = self.get_next_3_numbers();
                     let [x, y, z] = raw_numbers;
                     Transform::Rotate(Vec3::new(x, y, z), Degree(angle))
                 } else {
@@ -306,10 +313,13 @@ impl Parser {
             | Token::KwConcatTransform
             | Token::KwCoordSysTransform
             | Token::KwCoordinateSystem => unimplemented!("sorry"),
-            _ => panic!("unexpected token {:?}, {:?}", keyword, self.iter.clone().enumerate()),
+            _ => panic!(
+                "unexpected token {:?}, {:?}",
+                keyword,
+                self.iter.clone().enumerate()
+            ),
         }
     }
-
 
     fn parse_number_list(&mut self) -> Vec<f32> {
         let mut numbers = vec![];
@@ -319,14 +329,6 @@ impl Parser {
         }
         assert!(!matches!(self.peek, Token::Float(_)));
         numbers
-    }
-    fn parse_string_list(&mut self) -> Vec<String> {
-        let mut strings = vec![];
-        while let Token::QuotedString(qstr) = self.peek.clone() {
-            strings.push(qstr);
-            self.goto_next();
-        }
-        strings
     }
     fn get_next_3_numbers(&mut self) -> [f32; 3] {
         let mut numbers = [0.0f32; 3];
@@ -341,7 +343,7 @@ impl Parser {
         numbers
     }
     fn get_next_quoted_string(&mut self) -> String {
-        if let Token::QuotedString(s) = self.peek.clone() {
+        if let Token::QuotedString(s) = self.peek.take() {
             self.goto_next();
             s
         } else {

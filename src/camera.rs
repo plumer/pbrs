@@ -1,5 +1,5 @@
 use crate::hcm;
-use crate::{ray};
+use crate::ray;
 
 /// Left-handed coordinate system camera: x rightward, y upward, z forward.
 pub struct Camera {
@@ -32,13 +32,13 @@ impl Camera {
             orientation: hcm::Mat3::identity(),
         }
     }
-    
+
     #[allow(dead_code)]
     pub fn look_at(&mut self, from: hcm::Point3, target: hcm::Point3, up: hcm::Vec3) {
-        let forward = (target - from).hat();  // new z-axis
-        let right = (up.cross(forward)).hat();  // new x-axis, equals to cross(y, z)
-        let up = forward.cross(right);        // adjusted y-axis, equals to cross(z, x)
-        
+        let forward = (target - from).hat(); // new z-axis
+        let right = (up.cross(forward)).hat(); // new x-axis, equals to cross(y, z)
+        let up = forward.cross(right); // adjusted y-axis, equals to cross(z, x)
+
         self.orientation = hcm::Mat3::from_vectors(right, up, forward);
         self.center = from;
     }
@@ -56,7 +56,7 @@ impl Camera {
             Some(ray::Ray::new(self.center, dir))
         }
     }
-    
+
     /// Returns resolution (width x height) of the camera film.
     pub fn resolution(&self) -> (u32, u32) {
         (self.width, self.height)

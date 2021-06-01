@@ -1,30 +1,64 @@
+use crate::hcm::{Degree, Point3, Vec3};
+use std::collections::HashMap;
 use std::fmt;
 
-use crate::hcm::{Degree, Point3, Vec3};
-
-#[derive(Debug)]
-pub enum Parameter {
-    Strings(String, Vec<String>),
-    Numbers(String, Vec<f32>),
+#[derive(Debug, Clone)]
+pub enum ArgValue {
+    String(String),
+    Numbers(Vec<f32>),
+    Number(f32),
 }
 
-impl Parameter {
-    pub fn new_number(key: String, number: f32) -> Self {
-        Parameter::Numbers(key, vec![number])
+#[derive(Clone)]
+pub struct ParameterSet(pub HashMap<String, ArgValue>);
+
+impl ParameterSet {
+    pub fn lookup_f32(&self, key: &str) -> Option<f32> {
+        let num = self.0.get(key)?;
+        match num {
+            ArgValue::Numbers(x) => x.first(),
+            _ => None,
+        }
+        .map(|x| *x)
     }
-    pub fn new_string(key: String, word: String) -> Self {
-        Parameter::Strings(key, vec![word])
+
+    pub fn lookup_string(&self, key: &str) -> Option<String> {
+        let string_parameter = self.0.get(key)?;
+        match string_parameter {
+            ArgValue::String(s) => Some(s.clone()),
+            _ => None,
+        }
     }
-    pub fn new_numbers(key: String, numbers: Vec<f32>) -> Self {
-        Parameter::Numbers(key, numbers)
+
+    pub fn extract_string(&mut self, key: &str) -> Option<String> {
+        let string = self.0.remove(key)?;
+        match string {
+            ArgValue::String(s) => Some(s),
+            _ => None,
+        }
     }
-    pub fn new_strings(key: String, strings: Vec<String>) -> Self {
-        Parameter::Strings(key, strings)
+
+    pub fn extract(&mut self, key: &str) -> Option<ArgValue> {
+        self.0.remove(key)
+    }
+
+    /// Finds a key-value pair in the parameter set where the key contains `pattern` as a substring,
+    /// delimited by spaces.
+    /// Returns the fully matched key and its value.
+    pub fn extract_substr(&mut self, pattern: &str) -> Option<(String, ArgValue)> {
+        let full_key = self
+            .0
+            .keys()
+            .find(|k| k.split(' ').any(|part| part == pattern))?
+            .clone();
+        let value = self
+            .0
+            .remove(&full_key)
+            .expect("the value should exist after a key is found");
+        Some((full_key, value))
     }
 }
-
-pub struct ParameterSet(pub Vec<Parameter>);
-
+#[derive(Clone)]
 pub enum Transform {
     Identity,
     Translate(Vec3),
@@ -48,6 +82,7 @@ pub enum SceneWideOption {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub enum WorldItem {
     Transform(Transform),
     Shape(String, ParameterSet),
@@ -55,6 +90,7 @@ pub enum WorldItem {
     Light(String, ParameterSet),
     AreaLight(String, ParameterSet),
     Media(String, ParameterSet),
+    /// implmentation, type, name
     Texture(String, String, String, ParameterSet),
 
     AttributeBlock(Vec<WorldItem>),
@@ -77,21 +113,23 @@ pub struct Scene {
 
 // Formatters
 // --------------------------------------------------------------------
-impl fmt::Display for Parameter {
+impl fmt::Display for ArgValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Numbers(key, numbers) => write!(f, " {} = {:?}", key, numbers),
-            Self::Strings(key, strings) => write!(f, " {} = {:?}", key, strings),
+            Self::Numbers(numbers) => write!(f, "{:?}", numbers),
+            Self::String(s) => write!(f, "{}", s),
+            Self::Number(x) => write!(f, "{}", x),
         }
     }
 }
 
 impl fmt::Display for ParameterSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for parameter in self.0.iter() {
+        for (key, parameter) in self.0.iter() {
             match parameter {
-                Parameter::Numbers(key, numbers) => write!(f, "    {} = {:?}\n", key, numbers)?,
-                Parameter::Strings(key, strings) => write!(f, "    {} = {:?}\n", key, strings)?,
+                ArgValue::Numbers(numbers) => write!(f, "    {} = {:?}\n", key, numbers)?,
+                ArgValue::String(s) => write!(f, "    {} = {}\n", key, s)?,
+                ArgValue::Number(n) => write!(f, "    {} = {}\n", key, n)?,
             }
         }
         write!(f, "")

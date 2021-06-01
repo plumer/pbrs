@@ -1,5 +1,5 @@
-use std::{ffi::OsString, io::Read};
 use logos::Logos;
+use std::{ffi::OsString, io::Read};
 
 use crate::scene::token::Token;
 
@@ -34,7 +34,7 @@ impl Lexer {
             .expect("reading file failed");
 
         let tokenizer = Token::lexer(&content);
-        
+
         tokenizer.collect::<Vec<_>>()
     }
 }

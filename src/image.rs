@@ -93,7 +93,12 @@ pub struct PixelCoordIter {
 #[allow(dead_code)]
 impl PixelCoordIter {
     pub fn new(width: u32, height: u32) -> PixelCoordIter {
-        PixelCoordIter{width, height, ix: 0, iy: 0}
+        PixelCoordIter {
+            width,
+            height,
+            ix: 0,
+            iy: 0,
+        }
     }
 }
 
@@ -101,7 +106,7 @@ impl Iterator for PixelCoordIter {
     type Item = (u32, u32);
     fn next(&mut self) -> Option<Self::Item> {
         let current_position = (self.iy, self.ix);
-        
+
         self.ix += 1;
         if self.ix >= self.width {
             self.ix = 0;
@@ -115,18 +120,17 @@ impl Iterator for PixelCoordIter {
     }
 }
 
-
 #[cfg(test)]
 mod test {
 
     #[test]
     fn test_pixel_coord_iter() {
         let px_iter = super::PixelCoordIter::new(3, 2);
-        let all_coords : Vec<_> = px_iter.collect();
+        let all_coords: Vec<_> = px_iter.collect();
         let expected_coords = vec![(0u32, 0u32), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)];
         assert_eq!(all_coords, expected_coords);
     }
-    
+
     #[test]
     fn test_black() {
         assert!(super::Color::black().is_black());

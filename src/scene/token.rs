@@ -109,7 +109,7 @@ pub enum Token {
     #[regex(r"[\-\+]?\d+(\.\d*)?", |str| str.slice().parse())]
     #[regex(r"[\-\+]?\.\d+", |str| str.slice().parse())]
     Float(f32),
-    #[regex("\"[^\"\n]+\"", |str| str.slice().to_owned())]
+    #[regex("\"[^\"\n]+\"", |str| str.slice().trim_matches('\"').to_owned())]
     QuotedString(String),
 }
 
@@ -141,7 +141,7 @@ impl Token {
                 | Self::KwIntegrator
                 | Self::KwAccelerator
                 | Self::KwLookAt
-        )
+        ) || self.starts_transform()
     }
 
     pub fn starts_world_item(&self) -> bool {
@@ -161,5 +161,11 @@ impl Token {
                 | Self::KwNamedMedium
                 | Self::KwMakeNamedMedium
         ) || self.starts_transform()
+    }
+
+    pub fn take(&mut self) -> Self {
+        let mut t = Self::Error;
+        std::mem::swap(&mut t, self);
+        t
     }
 }

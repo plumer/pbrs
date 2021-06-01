@@ -53,12 +53,28 @@ impl fmt::Display for Radian {
 
 impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:.2}, {:.2}, {:.2})", self.x, self.y, self.z)
+        let precision = f.precision().unwrap_or(2);
+        write!(
+            f,
+            "({:.p$}, {:.p$}, {:.p$})",
+            self.x,
+            self.y,
+            self.z,
+            p = precision
+        )
     }
 }
 impl fmt::Display for Point3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{:.2}, {:.2}, {:.2}]", self.x, self.y, self.z)
+        let precision = f.precision().unwrap_or(2);
+        write!(
+            f,
+            "[{:.p$}, {:.p$}, {:.p$}]",
+            self.x,
+            self.y,
+            self.z,
+            p = precision
+        )
     }
 }
 
@@ -441,7 +457,7 @@ impl Mat3 {
             let vc = base.dot(axis) * axis / axis.dot(axis);
             let v1 = base - vc;
             let v2 = v1.cross(axis.hat());
-            mat.cols[i] = Vec3::from(vc + v1 * cos_t + v2 * sin_t);
+            mat.cols[i] = vc + v1 * cos_t + v2 * sin_t;
         }
         mat
     }
@@ -464,7 +480,8 @@ impl Mul for Mat3 {
     fn mul(self, m: Self) -> Mat3 {
         let mut mat = Mat3::zero();
         for c in 0..3 {
-            mat.cols[c] = self * m.cols[c];
+            // TODO verify the correctness
+            mat.cols[c] = mat.cols[c] + self * m.cols[c];
         }
         mat
     }
@@ -567,7 +584,8 @@ impl Mul for Mat4 {
     fn mul(self, m: Self) -> Mat4 {
         let mut mat = Mat4::zero();
         for c in 0..4 {
-            mat.cols[c] = self * m.cols[c];
+            // TODO verify the correctness and implement AddAssign trait.
+            mat.cols[c] = mat.cols[c] + self * m.cols[c];
         }
         mat
     }
@@ -599,6 +617,7 @@ pub fn normalize(x: f32, y: f32, z: f32) -> Vec3 {
     Vec3::new(x, y, z).hat()
 }
 
+#[allow(dead_code)]
 pub fn make_coord_system(v: Vec3) -> (Vec3, Vec3) {
     let i0 = v.abs_min_dimension();
     let (i1, i2) = ((i0 + 1) % 3, (i0 + 2) % 3);
@@ -655,7 +674,7 @@ mod test {
         let wo = Vec3::new(-2.0, 1.0, -0.5);
         let reflect_wi = super::reflect(normal, wi);
         eprintln!("reflect_wi = {}", reflect_wi);
-        assert!((reflect_wi - wo).norm_squared() < std::f32::EPSILON);
+        assert!((reflect_wi - wo).norm_squared() < f32::EPSILON);
     }
     #[test]
     fn test_refract() {
@@ -665,12 +684,9 @@ mod test {
         let refract_wo = super::refract(normal, wi, 0.5f32.sqrt());
         match refract_wo {
             super::FullReflect(_) => panic!(""),
-            super::Transmit(v) => assert!(
-                (wo - v).norm_squared() < std::f32::EPSILON,
-                "{} vs {}",
-                v,
-                wo
-            ),
+            super::Transmit(v) => {
+                assert!((wo - v).norm_squared() < f32::EPSILON, "{} vs {}", v, wo)
+            }
         }
     }
 }
