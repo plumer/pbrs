@@ -4,6 +4,7 @@ pub mod parser;
 pub mod plyloader;
 pub mod token;
 
+use core::panic;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -43,6 +44,7 @@ struct SceneLoader {
     pub instances: Vec<crate::instance::Instance>,
 }
 
+#[allow(dead_code)]
 pub fn build_scene(path: &str) {
     let lexer = lexer::Lexer::from_file(path).unwrap();
     let mut tokens = lexer.read_tokens();
@@ -148,11 +150,11 @@ impl SceneLoader {
             }
             _ => {
                 eprintln!("unhandled world item: {}", item);
-            },
+            }
         }
     }
 
-    fn parse_shape(&self, r#impl: &String, parameters: ast::ParameterSet) -> Arc<dyn Shape> {
+    fn parse_shape(&self, r#impl: &String, mut parameters: ast::ParameterSet) -> Arc<dyn Shape> {
         let implementation = r#impl.trim_matches('\"');
         match implementation {
             "sphere" => {
@@ -169,6 +171,50 @@ impl SceneLoader {
                 let _alpha_texture = parameters.lookup_string("alpha");
                 let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
                 let tri_bvh = shape::TriangleMesh::build_from_raw(&mesh);
+                Arc::new(tri_bvh)
+            }
+            "trianglemesh" | "loopsubdiv" => {
+                if implementation == "loopsubdiv" {
+                    eprintln!("unsupported subdiv, using regular triangle mesh");
+                }
+                let points_raw = match parameters.extract("point P").expect("missing points") {
+                    ArgValue::Numbers(nums) => nums,
+                    wtf => panic!("incorrect format for points: {:?}", wtf),
+                };
+                let points: Vec<_> = points_raw
+                    .chunks_exact(3)
+                    .map(|xyz| hcm::Point3::new(xyz[0], xyz[1], xyz[2]))
+                    .collect();
+
+                let uv_raw = match parameters.extract("float uv") {
+                    None => vec![0.0; points.len() * 2],
+                    Some(ArgValue::Numbers(nums)) => nums,
+                    Some(wtf) => panic!("incorrect format for uv coords: {:?}", wtf),
+                };
+                let uvs: Vec<_> = uv_raw.chunks_exact(2).map(|uv| (uv[0], uv[1])).collect();
+                
+                let indices_raw = match parameters.extract("integer indices") {
+                    None => panic!("missing indices"),
+                    Some(ArgValue::Numbers(nums)) => nums,
+                    Some(arg) => panic!("incorrect format for indices: {:?}", arg),
+                };
+                let indices = indices_raw
+                    .chunks_exact(3)
+                    .map(|ijk| (ijk[0] as usize, ijk[1] as usize, ijk[2] as usize))
+                    .collect::<Vec<_>>();
+                    
+                let normal_raw = match parameters.extract_substr("normal") {
+                    None => vec![0.0; points_raw.len()],
+                    Some((_, ArgValue::Numbers(nums))) => nums,
+                    Some((_, wtf)) => panic!("incorrect format for normals: {:?}", wtf),
+                };
+                let normals = normal_raw
+                    .chunks_exact(3)
+                    .map(|xyz| hcm::Vec3::new(xyz[0], xyz[1], xyz[2]))
+                    .collect::<Vec<_>>();
+
+
+                let tri_bvh = shape::TriangleMesh::from_soa(points, normals, uvs, indices);
                 Arc::new(tri_bvh)
             }
             _ => unimplemented!("implementation = {}", implementation),
@@ -274,7 +320,12 @@ impl SceneLoader {
                 }
                 Some((_, wtf)) => panic!("invalid remapreoughness: {:?}", wtf),
             };
-            let mtl = mtl::Plastic{diffuse: kd, specular: ks, roughness, remap_roughness};
+            let mtl = mtl::Plastic {
+                diffuse: kd,
+                specular: ks,
+                roughness,
+                remap_roughness,
+            };
             Arc::new(mtl)
         } else if mtl_impl == "uber" {
             let kd_tex = match parameters.extract_substr("Kd") {
