@@ -72,6 +72,7 @@ impl BBox {
         self.min
     }
 
+    /// Computes the surface area of the bounding box.
     pub fn area(&self) -> f32 {
         let Vec3 { x, y, z } = self.diag();
         if x.is_sign_positive() && y.is_sign_positive() && z.is_sign_positive() {
