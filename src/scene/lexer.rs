@@ -33,8 +33,28 @@ impl Lexer {
             .read_to_string(&mut content)
             .expect("reading file failed");
 
-        let tokenizer = Token::lexer(&content);
+        let mut tokenizer = Token::lexer(&content);
 
-        tokenizer.collect::<Vec<_>>()
+        // tokenizer.collect::<Vec<_>>()
+        let mut tokens = Vec::<Token>::new();
+        while let Some(t) = tokenizer.next() {
+            if t != Token::Include {
+                tokens.push(t);
+            } else {
+                let next_t = tokenizer
+                    .next()
+                    .expect("should have a file name after include");
+                if let Token::QuotedString(file_name) = next_t {
+                    let mut included_file_path = self.root_dir.clone();
+                    included_file_path.push(file_name);
+                    let nested_lexer = Lexer::from_file(included_file_path.to_str().unwrap())
+                        .expect("Can't read included file");
+                    tokens.append(&mut nested_lexer.read_tokens());
+                } else {
+                    panic!("should have a file name after include, but instead {:?}", next_t);
+                }
+            }
+        }
+        tokens
     }
 }

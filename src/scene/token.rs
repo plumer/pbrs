@@ -11,6 +11,9 @@ pub enum Token {
 
     #[regex(r"#[^\n]+\n", logos::skip)]
     Comment,
+    
+    #[token("Include")]
+    Include,
 
     // Directive of scene-wide options
     // ----------------------------------------------------------------
