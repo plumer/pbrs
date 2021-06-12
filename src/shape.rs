@@ -6,12 +6,10 @@ use std::{
 
 use partition::partition;
 
+use crate::float;
+use crate::hcm::{Point3, Vec3};
 use crate::ray::Ray;
-use crate::{float};
 use crate::{bvh, bvh::BBox, float::Interval};
-use crate::{
-    hcm::{Point3, Vec3},
-};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interaction {
@@ -50,6 +48,7 @@ impl Display for Interaction {
 pub trait Shape: Send + Sync {
     fn intersect(&self, r: &Ray) -> Option<Interaction>;
     fn bbox(&self) -> BBox;
+    fn summary(&self) -> String;
 }
 
 // Definition of various shapes and their building methods.
@@ -163,6 +162,21 @@ struct IsoBvhNode {
     content: IsoBvhNodeContent,
 }
 
+impl IsoBvhNode {
+    fn height(&self) -> usize {
+        match &self.content {
+            Children([left, right]) => std::cmp::max(left.height(), right.height()) + 1,
+            Leaf(_) => 1,
+        }
+    }
+    fn count(&self) -> usize {
+        match &self.content {
+            Children([left, right]) => left.count() + right.count() + 1,
+            Leaf(_) => 1,
+        }
+    }
+}
+
 /// A collection of `Shape`s of same type and organized with a bounding-volume hierarchy.
 pub struct IsoBlas<T>
 where
@@ -198,7 +212,6 @@ where
         raw.bvh_root = Some(tree);
         raw
     }
-
 }
 
 struct Triangle {
@@ -326,6 +339,11 @@ impl TriangleMesh {
         })
     }
 
+    pub fn bvh_shape_summary(&self) -> String {
+        let bvh = self.bvh_root.as_ref().unwrap();
+        format!("height = {}, node count = {}", bvh.height(), bvh.count())
+    }
+
     // fn positions(&self, ijk: (i32, i32, i32)) -> (Point3, Point3, Point3) {
     //     let (i, j, k) = ijk;
     //     let p = &self.positions;
@@ -359,6 +377,9 @@ impl Vertex {
 // ------------------------------------------------------------------------------------------------
 
 impl Shape for Sphere {
+    fn summary(&self) -> String {
+        format!("Sphere{{ {}, radius = {} }}", self.center, self.radius)
+    }
     fn bbox(&self) -> BBox {
         let half_diagonal = Vec3::new(1.0, 1.0, 1.0) * self.radius;
         BBox::new(self.center - half_diagonal, self.center + half_diagonal)
@@ -424,6 +445,11 @@ impl Shape for Sphere {
 }
 
 impl Shape for QuadXY {
+    fn summary(&self) -> String {
+        let (xmin, xmax) = self.x_interval.as_pair();
+        let (ymin, ymax) = self.y_interval.as_pair();
+        format!("QuadXY{{[{}, {}]x[{}, {}]}}", xmin, xmax, ymin, ymax)
+    }
     fn bbox(&self) -> BBox {
         let (xmin, xmax) = self.x_interval.as_pair();
         let (ymin, ymax) = self.y_interval.as_pair();
@@ -454,6 +480,11 @@ impl Shape for QuadXY {
 }
 
 impl Shape for QuadXZ {
+    fn summary(&self) -> String {
+        let (xmin, xmax) = self.x_interval.as_pair();
+        let (zmin, zmax) = self.z_interval.as_pair();
+        format!("QuadXZ{{[{}, {}]x[{}, {}]}}", xmin, xmax, zmin, zmax)
+    }
     fn bbox(&self) -> BBox {
         let (xmin, xmax) = self.x_interval.as_pair();
         let (zmin, zmax) = self.z_interval.as_pair();
@@ -482,6 +513,11 @@ impl Shape for QuadXZ {
 }
 
 impl Shape for QuadYZ {
+    fn summary(&self) -> String {
+        let (zmin, zmax) = self.z_interval.as_pair();
+        let (ymin, ymax) = self.y_interval.as_pair();
+        format!("QuadXY{{[{}, {}]x[{}, {}]}}", ymin, ymax, zmin, zmax)
+    }
     fn bbox(&self) -> BBox {
         let (ymin, ymax) = self.y_interval.as_pair();
         let (zmin, zmax) = self.z_interval.as_pair();
@@ -510,6 +546,9 @@ impl Shape for QuadYZ {
 }
 
 impl Shape for Cuboid {
+    fn summary(&self) -> String {
+        format!("Cuboid{{{} <-> {}}}", self.min, self.max)
+    }
     fn bbox(&self) -> BBox {
         BBox::new(self.min, self.max)
     }
@@ -586,6 +625,18 @@ impl<T> Shape for IsoBlas<T>
 where
     T: Shape,
 {
+    fn summary(&self) -> String {
+        if self.shapes.is_empty() {
+            String::from("EmptyBlas")
+        } else {
+            let shape_summary = self.shapes[0].summary();
+            let shape_name = match shape_summary.find('{') {
+                None => &shape_summary,    
+                Some(end) => &shape_summary[0..end],
+            };
+            format!("Blas of {} {}s", self.shapes.len(), shape_name)
+        }
+    }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         let tree = self.bvh_root.as_ref()?;
         intersect_bvh(&self.shapes, tree, r, |s: &T, r| s.intersect(r))
@@ -597,6 +648,10 @@ where
 }
 
 impl Shape for TriangleMesh {
+    fn summary(&self) -> String {
+        format!("TriangleMesh{{{} triangles, {} vertices, bvh = {}}}",
+                self.triangles.len(), self.positions.len(), self.bvh_shape_summary())
+    }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         let tree = self.bvh_root.as_ref()?;
         // self.intersect_tree(tree, r)
@@ -670,9 +725,9 @@ where
 
     // Partitions the set of shapes w.r.t. their bounding box midpoint coordinate on the split axis.
     let (left, right) = partition(&mut shapes[range.clone()], |s| {
-        box_getter(s).midpoint()[split_axis] < pivot_value
+        box_getter(s).midpoint()[split_axis] <= pivot_value
     });
-    let mid_point = left.len() + range.start;
+    let mut mid_point = left.len() + range.start;
     // This assertion isn't necessary: assert_eq!(mid_point - range.start, left.len());
     assert_eq!(
         range.end - mid_point,
@@ -684,8 +739,15 @@ where
         mid_point
     );
 
-    // assert!(left.len() > 0);
-    // assert!(right.len() > 0);
+    if left.len() == 0 || right.len() == 0 {
+        shapes[range.clone()].select_nth_unstable_by(range.len() / 2, |s0, s1| {
+            box_getter(s0).midpoint()[split_axis]
+                .partial_cmp(&box_getter(s1).midpoint()[split_axis])
+                .unwrap()
+        });
+        mid_point = range.start + range.len() / 2;
+    }
+    assert!(mid_point != range.start && mid_point != range.end);
 
     let left_child = recursive_build(shapes, range.start..mid_point, box_getter);
     let right_child = recursive_build(shapes, mid_point..range.end, box_getter);

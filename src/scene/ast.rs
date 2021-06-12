@@ -9,7 +9,7 @@ pub enum ArgValue {
     Number(f32),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ParameterSet(pub HashMap<String, ArgValue>);
 
 impl ParameterSet {
@@ -17,6 +17,7 @@ impl ParameterSet {
         let num = self.0.get(key)?;
         match num {
             ArgValue::Numbers(x) => x.first(),
+            ArgValue::Number(x) => Some(x),
             _ => None,
         }
         .map(|x| *x)
@@ -58,7 +59,7 @@ impl ParameterSet {
         Some((full_key, value))
     }
 }
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Transform {
     Identity,
     Translate(Vec3),
@@ -71,6 +72,7 @@ pub enum Transform {
     // ConcatMatrix4x4(Mat4),
 }
 
+#[derive(Debug)]
 pub enum SceneWideOption {
     Camera(String, ParameterSet),
     Film(String, ParameterSet),

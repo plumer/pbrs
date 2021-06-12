@@ -68,33 +68,34 @@ pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
 fn main() {
     // estimate_pi();
     // play_integrator();
-    {
-        // let pbrt_file = "assets/bathroom/bathroom.pbrt";
-        let pbrt_file = "assets/killeroos/killeroo-simple.pbrt";
-        scene::build_scene(pbrt_file);
-    }
+    // {
+    //     // let pbrt_file = "assets/bathroom/bathroom.pbrt";
+    //     let pbrt_file = "assets/killeroos/killeroo-simple.pbrt";
+    //     scene::build_scene(pbrt_file);
+    // }
 
     // {
     //     let ply_file = "assets/bathroom/geometry/mesh_00001.ply";
     //     scene::load_ply(ply_file);
     // }
 
-    {
-        let x = ["hello", "world", "rust"];
-        let y = x.iter().map(|s| String::from(*s)).collect::<Vec<_>>();
+    // {
+    //     let x = ["hello", "world", "rust"];
+    //     let y = x.iter().map(|s| String::from(*s)).collect::<Vec<_>>();
 
-        for s in y.into_iter() {
-            println!("s = {}", s);
-        }
-    }
-
-    return;
+    //     for s in y.into_iter() {
+    //         println!("s = {}", s);
+    //     }
+    // }
 
     let half_right_angle = hcm::Degree(45.0);
     println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
-    let (bvh, camera, env_light) = scene_cornell_box();
+    let (bvh, camera, env_light) = 
+        load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
+        // scene_everything();
+    
     println!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
@@ -541,6 +542,14 @@ fn scene_everything() -> Scene {
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
     (build_bvh(instances), cam, dark_room)
+}
+
+#[allow(dead_code)]
+fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
+    let pbrt_scene = scene::build_scene(pbrt_file_path);
+    let cam = pbrt_scene.camera.expect("camera not built in the scene");
+    let tlas = pbrt_scene.instances.into_iter().map(|i| Box::new(i)).collect::<Vec<_>>();
+    (build_bvh(tlas), cam, dark_room)
 }
 
 // Monte-carlo playground

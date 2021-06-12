@@ -83,6 +83,24 @@ impl std::ops::Div<f32> for Color {
     }
 }
 
+impl std::fmt::Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "rgb({:.2}, {:.2}, {:.2})", self.r, self.g, self.b)
+    }
+}
+
+impl std::fmt::LowerHex for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "#{:02x}{:02x}{:02x}",
+            (self.r * 255.0) as u8,
+            (self.g * 255.0) as u8,
+            (self.b * 255.0) as u8
+        )
+    }
+}
+
 pub struct PixelCoordIter {
     width: u32,
     height: u32,

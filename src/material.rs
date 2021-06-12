@@ -16,6 +16,7 @@ pub trait Material: Sync + Send {
     fn emission(&self) -> Color {
         Color::black()
     }
+    fn summary(&self) -> String;
 }
 
 pub struct Lambertian {
@@ -55,7 +56,7 @@ pub struct Plastic {
     pub diffuse: Color,
     pub specular: Color,
     pub roughness: f32,
-    pub remap_roughness: bool
+    pub remap_roughness: bool,
 }
 
 pub struct Dielectric {
@@ -152,6 +153,9 @@ impl Material for Lambertian {
         let ray_out = Ray::new(isect.pos + isect.normal * 0.001, wo);
         (ray_out, self.albedo.value(isect.uv, isect.pos))
     }
+    fn summary(&self) -> String {
+        String::from("Lambertian")
+    }
 }
 
 impl Material for Metal {
@@ -160,6 +164,9 @@ impl Material for Metal {
         let ray_out = Ray::new(isect.pos, reflected + uniform_sphere() * self.fuzziness);
         (ray_out, self.albedo)
     }
+    fn summary(&self) -> String {
+        format!("Metal{{albedo = {}}}", self.albedo)
+    }
 }
 
 impl Material for Mirror {
@@ -167,6 +174,9 @@ impl Material for Mirror {
         let reflected = hcm::reflect(isect.normal, wi);
         let ray_out = Ray::new(isect.pos, reflected);
         (ray_out, self.albedo)
+    }
+    fn summary(&self) -> String {
+        format!("Mirror{{albedo = {}}}", self.albedo)
     }
 }
 
@@ -190,6 +200,9 @@ impl Material for Dielectric {
         }
         (Ray::new(isect.pos, wo), color)
     }
+    fn summary(&self) -> String {
+        format!("Dielectric{{ior = {}}}", self.refract_index)
+    }
 }
 
 impl Material for DiffuseLight {
@@ -201,11 +214,17 @@ impl Material for DiffuseLight {
     fn emission(&self) -> Color {
         self.emit
     }
+    fn summary(&self) -> String {
+        format!("DiffuseLight{{emit = {}}}", self.emit)
+    }
 }
 
 impl Material for Uber {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
+    }
+    fn summary(&self) -> String {
+        String::from("uber")
     }
 }
 
@@ -213,11 +232,17 @@ impl Material for Substrate {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
+    fn summary(&self) -> String {
+        String::from("substrate")
+    }
 }
 
 impl Material for Plastic {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
+    }
+    fn summary(&self) -> String {
+        String::from("plastic")
     }
 }
 

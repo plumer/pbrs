@@ -5,6 +5,7 @@ pub mod plyloader;
 pub mod token;
 
 use core::panic;
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -12,6 +13,7 @@ pub use plyloader::load_ply;
 
 use crate::hcm;
 use crate::image::Color;
+use crate::instance;
 use crate::material as mtl;
 use crate::material::Material;
 use crate::shape;
@@ -33,19 +35,21 @@ struct Scene {
     named_materials: HashMap<String, usize>,
 }
 
-struct SceneLoader {
+pub struct SceneLoader {
     root_dir: std::path::PathBuf,
-    ctm_stack: Vec<hcm::Mat4>,
+    // ctm_stack: Vec<hcm::Mat4>,
+    ctm_stack: Vec<crate::instance::RigidBodyTransform>,
     current_mtl: Option<Arc<dyn Material>>,
     reverse_orientation_stack: Vec<bool>,
 
     named_textures: HashMap<String, Arc<dyn Texture>>,
     named_materials: HashMap<String, Arc<dyn Material>>,
     pub instances: Vec<crate::instance::Instance>,
+    pub camera: Option<crate::camera::Camera>,
 }
 
 #[allow(dead_code)]
-pub fn build_scene(path: &str) {
+pub fn build_scene(path: &str) -> SceneLoader {
     let lexer = lexer::Lexer::from_file(path).unwrap();
     let mut tokens = lexer.read_tokens();
     // println!("{:?}", tokens);
@@ -59,26 +63,86 @@ pub fn build_scene(path: &str) {
     let root_dir = std::path::PathBuf::from(std::path::Path::new(path).parent().unwrap());
     let mut loader = SceneLoader::new(root_dir);
     loader.traverse_tree(ast);
+    return loader;
 }
 
 impl SceneLoader {
     fn new(root_dir: std::path::PathBuf) -> Self {
         SceneLoader {
             root_dir,
-            ctm_stack: vec![hcm::Mat4::identity()],
+            ctm_stack: vec![crate::instance::identity()],
+            // ctm_stack: vec![hcm::Mat4::identity()],
             current_mtl: None,
             reverse_orientation_stack: vec![false],
             named_textures: HashMap::new(),
             named_materials: HashMap::new(),
             instances: vec![],
+            camera: None
         }
+    }
+    
+    fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> Option<crate::camera::Camera> {
+        let mut fov = None;
+        let mut w = None;
+        let mut h = None;
+        let mut pose = None;
+        for _scene_option in scene_options.into_iter() {
+            match _scene_option {
+                ast::SceneWideOption::Camera(camera_impl, mut args) => {
+                    if camera_impl != "perspective" {
+                        eprintln!("non perspective camera {} unsupported", camera_impl);
+                    }
+                    fov = match args.extract("float fov") {
+                        None => Some(hcm::Degree(60.0)),
+                        Some(ArgValue::Number(deg)) => Some(hcm::Degree(deg)),
+                        Some(wtf) => panic!("complicated fov degree: {:?}", wtf),
+                    };
+                }
+                ast::SceneWideOption::Film(_film_impl, args) => {
+                    w = args.lookup_f32("integer xresolution");
+                    h = args.lookup_f32("integer yresolution");
+                }
+                ast::SceneWideOption::Transform(t) => {
+                    use ast::Transform;
+                    pose = match t {
+                        Transform::LookAt(from, target, up) => Some((from, target, up)),
+                        wtf => panic!(
+                            "unsupported transform in scene-wide options (lookat only): {:?}",
+                            wtf
+                        ),
+                    };
+                }
+                _ => eprintln!("unhandled scene-wide option {:?}", _scene_option),
+            }
+        }
+        use crate::camera::Camera;
+        let mut camera: Camera;
+        match (fov, w, h) {
+            (Some(degree), Some(width), Some(height),) => {
+                camera = Camera::new((width as u32, height as u32), degree.to_radian());
+            }
+            _ => return None
+        }
+        match pose {
+             Some((eye, target, up)) => camera.look_at(eye, target, up),
+             _ => (),
+        }
+        Some(camera)
     }
 
     fn traverse_tree(&mut self, ast: ast::Scene) {
-        for _scene_option in ast.options.iter() {}
+        self.camera = Self::build_camera(ast.options);
         let items: Vec<ast::WorldItem> = ast.items;
         for world_item in items.into_iter() {
             self.traverse_world_item(world_item);
+        }
+        for instance in self.instances.iter() {
+            println!(
+                "transform = {}, shape summary = {}, mtl type = {}",
+                instance.transform,
+                instance.shape.summary(),
+                instance.mtl.summary()
+            );
         }
     }
 
@@ -88,14 +152,15 @@ impl SceneLoader {
             WorldItem::Transform(t) => {
                 // Parses the transform from parameters and applies that onto the current transform.
                 *self.ctm_stack.last_mut().unwrap() =
-                    *self.ctm_stack.last().unwrap() * Self::parse_transform(t);
+                    *self.ctm_stack.last().unwrap() * Self::parse_rbtransform(t);
             }
             WorldItem::Shape(implementation, mut parameters) => {
                 parameters.extract_string("alpha");
                 let shape = self.parse_shape(&implementation, parameters);
 
                 if let Some(mtl) = &self.current_mtl {
-                    let inst = crate::instance::Instance::new(shape, mtl.clone());
+                    let inst = crate::instance::Instance::new(shape, mtl.clone())
+                        .with_transform(self.ctm_stack.last().unwrap().clone());
                     self.instances.push(inst);
                 } else {
                     eprintln!("material not set");
@@ -148,6 +213,10 @@ impl SceneLoader {
             WorldItem::MaterialInstance(name) => {
                 self.current_mtl = self.named_materials.get(&name).cloned();
             }
+            WorldItem::Light(light_impl, args) => {
+                let mtl = Self::parse_light(light_impl, args);
+                self.current_mtl = Some(mtl);
+            }
             _ => {
                 eprintln!("unhandled world item: {}", item);
             }
@@ -171,6 +240,7 @@ impl SceneLoader {
                 let _alpha_texture = parameters.lookup_string("alpha");
                 let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
                 let tri_bvh = shape::TriangleMesh::build_from_raw(&mesh);
+                println!("triangle bvh shape: {}", tri_bvh.bvh_shape_summary());
                 Arc::new(tri_bvh)
             }
             "trianglemesh" | "loopsubdiv" => {
@@ -192,7 +262,7 @@ impl SceneLoader {
                     Some(wtf) => panic!("incorrect format for uv coords: {:?}", wtf),
                 };
                 let uvs: Vec<_> = uv_raw.chunks_exact(2).map(|uv| (uv[0], uv[1])).collect();
-                
+
                 let indices_raw = match parameters.extract("integer indices") {
                     None => panic!("missing indices"),
                     Some(ArgValue::Numbers(nums)) => nums,
@@ -202,7 +272,7 @@ impl SceneLoader {
                     .chunks_exact(3)
                     .map(|ijk| (ijk[0] as usize, ijk[1] as usize, ijk[2] as usize))
                     .collect::<Vec<_>>();
-                    
+
                 let normal_raw = match parameters.extract_substr("normal") {
                     None => vec![0.0; points_raw.len()],
                     Some((_, ArgValue::Numbers(nums))) => nums,
@@ -213,11 +283,28 @@ impl SceneLoader {
                     .map(|xyz| hcm::Vec3::new(xyz[0], xyz[1], xyz[2]))
                     .collect::<Vec<_>>();
 
-
                 let tri_bvh = shape::TriangleMesh::from_soa(points, normals, uvs, indices);
+                println!("triangle bvh summary: {}", tri_bvh.bvh_shape_summary());
                 Arc::new(tri_bvh)
             }
-            _ => unimplemented!("implementation = {}", implementation),
+            _ => unimplemented!("shape of {}", implementation),
+        }
+    }
+
+    fn parse_light(light_impl: String, mut parameters: ast::ParameterSet) -> Arc<dyn Material> {
+        if light_impl == "diffuse" {
+            let luminance = match parameters.extract_substr("L") {
+                None => Color::white(),
+                Some((key, ArgValue::Numbers(num))) => {
+                    let spectrum_type = key.split(' ').next().unwrap();
+                    Self::parse_constant_color(spectrum_type, num)
+                }
+                Some((_, ArgValue::Number(g))) => Color::gray(g),
+                Some((_, wtf)) => unimplemented!("complicated luminance: {:?}", wtf),
+            };
+            Arc::new(mtl::DiffuseLight::new(luminance))
+        } else {
+            unimplemented!("light of {}", light_impl)
         }
     }
 
@@ -231,7 +318,7 @@ impl SceneLoader {
                 None => Color::white(),
                 Some((key, ArgValue::Numbers(num))) => {
                     let spectrum_type = key.split(' ').next().unwrap();
-                    self.parse_constant_color(spectrum_type, num)
+                    Self::parse_constant_color(spectrum_type, num)
                 }
                 Some((_, ArgValue::Number(g))) => Color::gray(g),
                 Some(_) => unimplemented!("textured reflectivity in glass"),
@@ -240,7 +327,7 @@ impl SceneLoader {
                 None => Color::white(),
                 Some((key, ArgValue::Numbers(num))) => {
                     let spectrum_type = key.split(' ').next().unwrap();
-                    self.parse_constant_color(spectrum_type, num)
+                    Self::parse_constant_color(spectrum_type, num)
                 }
                 Some((_, ArgValue::Number(g))) => Color::gray(g),
                 Some(_) => unimplemented!("textured transmissivity in glass"),
@@ -258,7 +345,7 @@ impl SceneLoader {
                 Some((_, ArgValue::Number(g))) => Color::gray(g),
                 Some((key, ArgValue::Numbers(nums))) => {
                     let spectrum_type = key.split(' ').next().unwrap();
-                    self.parse_constant_color(spectrum_type, nums)
+                    Self::parse_constant_color(spectrum_type, nums)
                 }
                 Some((_, ArgValue::String(_))) => {
                     unimplemented!("unsupported: textured reflectivity for mirror material")
@@ -296,7 +383,7 @@ impl SceneLoader {
                 None => Color::gray(0.25),
                 Some((key, ArgValue::Numbers(nums))) => {
                     let spectrum_type = key.split(' ').next().unwrap();
-                    self.parse_constant_color(spectrum_type, nums)
+                    Self::parse_constant_color(spectrum_type, nums)
                 }
                 Some((_, wtf)) => unimplemented!("plastic, kd = {:?}", wtf),
             };
@@ -304,7 +391,7 @@ impl SceneLoader {
                 None => Color::gray(0.25),
                 Some((key, ArgValue::Numbers(nums))) => {
                     let spectrum_type = key.split(' ').next().unwrap();
-                    self.parse_constant_color(spectrum_type, nums)
+                    Self::parse_constant_color(spectrum_type, nums)
                 }
                 Some((_, wtf)) => unimplemented!("plastic, ks = {:?}", wtf),
             };
@@ -462,7 +549,7 @@ impl SceneLoader {
         match arg_value {
             ast::ArgValue::Numbers(nums) => {
                 let color_type = key.split(' ').next().unwrap();
-                let color = self.parse_constant_color(color_type, nums);
+                let color = Self::parse_constant_color(color_type, nums);
                 let solid_tex = tex::Solid::new(color);
                 Arc::new(solid_tex)
             }
@@ -478,7 +565,7 @@ impl SceneLoader {
     /// The spectrum type can be any of "rgb", "xyz", "blackbody" or "spectrum".
     ///
     /// Panics if the spectrum type isn't any of the supported types.
-    fn parse_constant_color(&self, spectrum_type: &str, nums: Vec<f32>) -> Color {
+    fn parse_constant_color(spectrum_type: &str, nums: Vec<f32>) -> Color {
         match spectrum_type {
             "rgb" | "color" => Color::new(nums[0], nums[1], nums[2]),
             "xyz" => unimplemented!("xyz color"),
@@ -514,6 +601,20 @@ impl SceneLoader {
             Transform::Scale(s) => hcm::Mat4::nonuniform_scale(s),
             Transform::Rotate(axis, angle) => hcm::Mat4::rotater(axis, angle.to_radian()),
             Transform::LookAt(_, _, _) => panic!("unsupported lookat in modeling step"),
+        }
+    }
+    fn parse_rbtransform(t: ast::Transform) -> crate::instance::RigidBodyTransform {
+        use crate::instance::RigidBodyTransform as RBTrans;
+        use ast::Transform;
+        match t {
+            Transform::Identity => RBTrans::identity(),
+            Transform::Translate(v) => RBTrans::translater(v),
+            Transform::Scale(s) => {
+                eprintln!("scaling of {} unsupported", s);
+                RBTrans::identity()
+            }
+            Transform::Rotate(axis, angle) => RBTrans::rotater(axis, angle.to_radian()),
+            Transform::LookAt(..) => panic!("unsupported lookat in modeling step"),
         }
     }
 }

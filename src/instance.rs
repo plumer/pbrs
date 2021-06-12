@@ -93,9 +93,24 @@ impl Mul for RigidBodyTransform {
     }
 }
 
+impl std::fmt::Display for RigidBodyTransform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rot = &self.rotation;
+        write!(
+            f,
+            "\n|{:5.2} {:5.2} {:5.2} {:5.2}\
+             \n|{:5.2} {:5.2} {:5.2} {:5.2}\
+             \n|{:5.2} {:5.2} {:5.2} {:5.2}\n",
+            rot.cols[0].x, rot.cols[1].x, rot.cols[2].x, self.translation.x,
+            rot.cols[0].y, rot.cols[1].y, rot.cols[2].y, self.translation.y,
+            rot.cols[0].z, rot.cols[1].z, rot.cols[2].z, self.translation.z
+        )
+    }
+}
+
 #[derive(Clone)]
 pub struct Instance {
-    shape: Arc<dyn Shape>,
+    pub shape: Arc<dyn Shape>,
     pub mtl: Arc<dyn Material>,
     pub transform: RigidBodyTransform,
 }
