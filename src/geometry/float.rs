@@ -6,6 +6,27 @@ pub struct Interval {
 pub const ONE_PLUS_EPSILON: f32 = 1.0 + f32::EPSILON;
 pub const ONE_MINUS_EPSILON: f32 = 1.0 - f32::EPSILON;
 
+/// Computes the linear interpolation between `a` and `b`: (0, 1) -> (a, b).
+pub fn lerp<T, U>(a: T, b: T, t: f32) -> T
+where
+    T: Copy + std::ops::Sub<T, Output = U>,
+    U: Copy + std::ops::Mul<f32, Output = U> + std::ops::Add<T, Output = T>,
+{
+    (b - a) * t + a
+}
+
+pub fn barycentric_lerp<T, U>(values: (T, T, T), bc_coeffs: (f32, f32, f32)) -> T
+where
+    T: Copy + std::ops::Sub<T, Output = U>,
+    U: Copy + std::ops::Mul<f32, Output = U> + std::ops::Add<T, Output = T> + std::ops::Add<U, Output = U>
+{
+    let (a, b, c) = values;
+    let (bc0, bc1, _) = bc_coeffs;
+    //   bc0 * a + bc1 * b + (1 - bc0 - bc1) * c
+    // = bc0 * (a-c) + bc1 * (b-c) + c
+    (a - c) * bc0 + (b - c) * bc1 + c
+}
+
 /// Represents a non-empty interval on the real-number axis.
 /// Any `Interval`s covers at least 1, and doesn't differentiate between open/closed intervals.
 impl Interval {

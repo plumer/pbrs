@@ -6,10 +6,12 @@ use std::{
 
 use partition::partition;
 
-use crate::float;
-use crate::hcm::{Point3, Vec3};
-use crate::ray::Ray;
-use crate::{bvh, bvh::BBox, float::Interval};
+use crate::geometry::{
+    float,
+    hcm::{Point3, Vec3},
+    ray::Ray,
+    {bvh, bvh::BBox, float::Interval},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interaction {
@@ -49,6 +51,7 @@ pub trait Shape: Send + Sync {
     fn intersect(&self, r: &Ray) -> Option<Interaction>;
     fn bbox(&self) -> BBox;
     fn summary(&self) -> String;
+    fn sample(&self, u: (f32, f32)) -> Interaction {unimplemented!()}
 }
 
 // Definition of various shapes and their building methods.
@@ -307,11 +310,11 @@ impl TriangleMesh {
     }
 
     fn intersect_triangle(&self, tri: &Triangle, r: &Ray) -> Option<Interaction> {
-        let (i, j, k) = tri.indices;
+        let (i, k, j) = tri.indices;
         let p0 = self.positions[i];
         let p1 = self.positions[j];
         let p2 = self.positions[k];
-        let normal = (p0 - p1).cross(p2 - p1);
+        let normal = (p0 - p1).cross(p2 - p1).hat();
         // The equation for the plane of the triangle would be:
         // (p - p0).dot(normal) = 0. Plugging in the ray equation $p = o + td$, we have
         // (o + td - p0).dot(normal) = 0  =>  t*dot(d, normal) = dot(p0-o, normal)
@@ -331,7 +334,7 @@ impl TriangleMesh {
         };
         // Now an intersection is truly found.
         Some(Interaction {
-            pos: barycentric_interp((p0, p1, p2), (b1, b2, b0)),
+            pos: float::barycentric_lerp((p0, p1, p2), (b1, b2, b0)),
             normal,
             ray_t: t,
             // TODO
@@ -475,6 +478,20 @@ impl Shape for QuadXY {
             Some(Interaction::new(pos, t, (u, v), normal))
         } else {
             None
+        }
+    }
+    fn sample(&self, uv: (f32, f32)) -> Interaction {
+        let (u, v) = uv;
+        let (x0, x1) = self.x_interval.as_pair();
+        let (y0, y1) = self.y_interval.as_pair();
+        let x = float::lerp(x0, x1, u);
+        let y = float::lerp(y0, y1, v);
+        let pos = Point3::new(x, y, self.z);
+        Interaction {
+            pos,
+            ray_t: 0.0,
+            uv,
+            normal: Vec3::zbase(),
         }
     }
 }
@@ -631,7 +648,7 @@ where
         } else {
             let shape_summary = self.shapes[0].summary();
             let shape_name = match shape_summary.find('{') {
-                None => &shape_summary,    
+                None => &shape_summary,
                 Some(end) => &shape_summary[0..end],
             };
             format!("Blas of {} {}s", self.shapes.len(), shape_name)
@@ -649,8 +666,13 @@ where
 
 impl Shape for TriangleMesh {
     fn summary(&self) -> String {
-        format!("TriangleMesh{{{} triangles, {} vertices, bvh = {}}}",
-                self.triangles.len(), self.positions.len(), self.bvh_shape_summary())
+        format!(
+            "TriangleMesh{{{} triangles, {} vertices, bbox = {}, bvh = {}}}",
+            self.triangles.len(),
+            self.positions.len(),
+            self.bbox(),
+            self.bvh_shape_summary()
+        )
     }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         let tree = self.bvh_root.as_ref()?;
@@ -660,9 +682,13 @@ impl Shape for TriangleMesh {
         })
     }
     fn bbox(&self) -> BBox {
-        self.triangles
-            .iter()
-            .fold(BBox::empty(), |b, t| bvh::union(b, t.bbox))
+        match &self.bvh_root {
+            None => self
+                .triangles
+                .iter()
+                .fold(BBox::empty(), |b, t| bvh::union(b, t.bbox)),
+            Some(node) => node.bbox,
+        }
     }
 }
 

@@ -1,14 +1,11 @@
-mod bvh;
+
 mod camera;
-mod float;
-mod hcm;
 mod image;
 mod instance;
 mod material;
-mod ray;
 mod scene;
-mod shape;
 mod texture;
+mod geometry;
 
 use rayon::prelude::*;
 use std::fs::File;
@@ -17,7 +14,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use hcm::{Point3, Vec3};
+use geometry::hcm::{Point3, Vec3};
 use image::Color;
 use instance::Instance;
 use io::Write;
@@ -25,15 +22,14 @@ use material as mtl;
 use texture as tex;
 
 use crate::{
-    bvh::{build_bvh, BvhNode},
     camera::Camera,
-    shape::Sphere,
     texture::Texture,
+    geometry::{bvh::{self, BvhNode}, hcm, ray, shape::{self, Sphere}},
 };
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 16;
+const MSAA: usize = 12;
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -74,27 +70,14 @@ fn main() {
     //     scene::build_scene(pbrt_file);
     // }
 
-    // {
-    //     let ply_file = "assets/bathroom/geometry/mesh_00001.ply";
-    //     scene::load_ply(ply_file);
-    // }
-
-    // {
-    //     let x = ["hello", "world", "rust"];
-    //     let y = x.iter().map(|s| String::from(*s)).collect::<Vec<_>>();
-
-    //     for s in y.into_iter() {
-    //         println!("s = {}", s);
-    //     }
-    // }
-
     let half_right_angle = hcm::Degree(45.0);
     println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
     let (bvh, camera, env_light) = 
-        load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
-        // scene_everything();
+        // load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
+        // load_pbrt_scene("assets/spheres.pbrt");
+        scene_125_spheres();
     
     println!(
         "building bvh success: {}, height = {}",
@@ -123,7 +106,7 @@ fn main() {
                     );
                     // let jitter = (rand::random::<f32>(), rand::random::<f32>());
                     let ray = camera.shoot_ray(row, col, jitter).unwrap();
-                    // color_sum = color_sum + dummy_integrator(&bvh, ray, 3, env_light);
+                    // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
                     color_sum = color_sum + path_integrator(&bvh, ray, 50, env_light);
                 }
 
@@ -268,28 +251,28 @@ fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
         Arc::new(mtl::Metal::new(Color::new(0.7, 0.6, 0.5), 0.0)),
     ];
 
-    for a in -11..11 {
-        for b in -11..11 {
-            let choose_mtl = rand_f32();
-            let center =
-                Point3::new(a as f32, 0.2, b as f32) + 0.9 * Vec3::new(rand_f32(), 0.0, rand_f32());
+    // for a in -11..11 {
+    //     for b in -11..11 {
+    //         let choose_mtl = rand_f32();
+    //         let center =
+    //             Point3::new(a as f32, 0.2, b as f32) + 0.9 * Vec3::new(rand_f32(), 0.0, rand_f32());
 
-            if (center - Point3::new(4.0, 0.2, 0.0)).norm() > 0.9 {
-                spheres.push(Sphere::new(center, 0.2));
-                let mtl: Arc<dyn mtl::Material> = if choose_mtl < 0.8 {
-                    let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
-                    Arc::new(mtl::Lambertian::solid(albedo))
-                } else if choose_mtl < 0.95 {
-                    let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
-                    let albedo = (albedo + Color::white()) * 0.5;
-                    Arc::new(mtl::Metal::new(albedo, rand_f32() * 0.5))
-                } else {
-                    Arc::new(mtl::Dielectric::new(1.4))
-                };
-                mtls.push(mtl);
-            }
-        }
-    }
+    //         if (center - Point3::new(4.0, 0.2, 0.0)).norm() > 0.9 {
+    //             spheres.push(Sphere::new(center, 0.2));
+    //             let mtl: Arc<dyn mtl::Material> = if choose_mtl < 0.8 {
+    //                 let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
+    //                 Arc::new(mtl::Lambertian::solid(albedo))
+    //             } else if choose_mtl < 0.95 {
+    //                 let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
+    //                 let albedo = (albedo + Color::white()) * 0.5;
+    //                 Arc::new(mtl::Metal::new(albedo, rand_f32() * 0.5))
+    //             } else {
+    //                 Arc::new(mtl::Dielectric::new(1.4))
+    //             };
+    //             mtls.push(mtl);
+    //         }
+    //     }
+    // }
 
     let spheres: Vec<_> = spheres.into_iter().map(|s| Arc::new(s)).collect();
 
@@ -336,7 +319,7 @@ fn scene_two_perlin_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
         Vec3::ybase(),
     );
 
-    (build_bvh(instances), cam, blue_sky)
+    (bvh::build_bvh(instances), cam, blue_sky)
 }
 
 #[allow(dead_code)]
@@ -354,7 +337,7 @@ fn scene_earth() -> (Box<BvhNode>, camera::Camera, EnvLight) {
         Vec3::ybase(),
     );
 
-    (build_bvh(instances), cam, blue_sky)
+    (bvh::build_bvh(instances), cam, blue_sky)
 }
 
 #[allow(dead_code)]
@@ -464,7 +447,7 @@ fn scene_cornell_box() -> Scene {
         Vec3::ybase(),
     );
 
-    (build_bvh(instances), cam, dark_room)
+    (bvh::build_bvh(instances), cam, dark_room)
 }
 
 #[allow(dead_code)]
@@ -541,7 +524,7 @@ fn scene_everything() -> Scene {
 
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
-    (build_bvh(instances), cam, dark_room)
+    (bvh::build_bvh(instances), cam, dark_room)
 }
 
 #[allow(dead_code)]
@@ -549,7 +532,7 @@ fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
     let pbrt_scene = scene::build_scene(pbrt_file_path);
     let cam = pbrt_scene.camera.expect("camera not built in the scene");
     let tlas = pbrt_scene.instances.into_iter().map(|i| Box::new(i)).collect::<Vec<_>>();
-    (build_bvh(tlas), cam, dark_room)
+    (bvh::build_bvh(tlas), cam, blue_sky)
 }
 
 // Monte-carlo playground

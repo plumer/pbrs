@@ -13,7 +13,6 @@ pub use plyloader::load_ply;
 
 use crate::hcm;
 use crate::image::Color;
-use crate::instance;
 use crate::material as mtl;
 use crate::material::Material;
 use crate::shape;
@@ -52,9 +51,11 @@ pub struct SceneLoader {
 pub fn build_scene(path: &str) -> SceneLoader {
     let lexer = lexer::Lexer::from_file(path).unwrap();
     let mut tokens = lexer.read_tokens();
-    // println!("{:?}", tokens);
     let has_errors = tokens.iter().any(|t| *t == token::Token::Error);
     println!("has errors = {}", has_errors);
+    if has_errors {
+        println!("{:?}", tokens);
+    }
     tokens.push(token::Token::End);
 
     let mut parser = parser::Parser::new(tokens.into_iter());
@@ -138,9 +139,10 @@ impl SceneLoader {
         }
         for instance in self.instances.iter() {
             println!(
-                "transform = {}, shape summary = {}, mtl type = {}",
+                "transform = {}, shape summary = {}, bbox = {}, mtl type = {}",
                 instance.transform,
                 instance.shape.summary(),
+                instance.bbox(),
                 instance.mtl.summary()
             );
         }
@@ -227,7 +229,7 @@ impl SceneLoader {
         let implementation = r#impl.trim_matches('\"');
         match implementation {
             "sphere" => {
-                let radius = parameters.lookup_f32("radius").unwrap_or(1.0);
+                let radius = parameters.lookup_f32("float radius").unwrap_or(1.0);
                 Arc::new(shape::Sphere::new(hcm::Point3::origin(), radius))
             }
             "plymesh" => {

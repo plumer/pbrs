@@ -139,7 +139,7 @@ pub fn uniform_hemisphere() -> Vec3 {
     Vec3::new(phi.sin() * theta.cos(), phi.sin() * theta.sin(), v)
 }
 
-// Implements the Material trait for muliple materials.
+// Implements the Material trait for various materials.
 // ------------------------------------------------------------------------------------------------
 
 impl Material for Lambertian {
@@ -238,8 +238,11 @@ impl Material for Substrate {
 }
 
 impl Material for Plastic {
-    fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
-        todo!()
+    fn scatter(&self, _wi: Vec3, isect: &Interaction) -> (Ray, Color) {
+        let h = uniform_hemisphere();
+        let wo = (h.dot(isect.normal)).signum() * h;
+        let ray_out = Ray::new(isect.pos + isect.normal * 0.001, wo);
+        (ray_out, self.diffuse)
     }
     fn summary(&self) -> String {
         String::from("plastic")

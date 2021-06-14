@@ -223,6 +223,9 @@ impl Point3 {
     pub fn distance_to(self, p: Self) -> f32 {
         (self - p).norm()
     }
+    pub fn squared_distance_to(self, p: Self) -> f32 {
+        (self - p).norm_squared()
+    }
 }
 
 impl Add<Vec3> for Point3 {

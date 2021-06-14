@@ -3,14 +3,13 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
+use crate::geometry::{
     float::min_max,
     hcm::{Point3, Vec3},
-    instance::Instance,
-    material::Material,
     ray::Ray,
     shape::Interaction,
 };
+use crate::{instance::Instance, material::Material};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BBox {
