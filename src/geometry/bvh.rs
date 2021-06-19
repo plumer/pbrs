@@ -11,6 +11,8 @@ use crate::geometry::{
 };
 use crate::{instance::Instance, material::Material};
 
+/// 3D bounding-box type. Boundary check is half-open (`[min, max)`) on all axes.
+/// Build one from 2 `Point3`s, expand it by `b.union()`
 #[derive(Debug, Clone, Copy)]
 pub struct BBox {
     min: Point3,

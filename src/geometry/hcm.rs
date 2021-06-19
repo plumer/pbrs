@@ -269,7 +269,7 @@ impl IndexMut<usize> for Point3 {
     }
 }
 
-// Explicit between Vec3 and Point3.
+// Explicit conversion between Vec3 and Point3.
 // -------------------------------------------------------------------------------------------------
 impl From<Vec3> for Point3 {
     fn from(v: Vec3) -> Self {
@@ -284,7 +284,7 @@ impl From<Point3> for Vec3 {
 }
 
 /// 4-element vector. Supported operations:
-/// - v+v v-v v*s v/s
+/// - `v+v` `v-v` `v*s` `v/s` where `s` is `f32`.
 /// - Convertible from `Vec3` and `Point3`, with homogeneous coordinate added properly.
 /// -------------------------------------------------------------------------------------------------
 #[derive(Debug, Clone, Copy)]
@@ -386,8 +386,8 @@ impl IndexMut<usize> for Vec4 {
     }
 }
 
-// Mat3: implements m * m, m * v, m + m, m - m
-// -------------------------------------------------------------------------------------------------
+/// ------------------------------------------------------------------------------------------------
+/// Mat3: implements m * m, m * v, m + m, m - m
 #[derive(Debug, Clone, Copy)]
 pub struct Mat3 {
     pub cols: [Vec3; 3],
@@ -647,9 +647,9 @@ pub enum Refract {
 pub use Refract::FullReflect;
 pub use Refract::Transmit;
 
-/// Refracts incident light `wi` w.r.t. normal.
-/// `normal` is assumed to be unit-length and forms an obtuse angle with `wi`.
-/// `ni` and `no` are refraction indices.
+/// Refracts incident light `wi` with regard to `normal`.
+/// - `normal` is assumed to be unit-length and forms an obtuse angle with `wi`.
+/// - `ni` and `no` are refraction indices.
 /// If `ni`/`no` < 1 (e.g., from water to air), there is a chance of full reflection.
 pub fn refract(normal: Vec3, wi: Vec3, ni_over_no: f32) -> Refract {
     let wi = wi.hat();
