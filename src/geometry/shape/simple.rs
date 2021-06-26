@@ -1,7 +1,7 @@
-use crate::geometry::bvh::{BBox};
-use crate::geometry::shape::*;
-use crate::geometry::hcm::*;
+use crate::geometry::bvh::BBox;
 use crate::geometry::float::{self, Interval};
+use crate::geometry::hcm::*;
+use crate::geometry::shape::*;
 use std::f32::consts::PI;
 
 pub struct Sphere {
@@ -19,8 +19,9 @@ impl Sphere {
         assert!(!has_nan);
         Self::new(Point3::new(x, y, z), radius)
     }
+    pub fn center(&self) -> Point3 {self.center}
+    pub fn radius(&self) -> f32 {self.radius}
 }
-
 
 pub struct QuadXY {
     x_interval: Interval,
@@ -103,7 +104,7 @@ impl Cuboid {
     }
 }
 
-
+// Implementation of the `Shape` trait for the shape implementations.
 
 impl Shape for Sphere {
     fn summary(&self) -> String {
@@ -204,20 +205,6 @@ impl Shape for QuadXY {
             Some(Interaction::new(pos, t, (u, v), normal))
         } else {
             None
-        }
-    }
-    fn sample(&self, uv: (f32, f32)) -> Interaction {
-        let (u, v) = uv;
-        let (x0, x1) = self.x_interval.as_pair();
-        let (y0, y1) = self.y_interval.as_pair();
-        let x = float::lerp(x0, x1, u);
-        let y = float::lerp(y0, y1, v);
-        let pos = Point3::new(x, y, self.z);
-        Interaction {
-            pos,
-            ray_t: 0.0,
-            uv,
-            normal: Vec3::zbase(),
         }
     }
 }

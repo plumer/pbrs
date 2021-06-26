@@ -4,6 +4,7 @@ mod image;
 mod instance;
 mod material;
 mod scene;
+mod light;
 mod texture;
 mod geometry;
 

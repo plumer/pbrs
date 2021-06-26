@@ -47,6 +47,11 @@ where
     (a - c) * bc0 + (b - c) * bc1 + c
 }
 
+/// Returns the length of other leg of the triangle given the hypotenuse and a known one.
+pub fn cathetus(hypot: f32, other: f32) -> f32 {
+    (hypot.powi(2) - other.powi(2)).max(0.0).sqrt()
+}
+
 /// Represents intervals on the real-number axis. Any `Interval`s covers at least 1 point.
 /// There is no difference between open/closed intervals.
 impl Interval {
