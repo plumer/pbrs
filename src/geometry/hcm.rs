@@ -1,3 +1,4 @@
+use core::convert::TryFrom;
 use std::{
     fmt,
     ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub},
@@ -288,7 +289,7 @@ impl From<Point3> for Vec3 {
 /// - Convertible from `Vec3` and `Point3`, with homogeneous coordinate added properly.
 /// -------------------------------------------------------------------------------------------------
 #[derive(Debug, Clone, Copy)]
-struct Vec4 {
+pub struct Vec4 {
     x: f32,
     y: f32,
     z: f32,
@@ -319,6 +320,26 @@ impl From<Vec3> for Vec4 {
 impl From<Point3> for Vec4 {
     fn from(v3: Point3) -> Self {
         Vec4::new(v3.x, v3.y, v3.z, 1.0)
+    }
+}
+
+impl From<Vec4> for Vec3 {
+    fn from(v4: Vec4) -> Self {
+        Vec3::new(v4.x, v4.y, v4.z)
+    }
+}
+
+impl TryFrom<Vec4> for Point3 {
+    type Error = &'static str;
+    fn try_from(value: Vec4) -> Result<Self, Self::Error> {
+        if value.w == 1.0 {
+            Ok(Point3::new(value.x, value.y, value.z))
+        } else if value.w == 0.0 {
+            Err("homogeneous coordinate is zero")
+        } else {
+            let w = value.w;
+            Ok(Point3::new(value.x / w, value.y / w, value.z / w))
+        }
     }
 }
 
@@ -573,6 +594,13 @@ impl Mat4 {
         }
         mat
     }
+    pub fn orientation(&self) -> Mat3 {
+        Mat3::from_vectors(
+            self.cols[0].into(),
+            self.cols[1].into(),
+            self.cols[2].into(),
+        )
+    }
 }
 
 impl Mul<Vec4> for Mat4 {
@@ -665,6 +693,16 @@ pub fn refract(normal: Vec3, wi: Vec3, ni_over_no: f32) -> Refract {
         let refracted = ni_over_no * -wi + (ni_over_no * cos_theta_i - cos_theta_o) * normal;
         Transmit(refracted)
     }
+}
+
+/// Computes a unit-vector on a unit-sphere given longitude and latitude values.
+///
+/// The computed vector is (0, 0, 1) rotated `phi` radians away from the z-axis and then rotates
+/// around the z-axis with angle `theta`. Note that sin(theta) and cos(theta) values are passed in
+/// as usually the trigonometry values are more directly available rather than the angle itself.
+pub fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: Radian) -> Vec3{
+    let (cos_phi, sin_phi) = phi.0.sin_cos();
+    Vec3::new(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta)
 }
 
 #[cfg(test)]

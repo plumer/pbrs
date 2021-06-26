@@ -4,7 +4,7 @@ use crate::ray::Ray;
 use crate::shape::Shape;
 use crate::{bvh::BBox, material::Material};
 use crate::{
-    hcm::{Mat3, Point3, Radian, Vec3},
+    hcm::{Mat3, Mat4, Point3, Radian, Vec3, Vec4},
     shape::Interaction,
 };
 
@@ -12,6 +12,12 @@ use crate::{
 pub struct RigidBodyTransform {
     rotation: Mat3,
     translation: Vec3,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AffineTransform {
+    forward: Mat4,
+    inverse: Mat4,
 }
 
 pub fn identity() -> RigidBodyTransform {
@@ -94,6 +100,7 @@ impl Mul for RigidBodyTransform {
 }
 
 impl std::fmt::Display for RigidBodyTransform {
+    #[rustfmt::skip]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rot = &self.rotation;
         write!(
@@ -105,6 +112,54 @@ impl std::fmt::Display for RigidBodyTransform {
             rot.cols[0].y, rot.cols[1].y, rot.cols[2].y, self.translation.y,
             rot.cols[0].z, rot.cols[1].z, rot.cols[2].z, self.translation.z
         )
+    }
+}
+
+#[allow(dead_code)]
+impl AffineTransform {
+    pub fn identity() -> Self {
+        Self {
+            forward: Mat4::identity(),
+            inverse: Mat4::identity(),
+        }
+    }
+    pub fn translater(t: Vec3) -> Self {
+        Self {
+            forward: Mat4::translater(t),
+            inverse: Mat4::translater(-t),
+        }
+    }
+    pub fn rotater(axis: Vec3, angle: Radian) -> Self {
+        let forward = Mat4::rotater(axis, angle);
+        Self {
+            forward: Mat4::rotater(axis, angle),
+            inverse: forward.transpose(),
+        }
+    }
+    pub fn inverse(&self) -> Self {
+        Self {
+            forward: self.inverse,
+            inverse: self.forward,
+        }
+    }
+    pub fn scaler(scale: Vec3) -> Self {
+        let Vec3 { x, y, z } = scale;
+        let scale_inv = Vec3::new(1.0 / x, 1.0 / y, 1.0 / z);
+        Self {
+            forward: Mat4::nonuniform_scale(scale),
+            inverse: Mat4::nonuniform_scale(scale_inv),
+        }
+    }
+}
+
+impl Mul for AffineTransform {
+    type Output = AffineTransform;
+    fn mul(self, rhs: Self) -> Self::Output {
+        // self * rhs -> self.forward * rhs.forward, rhs.inverse * self.inverse.
+        Self {
+            forward: self.forward * rhs.forward,
+            inverse: rhs.inverse * self.inverse,
+        }
     }
 }
 
@@ -203,6 +258,62 @@ impl Transform<BBox> for RigidBodyTransform {
     }
 }
 impl Transform<Interaction> for RigidBodyTransform {
+    fn apply(&self, i: Interaction) -> Interaction {
+        // Note that the transform is rigid-body, so transforming the normal is straightforward.
+        Interaction::new(self.apply(i.pos), i.ray_t, i.uv, self.apply(i.normal))
+    }
+}
+
+// Implements all kinds of transforms that `UniveralTransform` can do.
+// Transforms on:
+// - Vec3
+// - Point3
+// - Ray
+// - BBox
+// -------------------------------------------------------------------------------------------------
+
+impl Transform<Vec3> for AffineTransform {
+    fn apply(&self, x: Vec3) -> Vec3 {
+        let x4 = Vec4::from(x);
+        (self.forward * x4).into()
+    }
+}
+impl Transform<Point3> for AffineTransform {
+    fn apply(&self, p: Point3) -> Point3 {
+        let v4 = Vec4::from(p);
+        let v4 = self.forward * v4;
+        assert_eq!(v4[0], 1.0);
+        Point3::new(v4[0], v4[1], v4[2])
+    }
+}
+impl Transform<Ray> for AffineTransform {
+    fn apply(&self, r: Ray) -> Ray {
+        Ray::new(self.apply(r.origin), self.apply(r.dir))
+    }
+}
+impl Transform<BBox> for AffineTransform {
+    fn apply(&self, b: BBox) -> BBox {
+        let bases = self.forward.orientation().cols;
+        let mut res_box = BBox::empty();
+        let diag = b.diag();
+        for i in 0..8 {
+            let mut corner = self.apply(b.min());
+            if i & 1 != 0 {
+                corner = corner + diag[0] * bases[0];
+            }
+            if i & 2 != 0 {
+                corner = corner + diag[1] * bases[1];
+            }
+            if i & 4 != 0 {
+                corner = corner + diag[2] * bases[2];
+            }
+            res_box = res_box.union(corner);
+        }
+
+        res_box
+    }
+}
+impl Transform<Interaction> for AffineTransform {
     fn apply(&self, i: Interaction) -> Interaction {
         // Note that the transform is rigid-body, so transforming the normal is straightforward.
         Interaction::new(self.apply(i.pos), i.ray_t, i.uv, self.apply(i.normal))
