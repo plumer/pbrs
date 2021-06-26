@@ -2,6 +2,17 @@ use std::fmt::{Display, Formatter, Result};
 
 use crate::hcm;
 
+/// Represents a ray:
+///
+///     origin + t * direction
+///
+/// where t is positive.
+///
+/// The extent of the ray is by default infinite, but can be set to a positive number in order to
+/// accelerate intersection tests.
+///
+/// A `Ray` object can be used to intersect a `Shape`, a `BBox`, and an `Instance`. Please see their
+/// respective documentation for details.
 #[derive(Debug, Clone, Copy)]
 pub struct Ray {
     pub origin: hcm::Point3,

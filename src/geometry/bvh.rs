@@ -12,7 +12,9 @@ use crate::geometry::{
 use crate::{instance::Instance, material::Material};
 
 /// 3D bounding-box type. Boundary check is half-open (`[min, max)`) on all axes.
-/// Build one from 2 `Point3`s, expand it by `b.union()`
+/// - Build one from 2 `Point3`s;
+/// - Expand it by `b.union()` or `union(b1, b2)`;
+/// - Check if it `contains()` a point or `encloses()` another box, or `intersects()` with a `Ray`.
 #[derive(Debug, Clone, Copy)]
 pub struct BBox {
     min: Point3,
