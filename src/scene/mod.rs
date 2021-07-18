@@ -5,7 +5,6 @@ pub mod plyloader;
 pub mod token;
 
 use core::panic;
-use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -23,6 +22,7 @@ use crate::texture::Texture;
 
 use self::ast::{ArgValue, ParameterSet};
 
+#[allow(dead_code)]
 struct Scene {
     texture_descriptors: Vec<Box<dyn Texture>>,
     named_textures: HashMap<String, usize>,
@@ -595,6 +595,7 @@ impl SceneLoader {
 
     // Static functions
     // ---------------------------------------------------------------------------------------------
+    #[allow(dead_code)]
     fn parse_transform(t: ast::Transform) -> hcm::Mat4 {
         use ast::Transform;
         match t {

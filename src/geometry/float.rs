@@ -18,6 +18,7 @@ pub const ONE_MINUS_EPSILON: f32 = 1.0 - f32::EPSILON;
 ///   a point, so `lerp` can be used on 2 points.
 /// - `lerp` can be used on `Vec3`s as well - easier to understand.
 /// - If `std::time::Duration` could be scaled by `f32`, then `std::time::Instant` can be `lerp`ed.
+#[allow(dead_code)]
 pub fn lerp<T, U>(a: T, b: T, t: f32) -> T
 where
     T: Copy + std::ops::Sub<T, Output = U>,
@@ -31,7 +32,7 @@ where
 /// that they can be `barycentric_lerp`ed.
 ///
 /// One more constraint on difference type (type of `T - T`): `U + U -> U`. If only this constraint
-/// is unsatisfied, then there's a designe problem with types `T` and `U`.
+/// is unsatisfied, then there's a design problem with types `T` and `U`.
 pub fn barycentric_lerp<T, U>(values: (T, T, T), bc_coeffs: (f32, f32, f32)) -> T
 where
     T: Copy + std::ops::Sub<T, Output = U>,
@@ -48,6 +49,7 @@ where
 }
 
 /// Returns the length of other leg of the triangle given the hypotenuse and a known one.
+#[allow(dead_code)]
 pub fn cathetus(hypot: f32, other: f32) -> f32 {
     (hypot.powi(2) - other.powi(2)).max(0.0).sqrt()
 }

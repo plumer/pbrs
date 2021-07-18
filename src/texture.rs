@@ -218,7 +218,7 @@ pub trait TextureF32: Send + Sync {
 struct Fbm {}
 
 impl TextureF32 for Fbm {
-    fn value(&self, uv: (f32, f32), p: Point3) -> f32 {
+    fn value(&self, _uv: (f32, f32), _p: Point3) -> f32 {
         todo!()
     }
 }

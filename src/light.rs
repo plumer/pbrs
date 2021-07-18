@@ -69,7 +69,7 @@ impl Light for DistantLight {
     fn sample_incident_radiance(
         &self,
         target: &Interaction,
-        u: (f32, f32),
+        _u: (f32, f32),
     ) -> (Color, hcm::Vec3, HemiPdf, Ray) {
         let outside_world = target.pos + self.world_radius * 2.0 * self.incident_direction;
         let visibility_ray = spawn_ray_to(target, outside_world);

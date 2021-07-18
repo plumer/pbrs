@@ -281,14 +281,6 @@ impl Shape for TriangleMesh {
     }
 }
 
-fn barycentric_interp(points: (Point3, Point3, Point3), bc_coords: (f32, f32, f32)) -> Point3 {
-    let (a, b, c) = points;
-    let (bc0, bc1, _) = bc_coords;
-    //   bc0 * a + bc1 * b + (1 - bc0 - bc1) * c
-    // = bc0 * (a-c) + bc1 * (b-c) + c
-    bc0 * (a - c) + bc1 * (b - c) + c
-}
-
 fn recursive_build<S, F>(shapes: &mut Vec<S>, range: Range<usize>, box_getter: F) -> IsoBvhNode
 where
     F: Fn(&S) -> BBox + Copy,

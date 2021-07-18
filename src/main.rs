@@ -230,6 +230,7 @@ fn dark_room(r: ray::Ray) -> Color {
 }
 
 #[allow(dead_code)]
+#[allow(unused_mut)]
 fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     let mut camera = camera::Camera::new((WIDTH, HEIGHT), hcm::Degree(25.0).to_radian());
     camera.look_at(
