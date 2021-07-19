@@ -86,7 +86,7 @@ impl Parser {
                 self.goto_next();
                 if let Token::QuotedString(implementation) = self.peek.clone() {
                     self.goto_next();
-                    WorldItem::Light(implementation, self.parse_parameter_list())
+                    WorldItem::AreaLight(implementation, self.parse_parameter_list())
                 } else {
                     raise_syntax_error!("unexpected token after KwAreaLight: {:?}", self.peek)
                 }

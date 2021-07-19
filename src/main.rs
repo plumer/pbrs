@@ -77,9 +77,9 @@ fn main() {
 
     // Prepares the scene and environmental lighting.
     let (bvh, camera, env_light) = 
-        // load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
+        load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
         // load_pbrt_scene("assets/spheres.pbrt");
-        scene_125_spheres();
+        // scene_125_spheres();
     
     println!(
         "building bvh success: {}, height = {}",

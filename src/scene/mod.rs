@@ -10,17 +10,13 @@ use std::sync::Arc;
 
 pub use plyloader::load_ply;
 
-use crate::hcm;
-use crate::image::Color;
-use crate::material as mtl;
-use crate::material::Material;
-use crate::shape;
-use crate::shape::Shape;
-use crate::shape::TriangleMeshRaw;
-use crate::texture as tex;
-use crate::texture::Texture;
-
 use self::ast::{ArgValue, ParameterSet};
+use crate::{hcm, light};
+use crate::image::Color;
+use crate::light::{Light, ShapeSample};
+use crate::material::{self as mtl, Material};
+use crate::shape::{self, Shape, TriangleMeshRaw};
+use crate::texture::{self as tex, Texture};
 
 #[allow(dead_code)]
 struct Scene {
@@ -39,12 +35,14 @@ pub struct SceneLoader {
     // ctm_stack: Vec<hcm::Mat4>,
     ctm_stack: Vec<crate::instance::RigidBodyTransform>,
     current_mtl: Option<Arc<dyn Material>>,
+    current_arealight_luminance: Option<Color>,
     reverse_orientation_stack: Vec<bool>,
 
     named_textures: HashMap<String, Arc<dyn Texture>>,
     named_materials: HashMap<String, Arc<dyn Material>>,
     pub instances: Vec<crate::instance::Instance>,
     pub camera: Option<crate::camera::Camera>,
+    pub lights: Vec<Box<dyn Light>>,
 }
 
 #[allow(dead_code)]
@@ -74,14 +72,16 @@ impl SceneLoader {
             ctm_stack: vec![crate::instance::identity()],
             // ctm_stack: vec![hcm::Mat4::identity()],
             current_mtl: None,
+            current_arealight_luminance: None,
             reverse_orientation_stack: vec![false],
             named_textures: HashMap::new(),
             named_materials: HashMap::new(),
             instances: vec![],
-            camera: None
+            camera: None,
+            lights: vec![],
         }
     }
-    
+
     fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> Option<crate::camera::Camera> {
         let mut fov = None;
         let mut w = None;
@@ -119,14 +119,14 @@ impl SceneLoader {
         use crate::camera::Camera;
         let mut camera: Camera;
         match (fov, w, h) {
-            (Some(degree), Some(width), Some(height),) => {
+            (Some(degree), Some(width), Some(height)) => {
                 camera = Camera::new((width as u32, height as u32), degree.to_radian());
             }
-            _ => return None
+            _ => return None,
         }
         match pose {
-             Some((eye, target, up)) => camera.look_at(eye, target, up),
-             _ => (),
+            Some((eye, target, up)) => camera.look_at(eye, target, up),
+            _ => (),
         }
         Some(camera)
     }
@@ -156,20 +156,26 @@ impl SceneLoader {
                 *self.ctm_stack.last_mut().unwrap() =
                     *self.ctm_stack.last().unwrap() * Self::parse_rbtransform(t);
             }
-            WorldItem::Shape(implementation, mut parameters) => {
-                parameters.extract_string("alpha");
-                let shape = self.parse_shape(&implementation, parameters);
-
-                if let Some(mtl) = &self.current_mtl {
+            WorldItem::Shape(shape_impl, mut args) => {
+                args.extract_string("alpha");
+                
+                if self.current_mtl.is_some() && self.current_arealight_luminance.is_some() {
+                    eprintln!("Both material and arealight are set, can't decide which to use");
+                } else if let Some(mtl) = &self.current_mtl {
+                    let shape = self.parse_shape(&shape_impl, args);
                     let inst = crate::instance::Instance::new(shape, mtl.clone())
                         .with_transform(self.ctm_stack.last().unwrap().clone());
                     self.instances.push(inst);
+                } else if let Some(luminance) = &self.current_arealight_luminance {
+                    let shape = Self::parse_samplable_shape(&shape_impl, args);
+                    let diffuse_light = light::DiffuseAreaLight::new(luminance.clone(), shape);
+                    self.lights.push(Box::new(diffuse_light));
                 } else {
-                    eprintln!("material not set");
+                    eprintln!("Neither arealight luminance or material are set");
                 }
             }
-            WorldItem::Material(r#impl, parameters) => {
-                let mtl = self.parse_material(r#impl, parameters);
+            WorldItem::Material(mtl_impl, parameters) => {
+                let mtl = self.parse_material(mtl_impl, parameters);
                 self.current_mtl = Some(mtl);
             }
             WorldItem::AttributeBlock(items) => {
@@ -177,6 +183,8 @@ impl SceneLoader {
                 self.ctm_stack.push(last_transform);
                 let last_ro = self.reverse_orientation_stack.last().unwrap().clone();
                 self.reverse_orientation_stack.push(last_ro);
+                self.current_mtl = None;
+                self.current_arealight_luminance = None;
 
                 for child_item in items {
                     self.traverse_world_item(child_item);
@@ -216,8 +224,23 @@ impl SceneLoader {
                 self.current_mtl = self.named_materials.get(&name).cloned();
             }
             WorldItem::Light(light_impl, args) => {
-                let mtl = Self::parse_light(light_impl, args);
-                self.current_mtl = Some(mtl);
+                let light = Self::parse_light(light_impl, args);
+                self.lights.push(light);
+            }
+            WorldItem::AreaLight(light_impl, mut args) => {
+                if light_impl == "diffuse" {
+                    let luminance = match args.extract_substr("L") {
+                        None => unimplemented!("default illuminance for diffuse light"),
+                        Some((key, ArgValue::Numbers(num))) => {
+                            let spectrum_type = key.split(' ').next().unwrap();
+                            Self::parse_constant_color(spectrum_type, num)
+                        }
+                        Some((_, wtf)) => unimplemented!("complicated luminance: {:?}", wtf),
+                    };
+                    self.current_arealight_luminance = Some(luminance);
+                } else {
+                    eprintln!("unhandled area light: {}", light_impl);
+                }
             }
             _ => {
                 eprintln!("unhandled world item: {}", item);
@@ -293,21 +316,17 @@ impl SceneLoader {
         }
     }
 
-    fn parse_light(light_impl: String, mut parameters: ast::ParameterSet) -> Arc<dyn Material> {
-        if light_impl == "diffuse" {
-            let luminance = match parameters.extract_substr("L") {
-                None => Color::white(),
-                Some((key, ArgValue::Numbers(num))) => {
-                    let spectrum_type = key.split(' ').next().unwrap();
-                    Self::parse_constant_color(spectrum_type, num)
-                }
-                Some((_, ArgValue::Number(g))) => Color::gray(g),
-                Some((_, wtf)) => unimplemented!("complicated luminance: {:?}", wtf),
-            };
-            Arc::new(mtl::DiffuseLight::new(luminance))
+    fn parse_samplable_shape(shape_impl: &String, args: ast::ParameterSet) -> Box<dyn ShapeSample> {
+        if shape_impl == "sphere" {
+            let radius = args.lookup_f32("float radius").unwrap_or(1.0);
+            Box::new(shape::Sphere::new(hcm::Point3::origin(), radius))
         } else {
-            unimplemented!("light of {}", light_impl)
+            unimplemented!("samplable shape: {}", shape_impl)
         }
+    }
+
+    fn parse_light(light_impl: String, _args: ast::ParameterSet) -> Box<dyn Light> {
+        unimplemented!("light of {}", light_impl)
     }
 
     fn parse_material(
@@ -570,9 +589,9 @@ impl SceneLoader {
     fn parse_constant_color(spectrum_type: &str, nums: Vec<f32>) -> Color {
         match spectrum_type {
             "rgb" | "color" => Color::new(nums[0], nums[1], nums[2]),
-            "xyz" => unimplemented!("xyz color"),
+            "xyz" => Color::from_xyz(nums[0], nums[1], nums[2]),
             "spectrum" => unimplemented!("spectrum color"),
-            "blackbody" => unimplemented!("blackbody"),
+            "blackbody" => crate::spectrum::temperature_to_color(nums[0]) * nums[1],
             _ => panic!("unrecognized spectrum type \'{}\'", spectrum_type),
         }
     }

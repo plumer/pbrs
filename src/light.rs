@@ -58,7 +58,7 @@ impl Light for PointLight {
     }
 }
 
-struct DistantLight {
+pub struct DistantLight {
     _world_center: hcm::Point3,
     world_radius: f32,
     incident_direction: hcm::Vec3,
@@ -122,10 +122,17 @@ pub trait ShapeSample: Shape {
 
 /// Implements a basic area light source with a uniform spatial and directi onal radiance
 /// distribution. Owns a `shape` that defines its surface.
-struct DiffuseAreaLight {
+pub struct DiffuseAreaLight {
     emit_radiance: Color,
     shape: Box<dyn ShapeSample>,
     area: f32,
+}
+
+impl DiffuseAreaLight {
+    pub fn new(emit_radiance: Color, shape: Box<dyn ShapeSample>) -> Self {
+        let area = shape.area();
+        Self{emit_radiance, shape, area}
+    }
 }
 
 impl Light for DiffuseAreaLight {
