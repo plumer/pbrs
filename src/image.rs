@@ -21,6 +21,14 @@ impl Color {
     pub fn new(r: f32, g: f32, b: f32) -> Color {
         Color { r, g, b }
     }
+    #[rustfmt::skip]
+    pub fn from_xyz(x: f32, y: f32, z: f32) -> Color {
+        Color {
+            r:  3.240479 * x - 1.537150 * y - 0.498535 * z,
+            g: -0.969256 * x + 1.875991 * y + 0.041556 * z,
+            b:  0.055648 * x - 0.204043 * y + 1.057311 * z,
+        }
+    }
     pub fn black() -> Color {
         Color::new(0.0, 0.0, 0.0)
     }
