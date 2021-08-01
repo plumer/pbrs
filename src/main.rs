@@ -1,14 +1,15 @@
-
 mod camera;
+mod geometry;
 mod image;
 mod instance;
+mod light;
 mod material;
 mod scene;
-mod light;
 mod spectrum;
 mod texture;
-mod geometry;
 
+use glog::Flags;
+use log::*;
 use rayon::prelude::*;
 use std::fs::File;
 use std::io::{self, BufWriter};
@@ -25,13 +26,17 @@ use texture as tex;
 
 use crate::{
     camera::Camera,
+    geometry::{
+        bvh::{self, BvhNode},
+        hcm, ray,
+        shape::{self, Sphere},
+    },
     texture::Texture,
-    geometry::{bvh::{self, BvhNode}, hcm, ray, shape::{self, Sphere}},
 };
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 12;
+const MSAA: usize = 2;
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -64,6 +69,13 @@ pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
 
 #[allow(unreachable_code)]
 fn main() {
+    glog::new()
+        .init(Flags {
+            logtostderr: true,
+            colorlogtostderr: true,
+            ..Default::default()
+        })
+        .unwrap();
     // estimate_pi();
     // play_integrator();
     // {
@@ -73,14 +85,13 @@ fn main() {
     // }
 
     let half_right_angle = hcm::Degree(45.0);
-    println!("{} is {} ", half_right_angle, half_right_angle.to_radian());
+    info!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
-    let (bvh, camera, env_light) = 
-        load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
-        // load_pbrt_scene("assets/spheres.pbrt");
-        // scene_125_spheres();
-    
+    let (bvh, camera, env_light) = load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
+    // load_pbrt_scene("assets/spheres.pbrt");
+    // scene_125_spheres();
+
     println!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
@@ -109,7 +120,7 @@ fn main() {
                     // let jitter = (rand::random::<f32>(), rand::random::<f32>());
                     let ray = camera.shoot_ray(row, col, jitter).unwrap();
                     // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
-                    color_sum = color_sum + path_integrator(&bvh, ray, 50, env_light);
+                    color_sum = color_sum + path_integrator(&bvh, ray, 5, env_light);
                 }
 
                 let color = color_sum / (SAMPLES_PER_PIXEL as f32);
@@ -534,7 +545,11 @@ fn scene_everything() -> Scene {
 fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
     let pbrt_scene = scene::build_scene(pbrt_file_path);
     let cam = pbrt_scene.camera.expect("camera not built in the scene");
-    let tlas = pbrt_scene.instances.into_iter().map(|i| Box::new(i)).collect::<Vec<_>>();
+    let tlas = pbrt_scene
+        .instances
+        .into_iter()
+        .map(|i| Box::new(i))
+        .collect::<Vec<_>>();
     (bvh::build_bvh(tlas), cam, blue_sky)
 }
 

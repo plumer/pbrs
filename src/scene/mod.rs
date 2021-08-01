@@ -5,18 +5,20 @@ pub mod plyloader;
 pub mod token;
 
 use core::panic;
+use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 pub use plyloader::load_ply;
 
 use self::ast::{ArgValue, ParameterSet};
-use crate::{hcm, light};
 use crate::image::Color;
+use crate::instance::AffineTransform;
 use crate::light::{Light, ShapeSample};
 use crate::material::{self as mtl, Material};
 use crate::shape::{self, Shape, TriangleMeshRaw};
 use crate::texture::{self as tex, Texture};
+use crate::{hcm, light};
 
 #[allow(dead_code)]
 struct Scene {
@@ -50,7 +52,7 @@ pub fn build_scene(path: &str) -> SceneLoader {
     let lexer = lexer::Lexer::from_file(path).unwrap();
     let mut tokens = lexer.read_tokens();
     let has_errors = tokens.iter().any(|t| *t == token::Token::Error);
-    println!("has errors = {}", has_errors);
+    info!("Has errors = {}", has_errors);
     if has_errors {
         println!("{:?}", tokens);
     }
@@ -91,7 +93,7 @@ impl SceneLoader {
             match _scene_option {
                 ast::SceneWideOption::Camera(camera_impl, mut args) => {
                     if camera_impl != "perspective" {
-                        eprintln!("non perspective camera {} unsupported", camera_impl);
+                        error!("Non perspective camera {} unsupported", camera_impl);
                     }
                     fov = match args.extract("float fov") {
                         None => Some(hcm::Degree(60.0)),
@@ -113,7 +115,7 @@ impl SceneLoader {
                         ),
                     };
                 }
-                _ => eprintln!("unhandled scene-wide option {:?}", _scene_option),
+                _ => error!("unhandled scene-wide option {:?}", _scene_option),
             }
         }
         use crate::camera::Camera;
@@ -138,7 +140,7 @@ impl SceneLoader {
             self.traverse_world_item(world_item);
         }
         for instance in self.instances.iter() {
-            println!(
+            info!(
                 "transform = {}, shape summary = {}, bbox = {}, mtl type = {}",
                 instance.transform,
                 instance.shape.summary(),
@@ -158,9 +160,15 @@ impl SceneLoader {
             }
             WorldItem::Shape(shape_impl, mut args) => {
                 args.extract_string("alpha");
-                
+
                 if self.current_mtl.is_some() && self.current_arealight_luminance.is_some() {
-                    eprintln!("Both material and arealight are set, can't decide which to use");
+                    warn!("Both material and arealight are set, using only the light");
+                    let shape = Self::parse_samplable_shape(&shape_impl, args);
+                    let diffuse_light = light::DiffuseAreaLight::new(
+                        self.current_arealight_luminance.unwrap(),
+                        shape,
+                    );
+                    self.lights.push(Box::new(diffuse_light));
                 } else if let Some(mtl) = &self.current_mtl {
                     let shape = self.parse_shape(&shape_impl, args);
                     let inst = crate::instance::Instance::new(shape, mtl.clone())
@@ -171,7 +179,7 @@ impl SceneLoader {
                     let diffuse_light = light::DiffuseAreaLight::new(luminance.clone(), shape);
                     self.lights.push(Box::new(diffuse_light));
                 } else {
-                    eprintln!("Neither arealight luminance or material are set");
+                    error!("Neither arealight luminance or material are set");
                 }
             }
             WorldItem::Material(mtl_impl, parameters) => {
@@ -238,12 +246,13 @@ impl SceneLoader {
                         Some((_, wtf)) => unimplemented!("complicated luminance: {:?}", wtf),
                     };
                     self.current_arealight_luminance = Some(luminance);
+                    info!("current arealight set to {}", luminance);
                 } else {
-                    eprintln!("unhandled area light: {}", light_impl);
+                    error!("unhandled area light: {}", light_impl);
                 }
             }
             _ => {
-                eprintln!("unhandled world item: {}", item);
+                error!("unhandled world item: {}", item);
             }
         }
     }
@@ -265,12 +274,12 @@ impl SceneLoader {
                 let _alpha_texture = parameters.lookup_string("alpha");
                 let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
                 let tri_bvh = shape::TriangleMesh::build_from_raw(&mesh);
-                println!("triangle bvh shape: {}", tri_bvh.bvh_shape_summary());
+                info!("Triangle bvh shape: {}", tri_bvh.bvh_shape_summary());
                 Arc::new(tri_bvh)
             }
             "trianglemesh" | "loopsubdiv" => {
                 if implementation == "loopsubdiv" {
-                    eprintln!("unsupported subdiv, using regular triangle mesh");
+                    warn!("Unsupported subdiv, using regular triangle mesh");
                 }
                 let points_raw = match parameters.extract("point P").expect("missing points") {
                     ArgValue::Numbers(nums) => nums,
@@ -309,7 +318,7 @@ impl SceneLoader {
                     .collect::<Vec<_>>();
 
                 let tri_bvh = shape::TriangleMesh::from_soa(points, normals, uvs, indices);
-                println!("triangle bvh summary: {}", tri_bvh.bvh_shape_summary());
+                info!("Triangle bvh summary: {}", tri_bvh.bvh_shape_summary());
                 Arc::new(tri_bvh)
             }
             _ => unimplemented!("shape of {}", implementation),
@@ -537,7 +546,7 @@ impl SceneLoader {
                 remap_roughness,
             })
         } else if mtl_impl == "fourier" {
-            eprintln!("unimplemented fourier");
+            error!("unimplemented fourier");
             Arc::new(mtl::Lambertian::solid(Color::white()))
         } else {
             panic!("not recognized material: {}", mtl_impl)
@@ -615,13 +624,13 @@ impl SceneLoader {
     // Static functions
     // ---------------------------------------------------------------------------------------------
     #[allow(dead_code)]
-    fn parse_transform(t: ast::Transform) -> hcm::Mat4 {
+    fn parse_transform(t: ast::Transform) -> AffineTransform {
         use ast::Transform;
         match t {
-            Transform::Identity => hcm::Mat4::identity(),
-            Transform::Translate(v) => hcm::Mat4::translater(v),
-            Transform::Scale(s) => hcm::Mat4::nonuniform_scale(s),
-            Transform::Rotate(axis, angle) => hcm::Mat4::rotater(axis, angle.to_radian()),
+            Transform::Identity => AffineTransform::identity(),
+            Transform::Translate(v) => AffineTransform::translater(v),
+            Transform::Scale(s) => AffineTransform::scaler(s),
+            Transform::Rotate(axis, angle) => AffineTransform::rotater(axis, angle.to_radian()),
             Transform::LookAt(_, _, _) => panic!("unsupported lookat in modeling step"),
         }
     }
@@ -632,7 +641,7 @@ impl SceneLoader {
             Transform::Identity => RBTrans::identity(),
             Transform::Translate(v) => RBTrans::translater(v),
             Transform::Scale(s) => {
-                eprintln!("scaling of {} unsupported", s);
+                error!("scaling of {} unsupported", s);
                 RBTrans::identity()
             }
             Transform::Rotate(axis, angle) => RBTrans::rotater(axis, angle.to_radian()),
