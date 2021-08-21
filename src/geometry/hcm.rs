@@ -1,8 +1,5 @@
 use core::convert::TryFrom;
-use std::{
-    fmt,
-    ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub},
-};
+use std::{fmt, ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub}};
 
 /// Represents a 3D vector. Each component is a `f32` number.
 /// Components can be accessed using `v.x` `v.y` `v.z`,
@@ -150,6 +147,11 @@ impl Add for Vec3 {
     type Output = Self;
     fn add(self, other: Self) -> Vec3 {
         Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+}
+impl AddAssign for Vec3 {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
     }
 }
 impl Add<Point3> for Vec3 {
