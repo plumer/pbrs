@@ -19,8 +19,12 @@ impl Sphere {
         assert!(!has_nan);
         Self::new(Point3::new(x, y, z), radius)
     }
-    pub fn center(&self) -> Point3 {self.center}
-    pub fn radius(&self) -> f32 {self.radius}
+    pub fn center(&self) -> Point3 {
+        self.center
+    }
+    pub fn radius(&self) -> f32 {
+        self.radius
+    }
 }
 
 pub struct QuadXY {
@@ -101,6 +105,19 @@ impl Cuboid {
             min: Point3::new(xmin, ymin, zmin),
             max: Point3::new(xmax, ymax, zmax),
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct IsolatedTriangle {
+    pub p0: Point3,
+    pub p1: Point3,
+    pub p2: Point3,
+}
+
+impl IsolatedTriangle {
+    pub fn new(p0: Point3, p1: Point3, p2: Point3) -> Self {
+        Self { p0, p1, p2 }
     }
 }
 
@@ -349,4 +366,45 @@ impl Shape for Cuboid {
         normal[axis] = r.dir[axis].signum() * -1.0;
         Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal))
     }
+}
+
+impl Shape for IsolatedTriangle {
+    fn intersect(&self, r: &Ray) -> Option<Interaction> {
+        intersect_triangle(self.p0, self.p1, self.p2, r)
+    }
+    fn bbox(&self) -> crate::geometry::bvh::BBox {
+        BBox::new(self.p0, self.p1).union(self.p2)
+    }
+    fn summary(&self) -> String {
+        format!("Triangle boxed by {}", self.bbox())
+    }
+}
+
+pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option<Interaction> {
+    let normal = (p0 - p1).cross(p2 - p1).hat();
+    // The equation for the plane of the triangle would be:
+    // (p - p0).dot(normal) = 0. Plugging in the ray equation $p = o + td$, we have
+    // (o + td - p0).dot(normal) = 0  =>  t*dot(d, normal) = dot(p0-o, normal)
+    let t = normal.dot(p0 - r.origin) / normal.dot(r.dir);
+    let t = r.truncated_t(t)?;
+    let p = r.position_at(t);
+    // Computes the barycentric coordinates of p with regard to the triangle.
+    let b0 = (p - p0).cross(p - p1).dot(normal);
+    let b1 = (p - p1).cross(p - p2).dot(normal);
+    let b2 = (p - p2).cross(p - p0).dot(normal);
+    let (b0, b1, b2) = match (b0 > 0.0, b1 > 0.0, b2 > 0.0) {
+        (true, true, true) | (false, false, false) => {
+            let total_area = b0 + b1 + b2;
+            (b0 / total_area, b1 / total_area, b2 / total_area)
+        }
+        _ => return None,
+    };
+    // Now an intersection is truly found.
+    Some(Interaction {
+        pos: float::barycentric_lerp((p0, p1, p2), (b1, b2, b0)),
+        normal,
+        ray_t: t,
+        // TODO
+        uv: (0.0, 0.0),
+    })
 }

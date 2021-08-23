@@ -16,7 +16,7 @@ use crate::image::Color;
 use crate::instance::AffineTransform;
 use crate::light::{Light, ShapeSample};
 use crate::material::{self as mtl, Material};
-use crate::shape::{self, Shape, TriangleMeshRaw};
+use crate::shape::{self, IsolatedTriangle, Shape, TriangleMeshRaw};
 use crate::texture::{self as tex, Texture};
 use crate::{hcm, light};
 
@@ -163,21 +163,25 @@ impl SceneLoader {
 
                 if self.current_mtl.is_some() && self.current_arealight_luminance.is_some() {
                     warn!("Both material and arealight are set, using only the light");
-                    let shape = Self::parse_samplable_shape(&shape_impl, args);
-                    let diffuse_light = light::DiffuseAreaLight::new(
-                        self.current_arealight_luminance.unwrap(),
-                        shape,
-                    );
-                    self.lights.push(Box::new(diffuse_light));
+                    let shapes = self.parse_samplable_shape(&shape_impl, args);
+                    shapes.into_iter().for_each(|shape| {
+                        let diffuse_light = light::DiffuseAreaLight::new(
+                            self.current_arealight_luminance.unwrap(),
+                            shape,
+                        );
+                        self.lights.push(Box::new(diffuse_light));
+                    });
                 } else if let Some(mtl) = &self.current_mtl {
                     let shape = self.parse_shape(&shape_impl, args);
                     let inst = crate::instance::Instance::new(shape, mtl.clone())
                         .with_transform(self.ctm_stack.last().unwrap().clone());
                     self.instances.push(inst);
-                } else if let Some(luminance) = &self.current_arealight_luminance {
-                    let shape = Self::parse_samplable_shape(&shape_impl, args);
-                    let diffuse_light = light::DiffuseAreaLight::new(luminance.clone(), shape);
-                    self.lights.push(Box::new(diffuse_light));
+                } else if let Some(luminance) = self.current_arealight_luminance {
+                    let shapes = self.parse_samplable_shape(&shape_impl, args);
+                    shapes.into_iter().for_each(|shape| {
+                        let diffuse_light = light::DiffuseAreaLight::new(luminance.clone(), shape);
+                        self.lights.push(Box::new(diffuse_light));
+                    });
                 } else {
                     error!("Neither arealight luminance or material are set");
                 }
@@ -325,10 +329,36 @@ impl SceneLoader {
         }
     }
 
-    fn parse_samplable_shape(shape_impl: &String, args: ast::ParameterSet) -> Box<dyn ShapeSample> {
+    fn parse_samplable_shape(
+        &self,
+        shape_impl: &String,
+        args: ast::ParameterSet,
+    ) -> Vec<Box<dyn ShapeSample>> {
         if shape_impl == "sphere" {
             let radius = args.lookup_f32("float radius").unwrap_or(1.0);
-            Box::new(shape::Sphere::new(hcm::Point3::origin(), radius))
+            vec![Box::new(shape::Sphere::new(hcm::Point3::origin(), radius))]
+        } else if shape_impl == "plymesh" {
+            let ply_file_name = args
+                .lookup_string("string filename")
+                .expect("no ply file specified");
+            let mut ply_file_path = self.root_dir.clone();
+            ply_file_path.push(ply_file_name);
+
+            let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
+            let mut triangles: Vec<Box<dyn ShapeSample>> = Vec::new();
+            mesh.indices.chunks_exact(3).for_each(|ijk| {
+                if let [i, j, k] = ijk {
+                    let t = IsolatedTriangle::new(
+                        mesh.vertices[*i as usize].pos,
+                        mesh.vertices[*j as usize].pos,
+                        mesh.vertices[*k as usize].pos,
+                    );
+                    triangles.push(Box::new(t));
+                } else {
+                    panic!("indices should be multiple of 3")
+                }
+            });
+            triangles
         } else {
             unimplemented!("samplable shape: {}", shape_impl)
         }

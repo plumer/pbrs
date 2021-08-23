@@ -183,7 +183,7 @@ impl ShapeSample for shape::Sphere {
     }
 
     fn sample_towards(&self, target: &Interaction, rnd2: (f32, f32)) -> Interaction {
-        let wc = self.center() - target.pos;  // Target to sphere center.
+        let wc = self.center() - target.pos; // Target to sphere center.
         if wc.norm_squared() < self.radius().powi(2) {
             return self.sample(rnd2);
         }
@@ -229,11 +229,32 @@ impl ShapeSample for shape::Sphere {
             let cos_theta = ref_to_center.dot(wi) / (ref_to_center.norm() * wi.norm());
             let uniform_cone_pdf =
                 |cos_theta_max| 1.0 / (2.0 * std::f32::consts::PI * (1.0 - cos_theta_max));
-            if cos_theta > cos_theta_max {  // Theta is less than theta_max, `wi` inside the cone
+            if cos_theta > cos_theta_max {
+                // Theta is less than theta_max, `wi` inside the cone
                 uniform_cone_pdf(cos_theta_max)
             } else {
                 0.0
             }
         }
+    }
+}
+
+impl ShapeSample for shape::IsolatedTriangle {
+    fn sample(&self, rnd2: (f32, f32)) -> Interaction {
+        let (u, v) = rnd2;
+        let (u, v) = if u + v > 1.0 {
+            (1.0 - v, 1.0 - u)
+        } else {
+            (u, v)
+        };
+        let position = self.p0 + (self.p1 - self.p0) * u + (self.p2 - self.p0) * v;
+        let normal = (self.p0 - self.p1).cross(self.p2 - self.p1).hat();
+        Interaction::new(position, 0.0, (u, v), normal)
+    }
+    fn sample_towards(&self, _target: &Interaction, rnd2: (f32, f32)) -> Interaction {
+        self.sample(rnd2)
+    }
+    fn area(&self) -> f32 {
+        (self.p0 - self.p1).cross(self.p2 - self.p1).norm() * 0.5
     }
 }

@@ -1,9 +1,8 @@
-use std::ops::Range;
-use crate::geometry::bvh::{BBox, self};
-use crate::geometry::shape::*;
+use crate::geometry::bvh::{self, BBox};
 use crate::geometry::hcm::*;
-use crate::geometry::float;
+use crate::geometry::shape::*;
 use partition::partition;
+use std::ops::Range;
 
 enum IsoBvhNodeContent {
     Children([Box<IsoBvhNode>; 2]),
@@ -161,35 +160,7 @@ impl TriangleMesh {
 
     fn intersect_triangle(&self, tri: &Triangle, r: &Ray) -> Option<Interaction> {
         let (i, k, j) = tri.indices;
-        let p0 = self.positions[i];
-        let p1 = self.positions[j];
-        let p2 = self.positions[k];
-        let normal = (p0 - p1).cross(p2 - p1).hat();
-        // The equation for the plane of the triangle would be:
-        // (p - p0).dot(normal) = 0. Plugging in the ray equation $p = o + td$, we have
-        // (o + td - p0).dot(normal) = 0  =>  t*dot(d, normal) = dot(p0-o, normal)
-        let t = normal.dot(p0 - r.origin) / normal.dot(r.dir);
-        let t = r.truncated_t(t)?;
-        let p = r.position_at(t);
-        // Computes the barycentric coordinates of p with regard to the triangle.
-        let b0 = (p - p0).cross(p - p1).dot(normal);
-        let b1 = (p - p1).cross(p - p2).dot(normal);
-        let b2 = (p - p2).cross(p - p0).dot(normal);
-        let (b0, b1, b2) = match (b0 > 0.0, b1 > 0.0, b2 > 0.0) {
-            (true, true, true) | (false, false, false) => {
-                let total_area = b0 + b1 + b2;
-                (b0 / total_area, b1 / total_area, b2 / total_area)
-            }
-            _ => return None,
-        };
-        // Now an intersection is truly found.
-        Some(Interaction {
-            pos: float::barycentric_lerp((p0, p1, p2), (b1, b2, b0)),
-            normal,
-            ray_t: t,
-            // TODO
-            uv: (0.0, 0.0),
-        })
+        intersect_triangle(self.positions[i], self.positions[j], self.positions[k], r)
     }
 
     pub fn bvh_shape_summary(&self) -> String {
@@ -204,7 +175,7 @@ impl TriangleMesh {
     // }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub pos: Point3,
     pub normal: Vec3,
@@ -225,7 +196,6 @@ impl Vertex {
         }
     }
 }
-
 
 impl<T> Shape for IsoBlas<T>
 where
