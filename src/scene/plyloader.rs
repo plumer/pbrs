@@ -5,14 +5,10 @@ use std::{
 
 use crate::hcm;
 use crate::shape::{TriangleMeshRaw, Vertex};
-use log::{info, error, warn};
+use log::{error, info, warn};
 use ply_rs::ply::*;
 
 pub fn load_ply(path: &str) -> TriangleMeshRaw {
-    match _load_ply(path) {
-        Ok(x) => info!("_load_ply ok"),
-        Err(x) => error!("_load_ply error: {}", x.to_string()),
-    };
     let mut f = std::fs::File::open(path).unwrap();
     let vertex_name_set = ["x", "y", "z", "nx", "ny", "nz", "u", "v"]
         .iter()
@@ -78,6 +74,29 @@ pub fn load_ply(path: &str) -> TriangleMeshRaw {
             triangle_indices.append(&mut indices.clone());
         }
     }
+    
+    let points_are_close = |p0: hcm::Point3, p1: hcm::Point3| { (p0 - p1).norm_squared() < 1e-6};
+    let vecs_are_close = |v0: hcm::Vec3, v1: hcm::Vec3| { (v0 - v1).norm_squared() < 1e-6};
+
+    match _load_ply(path) {
+        Ok(x) => {
+            info!("_load_ply ok");
+            assert_eq!(x.indices, triangle_indices, "indices are the same ?");
+            assert_eq!(x.vertices.len(), vertex_data.len(), "vertices are the same length?" );
+            x.vertices.iter().zip(vertex_data.iter()).enumerate().for_each(|(id, (vnew, vold))|{
+                if !points_are_close(vnew.pos, vold.pos) {
+                    error!("differ on #{} by position", id);
+                }
+                if !vecs_are_close(vnew.normal, vold.normal) {
+                    error!("differ on #{} by normal", id);
+                }
+                if vnew.uv.0 != vold.uv.0 || vnew.uv.1 != vold.uv.1{
+                    error!("differ on #{} by uv", id);
+                }
+            });
+        } 
+        Err(x) => error!("_load_ply error: {}", x.to_string()),
+    };
 
     TriangleMeshRaw {
         vertices: vertex_data,
@@ -94,10 +113,44 @@ fn get_type_size(name: &str) -> Option<usize> {
     }
 }
 
+#[derive(Clone, Copy)]
 enum PlyFormat {
     Ascii,
     BinaryLE,
     BinaryBE,
+}
+
+fn bytes_to_f32(bytes: &[u8], ply_format: PlyFormat) -> f32 {
+    if bytes.len() != std::mem::size_of::<f32>() {
+        error!("Length of a u8 for f32 isn't 4: {}", bytes.len());
+    }
+    let b = [bytes[0], bytes[1], bytes[2], bytes[3]];
+    match ply_format {
+        PlyFormat::BinaryBE => f32::from_be_bytes(b),
+        PlyFormat::BinaryLE => f32::from_le_bytes(b),
+        PlyFormat::Ascii => panic!("Not supported ascii"),
+    }
+}
+fn bytes_to_uint(bytes: &[u8], ply_format: PlyFormat) -> u32 {
+    if bytes.len() == std::mem::size_of::<u8>() {
+        bytes[0] as u32
+    } else if bytes.len() == std::mem::size_of::<u16>() {
+        let b = [bytes[0], bytes[1]];
+        (match ply_format {
+            PlyFormat::Ascii => panic!("Not supported"),
+            PlyFormat::BinaryBE => u16::from_be_bytes(b),
+            PlyFormat::BinaryLE => u16::from_le_bytes(b),
+        }) as u32
+    } else if bytes.len() == std::mem::size_of::<u32>() {
+        let b = [bytes[0], bytes[1], bytes[2], bytes[3]];
+        match ply_format {
+            PlyFormat::Ascii => panic!("Not supported"),
+            PlyFormat::BinaryBE => u32::from_be_bytes(b),
+            PlyFormat::BinaryLE => u32::from_le_bytes(b),
+        }
+    } else {
+        panic!("unsupported byte length {}", bytes.len());
+    }
 }
 
 macro_rules! wrong_data_error {
@@ -107,21 +160,21 @@ macro_rules! wrong_data_error {
 }
 
 fn _load_ply(path: &str) -> std::io::Result<TriangleMeshRaw> {
-    let file = std::fs::File::open(path)?;
+    let file = std::fs::File::open(path).unwrap();
     let mut reader = std::io::BufReader::new(file);
 
     // Reads the header.
     let mut header = String::new();
-    reader.read_line(&mut header)?;
-    if header != "ply" {
-        return wrong_data_error!("Header isn't ply: {}", header);
+    reader.read_line(&mut header).unwrap();
+    if header.trim() != "ply" {
+        return wrong_data_error!("Header isn't ply: '{}'", header);
     }
     let mut format_line = String::new();
-    reader.read_line(&mut format_line)?;
+    reader.read_line(&mut format_line).unwrap();
 
     let ply_format = {
         let mut words = format_line.split(' ');
-        if words.next() != Some("ascii") {
+        if words.next() != Some("format") {
             return wrong_data_error!("Format line is bad: {}", format_line);
         }
         match words.next() {
@@ -137,7 +190,9 @@ fn _load_ply(path: &str) -> std::io::Result<TriangleMeshRaw> {
     let mut header_lines = Vec::new();
     loop {
         let mut buffer = String::new();
-        reader.read_line(&mut buffer)?;
+        reader.read_line(&mut buffer).unwrap();
+        let buffer = buffer.trim().to_owned();
+        info!("line = {}", buffer);
         if buffer == "end_header" {
             break;
         } else if !buffer.starts_with("comment") {
@@ -172,36 +227,7 @@ fn _load_ply(path: &str) -> std::io::Result<TriangleMeshRaw> {
             warn!("Unprocessed header line: {}", line);
         }
     }
-    let bytes_to_f32 = |bytes: &[u8]| {
-        if bytes.len() != std::mem::size_of::<f32>() {
-            error!("Length of a u8 for f32 isn't 4: {}", bytes.len());
-        }
-        let b = [bytes[0], bytes[1], bytes[2], bytes[3]];
-        match ply_format {
-            PlyFormat::BinaryBE => f32::from_be_bytes(b),
-            PlyFormat::BinaryLE => f32::from_le_bytes(b),
-            PlyFormat::Ascii => panic!("Not supported ascii"),
-        }
-    };
-    let bytes_to_uint = |bytes: &[u8]| {
-        if bytes.len() != std::mem::size_of::<u16>() {
-            let b = [bytes[0], bytes[1]];
-            (match ply_format {
-                PlyFormat::Ascii => panic!("Not supported"),
-                PlyFormat::BinaryBE => u16::from_be_bytes(b),
-                PlyFormat::BinaryLE => u16::from_le_bytes(b),
-            }) as u32
-        } else if bytes.len() == std::mem::size_of::<u32>() {
-            let b = [bytes[0], bytes[1], bytes[2], bytes[3]];
-            match ply_format {
-                PlyFormat::Ascii => panic!("Not supported"),
-                PlyFormat::BinaryBE => u32::from_be_bytes(b),
-                PlyFormat::BinaryLE => u32::from_le_bytes(b),
-            }
-        } else {
-            panic!("unsupported byte length {}", bytes.len());
-        }
-    };
+
     if let (
         Some(num_vertices),
         Some(num_faces),
@@ -213,30 +239,36 @@ fn _load_ply(path: &str) -> std::io::Result<TriangleMeshRaw> {
         list_length_number_size,
         list_element_size,
     ) {
+        info!("num_vertices = {}, num_faces = {}, list_length_number_size = {}, list_element_size = {}",
+                num_vertices, num_faces, list_length_number_size, list_element_size);
         let mut vertex_buffer_u8 = Vec::new();
-        vertex_buffer_u8.resize(num_vertices * std::mem::size_of::<f32>(), 0u8);
-        reader.read_exact(&mut vertex_buffer_u8)?;
+        vertex_buffer_u8.resize(
+            num_vertices * property_names.len() * std::mem::size_of::<f32>(),
+            0u8,
+        );
+        reader.read_exact(&mut vertex_buffer_u8).unwrap();
 
         let vertex_buffer = vertex_buffer_u8
             .chunks_exact(4)
-            .map(|bytes| bytes_to_f32(bytes))
+            .map(|bytes| bytes_to_f32(bytes, ply_format))
             .collect::<Vec<_>>();
+        // info!("Vertex buffer = {:?}", vertex_buffer);
 
         let mut indices_list = Vec::new();
         for _ in 0..num_faces {
             let mut list_length_u8 = Vec::new();
             list_length_u8.resize(list_length_number_size * std::mem::size_of::<u8>(), 0u8);
-            reader.read_exact(&mut list_length_u8)?;
-            let list_length = bytes_to_uint(&list_length_u8);
+            reader.read_exact(&mut list_length_u8).unwrap();
+            let list_length = bytes_to_uint(&list_length_u8, ply_format);
             assert!(matches!(list_element_size, 1 | 2 | 4));
 
             let mut face_indices_bytes = Vec::new();
             face_indices_bytes.resize(list_element_size * list_length as usize, 0u8);
-            reader.read_exact(&mut face_indices_bytes)?;
+            reader.read_exact(&mut face_indices_bytes).unwrap();
 
             let mut face_indices: Vec<_> = face_indices_bytes
                 .chunks_exact(list_element_size)
-                .map(|bytes| bytes_to_uint(bytes) as i32)
+                .map(|bytes| bytes_to_uint(bytes, ply_format) as i32)
                 .collect();
             if face_indices.len() > 3 {
                 for i in 1..(list_length - 1) as usize {
