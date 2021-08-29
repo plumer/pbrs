@@ -3,11 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use crate::geometry::{
+use crate::geometry::{ray::Ray, shape::Interaction};
+use crate::math::{
     float::min_max,
     hcm::{Point3, Vec3},
-    ray::Ray,
-    shape::Interaction,
 };
 use crate::{instance::Instance, material::Material};
 

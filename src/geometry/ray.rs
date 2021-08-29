@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter, Result};
 
-use crate::hcm;
+use crate::math::hcm;
 
 /// Represents a ray:
 ///

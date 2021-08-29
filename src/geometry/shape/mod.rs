@@ -8,9 +8,9 @@ use std::fmt::{Display, Formatter, Result};
 
 use crate::geometry::{
     bvh::BBox,
-    hcm::{Point3, Vec3},
     ray::Ray,
 };
+use crate::math::hcm::{Point3, Vec3};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interaction {

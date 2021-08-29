@@ -4,31 +4,31 @@ mod image;
 mod instance;
 mod light;
 mod material;
+mod math;
 mod scene;
 mod spectrum;
 mod texture;
 
 use glog::Flags;
 use log::*;
-use rayon::prelude::*;
 use std::fs::File;
 use std::io::{self, BufWriter};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use geometry::hcm::{Point3, Vec3};
 use image::Color;
 use instance::Instance;
 use io::Write;
 use material as mtl;
+use math::hcm::{self, Point3, Vec3};
 use texture as tex;
 
 use crate::{
     camera::Camera,
     geometry::{
         bvh::{self, BvhNode},
-        hcm, ray,
+        ray,
         shape::{self, Sphere},
     },
     texture::Texture,

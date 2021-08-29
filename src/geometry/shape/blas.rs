@@ -1,5 +1,4 @@
 use crate::geometry::bvh::{self, BBox};
-use crate::geometry::hcm::*;
 use crate::geometry::shape::*;
 use partition::partition;
 use std::ops::Range;

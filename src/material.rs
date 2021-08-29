@@ -1,10 +1,8 @@
+use crate::math::hcm::{self,Vec3};
 use crate::ray::Ray;
 use crate::shape::Interaction;
-use crate::{
-    hcm,
-    texture::{self, *},
-};
-use crate::{hcm::Vec3, image::Color};
+use crate::texture::{self, *};
+use crate::{image::Color};
 use std::sync::Arc;
 pub trait Material: Sync + Send {
     /// Computes the scattering of a ray on a given surface interation.

@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, Read},
 };
 
-use crate::hcm;
+use crate::math::hcm;
 use crate::shape::{TriangleMeshRaw, Vertex};
 use log::{error, info, warn};
 use ply_rs::ply::*;

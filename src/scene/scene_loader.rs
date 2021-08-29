@@ -5,15 +5,16 @@ use std::sync::Arc;
 
 use crate::image::Color;
 use crate::instance::AffineTransform;
+use crate::light;
 use crate::light::{Light, ShapeSample};
 use crate::material::{self as mtl, Material};
+use crate::math::hcm;
 use crate::scene::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, plyloader, token,
 };
 use crate::shape::{self, IsolatedTriangle, Shape, TriangleMeshRaw};
 use crate::texture::{self as tex, Texture};
-use crate::{hcm, light};
 
 #[allow(dead_code)]
 pub struct Scene {

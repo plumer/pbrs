@@ -1,6 +1,5 @@
 use crate::geometry::bvh::BBox;
-use crate::geometry::float::{self, Interval};
-use crate::geometry::hcm::*;
+use crate::math::float::{self, Interval};
 use crate::geometry::shape::*;
 use std::f32::consts::PI;
 

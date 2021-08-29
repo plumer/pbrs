@@ -1,4 +1,4 @@
-use crate::geometry::hcm::{Degree, Point3, Vec3};
+use crate::math::hcm::{Degree, Point3, Vec3};
 use std::collections::HashMap;
 use std::fmt;
 
