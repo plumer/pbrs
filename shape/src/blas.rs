@@ -1,7 +1,9 @@
-use crate::geometry::bvh::{self, BBox};
-use crate::geometry::shape::*;
+use geometry::bvh::{self, BBox};
+use geometry::ray::Ray;
+use crate::{Shape, Interaction};
 use partition::partition;
 use std::ops::Range;
+use math::hcm::{Point3, Vec3};
 
 enum IsoBvhNodeContent {
     Children([Box<IsoBvhNode>; 2]),
@@ -160,7 +162,7 @@ impl TriangleMesh {
 
     fn intersect_triangle(&self, tri: &Triangle, r: &Ray) -> Option<Interaction> {
         let (i, k, j) = tri.indices;
-        intersect_triangle(self.positions[i], self.positions[j], self.positions[k], r)
+        crate::intersect_triangle(self.positions[i], self.positions[j], self.positions[k], r)
     }
 
     pub fn bvh_shape_summary(&self) -> String {
@@ -196,6 +198,22 @@ impl Vertex {
         }
     }
 }
+
+impl std::fmt::Display for Vertex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let prec = f.precision().unwrap_or(2);
+        write!(
+            f,
+            "{} {} ({:.p$}, {:.p$})",
+            self.pos,
+            self.normal,
+            self.uv.0,
+            self.uv.1,
+            p = prec
+        )
+    }
+}
+
 
 impl<T> Shape for IsoBlas<T>
 where

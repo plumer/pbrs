@@ -1,7 +1,10 @@
-use crate::geometry::bvh::BBox;
+use geometry::bvh::BBox;
 use math::float::{self, Interval};
-use crate::geometry::shape::*;
+use math::hcm::{Point3, Vec3};
 use std::f32::consts::PI;
+
+use crate::{Interaction, Shape};
+use geometry::ray::Ray;
 
 #[derive(Debug)]
 pub struct Sphere {
@@ -372,7 +375,7 @@ impl Shape for IsolatedTriangle {
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         intersect_triangle(self.p0, self.p1, self.p2, r)
     }
-    fn bbox(&self) -> crate::geometry::bvh::BBox {
+    fn bbox(&self) -> BBox {
         BBox::new(self.p0, self.p1).union(self.p2)
     }
     fn summary(&self) -> String {
@@ -383,7 +386,8 @@ impl Shape for IsolatedTriangle {
 pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option<Interaction> {
     let normal = (p0 - p1).cross(p2 - p1);
     // TODO(zixun): remove triangles (index triplets) from plymeshes that have zero area.
-    if normal.is_zero() {  // Degenerate triangle.
+    if normal.is_zero() {
+        // Degenerate triangle.
         return None;
     }
     let normal = normal.hat();

@@ -4,7 +4,7 @@ use std::{
 };
 
 use math::hcm;
-use crate::shape::{TriangleMeshRaw, Vertex};
+use shape::{TriangleMeshRaw, Vertex};
 use log::{error, info, warn};
 use ply_rs::ply::*;
 
@@ -381,19 +381,4 @@ fn compute_normals(positions: &Vec<hcm::Point3>, indices: &Vec<i32>) -> Vec<hcm:
         }
     });
     normals.iter().map(|n| n.hat()).collect()
-}
-
-impl std::fmt::Display for Vertex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let prec = f.precision().unwrap_or(2);
-        write!(
-            f,
-            "{} {} ({:.p$}, {:.p$})",
-            self.pos,
-            self.normal,
-            self.uv.0,
-            self.uv.1,
-            p = prec
-        )
-    }
 }

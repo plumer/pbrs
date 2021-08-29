@@ -3,12 +3,14 @@ use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use math::hcm;
+use geometry::camera::Camera;
+
 use crate::image::Color;
 use crate::instance::AffineTransform;
 use crate::light;
 use crate::light::{Light, ShapeSample};
 use crate::material::{self as mtl, Material};
-use math::hcm;
 use crate::scene::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, plyloader, token,
@@ -39,7 +41,7 @@ pub struct SceneLoader {
     named_textures: HashMap<String, Arc<dyn Texture>>,
     named_materials: HashMap<String, Arc<dyn Material>>,
     pub instances: Vec<crate::instance::Instance>,
-    pub camera: Option<crate::camera::Camera>,
+    pub camera: Option<Camera>,
     pub lights: Vec<Box<dyn Light>>,
 }
 
@@ -80,7 +82,7 @@ impl SceneLoader {
         }
     }
 
-    fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> Option<crate::camera::Camera> {
+    fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> Option<Camera> {
         let mut fov = None;
         let mut w = None;
         let mut h = None;
@@ -114,7 +116,6 @@ impl SceneLoader {
                 _ => error!("unhandled scene-wide option {:?}", _scene_option),
             }
         }
-        use crate::camera::Camera;
         let mut camera: Camera;
         match (fov, w, h) {
             (Some(degree), Some(width), Some(height)) => {

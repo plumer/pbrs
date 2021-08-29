@@ -1,0 +1,10 @@
+[package]
+name = "shape"
+version = "0.1.0"
+description = "Shape library module for pbrs"
+edition = "2018"
+
+[dependencies]
+partition = "0.1.2"
+math = { path = "../math", version = "0.1.0"}
+geometry = {path = "../geometry", version = "0.1.0"}

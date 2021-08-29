@@ -1,0 +1,8 @@
+[package]
+name = "geometry"
+version = "0.1.0"
+description = "Geometry library module for pbrs"
+edition = "2018"
+
+[dependencies]
+math = { path = "../math", version = "0.1.0"}

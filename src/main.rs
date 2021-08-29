@@ -1,7 +1,6 @@
-mod camera;
-mod geometry;
 mod image;
 mod instance;
+mod tlas;
 mod light;
 mod material;
 mod scene;
@@ -16,23 +15,19 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+use tlas::BvhNode;
 use image::Color;
 use instance::Instance;
 use io::Write;
 use material as mtl;
-use math::hcm::{self, Point3, Vec3};
 use math::assert_le;
+use math::hcm::{self, Point3, Vec3};
 use texture as tex;
 
-use crate::{
-    camera::Camera,
-    geometry::{
-        bvh::{self, BvhNode},
-        ray,
-        shape::{self, Sphere},
-    },
-    texture::Texture,
-};
+use geometry::{bvh, ray, camera};
+use shape::{self, Sphere};
+
+use crate::{camera::Camera, texture::Texture};
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
@@ -300,7 +295,7 @@ fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
 
     let boxed_instances: Vec<Box<Instance>> =
         instances.iter().map(|x| Box::from(x.clone())).collect();
-    (bvh::build_bvh(boxed_instances), camera, blue_sky)
+    (tlas::build_bvh(boxed_instances), camera, blue_sky)
 }
 
 #[allow(dead_code)]
@@ -335,7 +330,7 @@ fn scene_two_perlin_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
         Vec3::ybase(),
     );
 
-    (bvh::build_bvh(instances), cam, blue_sky)
+    (tlas::build_bvh(instances), cam, blue_sky)
 }
 
 #[allow(dead_code)]
@@ -353,7 +348,7 @@ fn scene_earth() -> (Box<BvhNode>, camera::Camera, EnvLight) {
         Vec3::ybase(),
     );
 
-    (bvh::build_bvh(instances), cam, blue_sky)
+    (tlas::build_bvh(instances), cam, blue_sky)
 }
 
 #[allow(dead_code)]
@@ -387,7 +382,7 @@ fn scene_quad_light() -> Scene {
         Vec3::ybase(),
     );
 
-    (bvh::build_bvh(instances), cam, dark_room)
+    (tlas::build_bvh(instances), cam, dark_room)
 }
 
 #[allow(dead_code)]
@@ -398,7 +393,7 @@ fn scene_quad() -> Scene {
 
     let cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(45.0).to_radian());
 
-    (bvh::build_bvh(instances), cam, blue_sky)
+    (tlas::build_bvh(instances), cam, blue_sky)
 }
 
 #[allow(dead_code)]
@@ -463,7 +458,7 @@ fn scene_cornell_box() -> Scene {
         Vec3::ybase(),
     );
 
-    (bvh::build_bvh(instances), cam, dark_room)
+    (tlas::build_bvh(instances), cam, dark_room)
 }
 
 #[allow(dead_code)]
@@ -540,7 +535,7 @@ fn scene_everything() -> Scene {
 
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
-    (bvh::build_bvh(instances), cam, dark_room)
+    (tlas::build_bvh(instances), cam, dark_room)
 }
 
 #[allow(dead_code)]
@@ -552,7 +547,7 @@ fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
         .into_iter()
         .map(|i| Box::new(i))
         .collect::<Vec<_>>();
-    (bvh::build_bvh(tlas), cam, blue_sky)
+    (tlas::build_bvh(tlas), cam, blue_sky)
 }
 
 // Monte-carlo playground

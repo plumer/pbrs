@@ -19,9 +19,17 @@ log = "0.4"
 [dependencies.math]
 path = "math"
 
+[dependencies.geometry]
+path = "geometry"
+
+[dependencies.shape]
+path = "shape"
+
 [workspace]
 members = [
     "math",
+    "shape",
+    "geometry",
 ]
 
 [profile.release]

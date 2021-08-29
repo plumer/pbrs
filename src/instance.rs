@@ -1,6 +1,6 @@
 use std::{ops::Mul, sync::Arc};
 
-use crate::geometry::shape::Interaction;
+use shape::Interaction;
 use math::hcm::{Mat3, Mat4, Point3, Radian, Vec3, Vec4};
 use crate::ray::Ray;
 use crate::shape::Shape;

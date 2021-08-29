@@ -6,10 +6,8 @@ pub use simple::*;
 
 use std::fmt::{Display, Formatter, Result};
 
-use crate::geometry::{
-    bvh::BBox,
-    ray::Ray,
-};
+use geometry::ray::Ray;
+use geometry::bvh::BBox;
 use math::hcm::{Point3, Vec3};
 
 #[derive(Debug, Clone, Copy)]
