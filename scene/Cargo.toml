@@ -1,0 +1,13 @@
+[package]
+name = "scene"
+version = "0.1.0"
+description = "Scene library module for pbrs"
+edition = "2018"
+
+[dependencies]
+math = { path = "../math", version = "0.1.0"}
+shape = {path = "../shape", version = "0.1.0"}
+logos = "0.12"
+glog = "0.1"
+log = "0.4"
+ply-rs = "0.1.3"

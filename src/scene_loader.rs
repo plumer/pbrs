@@ -11,11 +11,11 @@ use crate::instance::AffineTransform;
 use crate::light;
 use crate::light::{Light, ShapeSample};
 use crate::material::{self as mtl, Material};
-use crate::scene::{
+use scene::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, plyloader, token,
 };
-use crate::shape::{self, IsolatedTriangle, Shape, TriangleMeshRaw};
+use shape::{self, IsolatedTriangle, Shape, TriangleMeshRaw};
 use crate::texture::{self as tex, Texture};
 
 #[allow(dead_code)]

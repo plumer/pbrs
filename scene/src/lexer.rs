@@ -1,7 +1,7 @@
 use logos::Logos;
 use std::{ffi::OsString, io::Read};
 
-use crate::scene::token::Token;
+use crate::token::Token;
 
 pub struct Lexer {
     root_file: OsString,

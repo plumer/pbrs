@@ -106,7 +106,7 @@ macro_rules! assert_le {
     ($left:expr, $right:expr) => {
         if $left > $right {
             panic!(
-                "less-than assertion failed: {} < {} (values: {} vs. {})",
+                "Assertion failed: {} <= {} (values: {} vs. {})",
                 stringify!($left),
                 stringify! {$right},
                 $left,
@@ -121,7 +121,37 @@ macro_rules! assert_lt {
     ($left:expr, $right:expr) => {
         if $left >= $right {
             panic!(
-                "less-than assertion failed: {} < {} (values: {} vs. {})",
+                "Assertion failed: {} < {} (values: {} vs. {})",
+                stringify!($left),
+                stringify! {$right},
+                $left,
+                $right
+            )
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! assert_gt {
+    ($left:expr, $right:expr) => {
+        if $left <= $right {
+            panic!(
+                "Assertion failed: {} > {} (values: {} vs. {})",
+                stringify!($left),
+                stringify! {$right},
+                $left,
+                $right
+            )
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! assert_ge {
+    ($left:expr, $right:expr) => {
+        if $left < $right {
+            panic!(
+                "Assertion failed: {} >= {} (values: {} vs. {})",
                 stringify!($left),
                 stringify! {$right},
                 $left,

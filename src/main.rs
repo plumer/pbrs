@@ -3,7 +3,7 @@ mod instance;
 mod tlas;
 mod light;
 mod material;
-mod scene;
+mod scene_loader;
 mod spectrum;
 mod texture;
 
@@ -540,7 +540,7 @@ fn scene_everything() -> Scene {
 
 #[allow(dead_code)]
 fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
-    let pbrt_scene = scene::build_scene(pbrt_file_path);
+    let pbrt_scene = scene_loader::build_scene(pbrt_file_path);
     let cam = pbrt_scene.camera.expect("camera not built in the scene");
     let tlas = pbrt_scene
         .instances

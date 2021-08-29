@@ -11,8 +11,6 @@ png = "0.16"
 rand="0.8"
 rayon = "1.5"
 partition = "0.1"
-logos = "0.12"
-ply-rs = "0.1.3"
 glog = "0.1"
 log = "0.4"
 
@@ -25,11 +23,15 @@ path = "geometry"
 [dependencies.shape]
 path = "shape"
 
+[dependencies.scene]
+path = "scene"
+
 [workspace]
 members = [
     "math",
     "shape",
     "geometry",
+    "scene",
 ]
 
 [profile.release]

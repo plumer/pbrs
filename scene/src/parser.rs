@@ -1,8 +1,8 @@
 use core::panic;
 
 use math::hcm::{Degree, Point3, Vec3};
-use crate::scene::ast::*;
-use crate::scene::token::Token;
+use crate::ast::*;
+use crate::token::Token;
 
 macro_rules! raise_syntax_error {
     ($($arg:tt)*) => {{
