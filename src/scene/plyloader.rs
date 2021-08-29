@@ -192,7 +192,6 @@ fn _load_ply(path: &str) -> std::io::Result<TriangleMeshRaw> {
         let mut buffer = String::new();
         reader.read_line(&mut buffer).unwrap();
         let buffer = buffer.trim().to_owned();
-        info!("line = {}", buffer);
         if buffer == "end_header" {
             break;
         } else if !buffer.starts_with("comment") {
