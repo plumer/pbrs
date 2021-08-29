@@ -44,7 +44,7 @@ use IsoBvhNodeContent::Leaf;
 
 impl<T> IsoBlas<T>
 where
-    T: Shape,
+    T: Shape + std::fmt::Debug,
 {
     fn new_with_only_shapes(shapes: Vec<T>) -> Self {
         IsoBlas {
@@ -66,6 +66,7 @@ where
     }
 }
 
+#[derive(Debug)]
 struct Triangle {
     indices: (usize, usize, usize),
     bbox: BBox,
@@ -253,6 +254,7 @@ impl Shape for TriangleMesh {
 
 fn recursive_build<S, F>(shapes: &mut Vec<S>, range: Range<usize>, box_getter: F) -> IsoBvhNode
 where
+    S: std::fmt::Debug,
     F: Fn(&S) -> BBox + Copy,
 {
     if range.len() <= 4 {
@@ -272,8 +274,16 @@ where
     let centroid_bbox = bboxes
         .iter()
         .fold(BBox::empty(), |sum, b| sum.union(b.midpoint()));
-    assert!(centroid_bbox.area() > 0.0);
     let split_axis = centroid_bbox.diag().max_dimension();
+    if centroid_bbox.diag()[split_axis] < 1e-8 {
+        eprintln!("Creating a tiny leaf node with {} shapes", range.len());
+        return IsoBvhNode {
+            bbox: bboxes
+                .iter()
+                .fold(BBox::empty(), |b0, b1| bvh::union(b0, *b1)),
+            content: Leaf(range),
+        };
+    }
 
     // Computes the plane "axis = pivot_value" that will be used to partition the shapes.
     // ----------------------------------------------------------------------------------

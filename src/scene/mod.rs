@@ -278,7 +278,12 @@ impl SceneLoader {
                 let _alpha_texture = parameters.lookup_string("alpha");
                 let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
                 let tri_bvh = shape::TriangleMesh::build_from_raw(&mesh);
-                info!("Triangle bvh shape: {}", tri_bvh.bvh_shape_summary());
+                info!(
+                    "Triangle mesh with {} vertices and {} indices, bvh shape: {}",
+                    mesh.vertices.len(),
+                    mesh.indices.len(),
+                    tri_bvh.bvh_shape_summary()
+                );
                 Arc::new(tri_bvh)
             }
             "trianglemesh" | "loopsubdiv" => {

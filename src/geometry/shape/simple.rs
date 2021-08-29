@@ -4,6 +4,7 @@ use crate::geometry::hcm::*;
 use crate::geometry::shape::*;
 use std::f32::consts::PI;
 
+#[derive(Debug)]
 pub struct Sphere {
     center: Point3,
     radius: f32,
@@ -381,7 +382,12 @@ impl Shape for IsolatedTriangle {
 }
 
 pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option<Interaction> {
-    let normal = (p0 - p1).cross(p2 - p1).hat();
+    let normal = (p0 - p1).cross(p2 - p1);
+    // TODO(zixun): remove triangles (index triplets) from plymeshes that have zero area.
+    if normal.is_zero() {  // Degenerate triangle.
+        return None;
+    }
+    let normal = normal.hat();
     // The equation for the plane of the triangle would be:
     // (p - p0).dot(normal) = 0. Plugging in the ray equation $p = o + td$, we have
     // (o + td - p0).dot(normal) = 0  =>  t*dot(d, normal) = dot(p0-o, normal)

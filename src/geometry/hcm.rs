@@ -118,8 +118,7 @@ impl Vec3 {
     }
     pub fn hat(self) -> Vec3 {
         if self.is_zero() {
-            eprintln!("normalizing zero vector");
-            self
+            panic!("normalizing zero vector");
         } else {
             let inv_sqrt = 1.0 / self.norm();
             self * inv_sqrt

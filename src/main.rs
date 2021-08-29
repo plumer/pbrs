@@ -76,19 +76,20 @@ fn main() {
             ..Default::default()
         })
         .unwrap();
-    // estimate_pi();
-    // play_integrator();
-    // {
-    //     // let pbrt_file = "assets/bathroom/bathroom.pbrt";
-    //     let pbrt_file = "assets/killeroos/killeroo-simple.pbrt";
-    //     scene::build_scene(pbrt_file);
-    // }
 
     let half_right_angle = hcm::Degree(45.0);
     info!("{} is {} ", half_right_angle, half_right_angle.to_radian());
 
     // Prepares the scene and environmental lighting.
-    let (bvh, camera, env_light) = load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt");
+    let mut args_iter = std::env::args();
+    args_iter.next();
+    let pbrs_input_path = args_iter.next();
+    let (bvh, camera, env_light) = if let Some(pbrs_file_path) = pbrs_input_path {
+        load_pbrt_scene(&pbrs_file_path)
+    } else {
+        load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt")
+    };
+
     // load_pbrt_scene("assets/spheres.pbrt");
     // scene_125_spheres();
 
@@ -102,7 +103,8 @@ fn main() {
     let start_render = Instant::now();
 
     let image_map: Vec<_> = (0..height)
-        .into_par_iter()
+        // .into_par_iter()
+        .into_iter()
         .map(|row| {
             if (row % 10) == 0 {
                 print!("{} ", row);
