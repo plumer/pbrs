@@ -228,6 +228,9 @@ impl Point3 {
     pub fn squared_distance_to(self, p: Self) -> f32 {
         (self - p).norm_squared()
     }
+    pub fn has_nan(self) -> bool {
+        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
+    }
 }
 
 impl Add<Vec3> for Point3 {
@@ -535,7 +538,7 @@ impl Sub for Mat3 {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Mat4 {
-    cols: [Vec4; 4],
+    pub cols: [Vec4; 4],
 }
 
 #[allow(dead_code)]

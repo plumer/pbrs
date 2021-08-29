@@ -1,10 +1,10 @@
 use std::{ops::Mul, sync::Arc};
 
-use shape::Interaction;
-use math::hcm::{Mat3, Mat4, Point3, Radian, Vec3, Vec4};
 use crate::ray::Ray;
 use crate::shape::Shape;
 use crate::{bvh::BBox, material::Material};
+use math::hcm::{Mat3, Mat4, Point3, Radian, Vec3, Vec4};
+use shape::Interaction;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RigidBodyTransform {
@@ -113,6 +113,24 @@ impl std::fmt::Display for RigidBodyTransform {
     }
 }
 
+impl std::fmt::Display for AffineTransform {
+    #[rustfmt::skip]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let m = &self.forward;
+        write!(
+            f,
+            "\n|{:5.2} {:5.2} {:5.2} {:5.2}|\
+             \n|{:5.2} {:5.2} {:5.2} {:5.2}|\
+             \n|{:5.2} {:5.2} {:5.2} {:5.2}|\
+             \n|{:5.2} {:5.2} {:5.2} {:5.2}|\n",
+            m.cols[0][0], m.cols[1][0], m.cols[2][0], m.cols[3][0],
+            m.cols[0][1], m.cols[1][1], m.cols[2][1], m.cols[3][1],
+            m.cols[0][2], m.cols[1][2], m.cols[2][2], m.cols[3][2],
+            m.cols[0][3], m.cols[1][3], m.cols[2][3], m.cols[3][3]
+        )
+    }
+}
+
 #[allow(dead_code)]
 impl AffineTransform {
     pub fn identity() -> Self {
@@ -148,6 +166,22 @@ impl AffineTransform {
             inverse: Mat4::nonuniform_scale(scale_inv),
         }
     }
+
+    /// Applies Translate(t) onto the transform, and returns Translate(t) * self.
+    pub fn translate(self, t: Vec3) -> Self {
+        Self::translater(t) * self
+    }
+
+    /// Applies rotation onto the transform, and returns Rotate(angle) * self.
+    pub fn rotate_x(self, angle: Radian) -> Self {
+        Self::rotater(Vec3::xbase(), angle) * self
+    }
+    pub fn rotate_y(self, angle: Radian) -> Self {
+        Self::rotater(Vec3::ybase(), angle) * self
+    }
+    pub fn rotate_z(self, angle: Radian) -> Self {
+        Self::rotater(Vec3::zbase(), angle) * self
+    }
 }
 
 impl Mul for AffineTransform {
@@ -161,11 +195,14 @@ impl Mul for AffineTransform {
     }
 }
 
+// use RigidBodyTransform as InstanceTransform;
+pub use AffineTransform as InstanceTransform;
+
 #[derive(Clone)]
 pub struct Instance {
     pub shape: Arc<dyn Shape>,
     pub mtl: Arc<dyn Material>,
-    pub transform: RigidBodyTransform,
+    pub transform: InstanceTransform,
 }
 
 impl std::fmt::Debug for Instance {
@@ -180,7 +217,7 @@ impl Instance {
         Instance {
             shape,
             mtl,
-            transform: RigidBodyTransform::identity(),
+            transform: InstanceTransform::identity(),
         }
     }
     pub fn from_raw<S: 'static, M: 'static>(shape: S, mtl: M) -> Self
@@ -190,7 +227,7 @@ impl Instance {
     {
         Instance::new(Arc::new(shape), Arc::new(mtl))
     }
-    pub fn with_transform(self, transform: RigidBodyTransform) -> Self {
+    pub fn with_transform(self, transform: InstanceTransform) -> Self {
         Instance {
             shape: self.shape,
             mtl: self.mtl,
@@ -204,7 +241,15 @@ impl Instance {
         let inv_ray = self.transform.inverse().apply(*ray);
         match self.shape.intersect(&inv_ray) {
             None => None,
-            Some(hit) => Some((self.transform.apply(hit), &self.mtl)),
+            Some(hit) => {
+                assert!(
+                    !hit.pos.has_nan(),
+                    "shape {} intersect ray {} has nan",
+                    self.shape.summary(),
+                    ray
+                );
+                Some((self.transform.apply(hit), &self.mtl))
+            }
         }
     }
 }
@@ -280,7 +325,7 @@ impl Transform<Point3> for AffineTransform {
     fn apply(&self, p: Point3) -> Point3 {
         let v4 = Vec4::from(p);
         let v4 = self.forward * v4;
-        assert_eq!(v4[0], 1.0);
+        assert_eq!(v4[3], 1.0, "v4 = {}, forward = {}", v4, self);
         Point3::new(v4[0], v4[1], v4[2])
     }
 }
@@ -314,6 +359,7 @@ impl Transform<BBox> for AffineTransform {
 impl Transform<Interaction> for AffineTransform {
     fn apply(&self, i: Interaction) -> Interaction {
         // Note that the transform is rigid-body, so transforming the normal is straightforward.
+        assert!(!i.pos.has_nan());
         Interaction::new(self.apply(i.pos), i.ray_t, i.uv, self.apply(i.normal))
     }
 }

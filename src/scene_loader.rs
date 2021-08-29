@@ -33,7 +33,7 @@ pub struct Scene {
 pub struct SceneLoader {
     root_dir: std::path::PathBuf,
     // ctm_stack: Vec<hcm::Mat4>,
-    ctm_stack: Vec<crate::instance::RigidBodyTransform>,
+    ctm_stack: Vec<crate::instance::InstanceTransform>,
     current_mtl: Option<Arc<dyn Material>>,
     current_arealight_luminance: Option<Color>,
     reverse_orientation_stack: Vec<bool>,
@@ -69,7 +69,7 @@ impl SceneLoader {
     fn new(root_dir: std::path::PathBuf) -> Self {
         SceneLoader {
             root_dir,
-            ctm_stack: vec![crate::instance::identity()],
+            ctm_stack: vec![AffineTransform::identity()],
             // ctm_stack: vec![hcm::Mat4::identity()],
             current_mtl: None,
             current_arealight_luminance: None,
@@ -153,7 +153,7 @@ impl SceneLoader {
             WorldItem::Transform(t) => {
                 // Parses the transform from parameters and applies that onto the current transform.
                 *self.ctm_stack.last_mut().unwrap() =
-                    *self.ctm_stack.last().unwrap() * Self::parse_rbtransform(t);
+                    *self.ctm_stack.last().unwrap() * Self::parse_transform(t);
             }
             WorldItem::Shape(shape_impl, mut args) => {
                 args.extract_string("alpha");
@@ -666,6 +666,7 @@ impl SceneLoader {
             Transform::LookAt(_, _, _) => panic!("unsupported lookat in modeling step"),
         }
     }
+    #[allow(dead_code)]
     fn parse_rbtransform(t: ast::Transform) -> crate::instance::RigidBodyTransform {
         use crate::instance::RigidBodyTransform as RBTrans;
         use ast::Transform;

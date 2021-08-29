@@ -255,7 +255,11 @@ impl Shape for TriangleMesh {
         let tree = self.bvh_root.as_ref()?;
         // self.intersect_tree(tree, r)
         intersect_bvh(&self.triangles, tree, r, |tri: &Triangle, r| {
-            self.intersect_triangle(tri, r)
+            let result = self.intersect_triangle(tri, r);
+            if let Some(hit) = result {
+                assert!(!hit.pos.has_nan());
+            }
+            result
         })
     }
     fn bbox(&self) -> BBox {

@@ -383,6 +383,8 @@ impl Shape for IsolatedTriangle {
     }
 }
 
+    #[rustfmt::skip]
+
 pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option<Interaction> {
     let normal = (p0 - p1).cross(p2 - p1);
     // TODO(zixun): remove triangles (index triplets) from plymeshes that have zero area.
@@ -401,6 +403,9 @@ pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option
     let b0 = (p - p0).cross(p - p1).dot(normal);
     let b1 = (p - p1).cross(p - p2).dot(normal);
     let b2 = (p - p2).cross(p - p0).dot(normal);
+    if b0.is_nan() || b1.is_nan() || b2.is_nan() {
+        panic!("some Nans: {}, {}, {}", b0, b1, b2);
+    }
     let (b0, b1, b2) = match (b0 > 0.0, b1 > 0.0, b2 > 0.0) {
         (true, true, true) | (false, false, false) => {
             let total_area = b0 + b1 + b2;
@@ -408,12 +413,15 @@ pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option
         }
         _ => return None,
     };
+    let hit_pos = float::barycentric_lerp((p0, p1, p2), (b1, b2, b0));
+    if hit_pos.has_nan() {
+        // println!("normal = {:.3}, p0 - r.origin = {:.3}, r.dir = {:.3}", normal, p0 - r.origin, r.dir);
+        // println!("t = {} / {} = {}. p = {}", normal.dot(p0 - r.origin), normal.dot(r.dir), t, p);
+        // println!("p-p0 x p-p1 = {:.3}", (p-p0).cross(p-p1));
+        // println!("p-p1 x p-p2 = {:.3}", (p-p1).cross(p-p2));
+        // println!("p-p2 x p-p0 = {:.3}", (p-p2).cross(p-p0));
+        return None;
+    }
     // Now an intersection is truly found.
-    Some(Interaction {
-        pos: float::barycentric_lerp((p0, p1, p2), (b1, b2, b0)),
-        normal,
-        ray_t: t,
-        // TODO
-        uv: (0.0, 0.0),
-    })
+    Some(Interaction::new(hit_pos, t, (0.0, 0.0), normal))
 }
