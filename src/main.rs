@@ -4,7 +4,6 @@ mod image;
 mod instance;
 mod light;
 mod material;
-mod math;
 mod scene;
 mod spectrum;
 mod texture;
@@ -22,6 +21,7 @@ use instance::Instance;
 use io::Write;
 use material as mtl;
 use math::hcm::{self, Point3, Vec3};
+use math::assert_le;
 use texture as tex;
 
 use crate::{

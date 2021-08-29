@@ -1,4 +1,4 @@
-use crate::math::hcm::{self,Vec3};
+use math::hcm::{self,Vec3};
 use crate::ray::Ray;
 use crate::shape::Interaction;
 use crate::texture::{self, *};

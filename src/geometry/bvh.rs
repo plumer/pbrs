@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::geometry::{ray::Ray, shape::Interaction};
-use crate::math::{
+use math::{
     float::min_max,
     hcm::{Point3, Vec3},
 };

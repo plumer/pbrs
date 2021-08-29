@@ -8,7 +8,7 @@ use crate::instance::AffineTransform;
 use crate::light;
 use crate::light::{Light, ShapeSample};
 use crate::material::{self as mtl, Material};
-use crate::math::hcm;
+use math::hcm;
 use crate::scene::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, plyloader, token,

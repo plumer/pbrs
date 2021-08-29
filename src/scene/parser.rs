@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::math::hcm::{Degree, Point3, Vec3};
+use math::hcm::{Degree, Point3, Vec3};
 use crate::scene::ast::*;
 use crate::scene::token::Token;
 

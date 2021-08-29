@@ -1,4 +1,4 @@
-use crate::math::hcm;
+use math::hcm;
 use crate::ray;
 
 /// Left-handed coordinate system camera: x rightward, y upward, z forward.

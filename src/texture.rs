@@ -1,5 +1,5 @@
 use crate::image::Color;
-use crate::math::hcm::*;
+use math::hcm::*;
 use std::fs::File;
 
 pub trait Texture: Send + Sync {

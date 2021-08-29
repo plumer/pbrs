@@ -10,7 +10,7 @@ use crate::geometry::{
     bvh::BBox,
     ray::Ray,
 };
-use crate::math::hcm::{Point3, Vec3};
+use math::hcm::{Point3, Vec3};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Interaction {

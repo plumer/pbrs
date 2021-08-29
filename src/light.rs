@@ -1,6 +1,6 @@
 use std::f32::consts;
 
-use crate::math::hcm;
+use math::hcm;
 use crate::image::Color;
 use crate::ray::Ray;
 use crate::shape::{self, Interaction, Shape};

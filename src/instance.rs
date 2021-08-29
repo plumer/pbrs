@@ -1,7 +1,7 @@
 use std::{ops::Mul, sync::Arc};
 
 use crate::geometry::shape::Interaction;
-use crate::math::hcm::{Mat3, Mat4, Point3, Radian, Vec3, Vec4};
+use math::hcm::{Mat3, Mat4, Point3, Radian, Vec3, Vec4};
 use crate::ray::Ray;
 use crate::shape::Shape;
 use crate::{bvh::BBox, material::Material};
@@ -320,7 +320,7 @@ impl Transform<Interaction> for AffineTransform {
 
 #[cfg(test)]
 mod test {
-    use crate::assert_le;
+    use math::assert_le;
 
     #[test]
     pub fn test_inverse() {
