@@ -680,15 +680,16 @@ pub use Refract::FullReflect;
 pub use Refract::Transmit;
 
 /// Refracts incident light `wi` with regard to `normal`.
-/// - `normal` is assumed to be unit-length and forms an obtuse angle with `wi`.
+/// - `normal` is assumed to be unit-length and forms an acute angle with `wi`.
 /// - `ni` and `no` are refraction indices.
-/// If `ni`/`no` < 1 (e.g., from water to air), there is a chance of full reflection.
+/// If `ni`/`no` > 1 (e.g., from water to air), there is a chance of full reflection.
 pub fn refract(normal: Vec3, wi: Vec3, ni_over_no: f32) -> Refract {
     let wi = wi.hat();
     let normal = normal.hat();
     let cos_theta_i = wi.dot(normal);
+    crate::assert_ge!(cos_theta_i, 0.0);
     let sin2_theta_i = (1.0 - cos_theta_i.powi(2)).max(0.0);
-    // sin_i * ni = sin_o * no => sino = sin_i * ni_over_no
+    // sin_i * ni = sin_o * no => sin_o = sin_i * ni_over_no
     let sin2_theta_o = sin2_theta_i * ni_over_no.powi(2);
     if sin2_theta_o >= 1.0 {
         FullReflect(reflect(normal, wi))
@@ -701,8 +702,8 @@ pub fn refract(normal: Vec3, wi: Vec3, ni_over_no: f32) -> Refract {
 
 /// Computes a unit-vector on a unit-sphere given longitude and latitude values.
 ///
-/// The computed vector is (0, 0, 1) rotated `phi` radians away from the z-axis and then rotates
-/// around the z-axis with angle `theta`. Note that sin(theta) and cos(theta) values are passed in
+/// The computed vector is (0, 0, 1) rotated `theta` radians away from the z-axis and then rotates
+/// around the z-axis with angle `phi`. Note that sin(theta) and cos(theta) values are passed in
 /// as usually the trigonometry values are more directly available rather than the angle itself.
 pub fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: Radian) -> Vec3{
     let (cos_phi, sin_phi) = phi.0.sin_cos();
@@ -733,5 +734,12 @@ mod test {
                 assert!((wo - v).norm_squared() < f32::EPSILON, "{} vs {}", v, wo)
             }
         }
+        
+        // The critical angle for a "glass"-to-air IOR of 2.0 is 30 degrees.
+        // One corresponding incident direction is (0.5, sqrt(0.75), 0.0).
+        let full_reflect_wi = Vec3::new(0.51, 0.75f32.sqrt(), 0.0).hat();
+        let transmit_wi = Vec3::new(0.49, 0.75f32.sqrt(), 0.0).hat();
+        assert!(matches!(super::refract(normal, full_reflect_wi, 2.0), super::FullReflect(_)));
+        assert!(matches!(super::refract(normal, transmit_wi, 2.0), super::Transmit(_)));
     }
 }

@@ -2,3 +2,4 @@
 pub mod bvh;
 pub mod camera;
 pub mod ray;
+pub mod bxdf;
