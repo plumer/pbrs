@@ -1,7 +1,7 @@
 use std::f32::consts;
 
 use math::hcm;
-use crate::image::Color;
+use radiometry::color::Color;
 use crate::ray::Ray;
 use crate::shape::{self, Interaction, Shape};
 

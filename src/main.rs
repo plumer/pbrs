@@ -1,10 +1,8 @@
-mod image;
 mod instance;
 mod tlas;
 mod light;
 mod material;
 mod scene_loader;
-mod spectrum;
 mod texture;
 
 use glog::Flags;
@@ -16,7 +14,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use tlas::BvhNode;
-use image::Color;
+use radiometry::color::Color;
 use instance::Instance;
 use io::Write;
 use material as mtl;
@@ -38,10 +36,8 @@ const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 type EnvLight = fn(ray::Ray) -> Color;
 type Scene = (Box<BvhNode>, camera::Camera, EnvLight);
 
-impl From<Vec3> for Color {
-    fn from(v: Vec3) -> Self {
-        Color::new(v.x, v.y, v.z)
-    }
+fn vec3_to_color(v: Vec3) -> Color {
+    Color::new(v.x, v.y, v.z)
 }
 
 fn rand_f32() -> f32 {
@@ -215,7 +211,7 @@ fn dummy_integrator(scene: &Box<BvhNode>, mut ray: ray::Ray, _: i32, env_light: 
         None => env_light(ray),
         Some((hit, mtl)) => {
             let (_, albedo) = mtl.scatter(-ray.dir, &hit);
-            (albedo + Color::from(hit.normal)) * 0.5
+            (albedo + vec3_to_color(hit.normal)) * 0.5
             // albedo
             // (Color::from(hit.normal) + Color::white()) * 0.5
         }

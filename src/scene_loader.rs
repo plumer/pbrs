@@ -6,7 +6,7 @@ use std::sync::Arc;
 use math::hcm;
 use geometry::camera::Camera;
 
-use crate::image::Color;
+use radiometry::color::Color;
 use crate::instance::AffineTransform;
 use crate::light;
 use crate::light::{Light, ShapeSample};
@@ -28,6 +28,9 @@ pub struct Scene {
 
     materials: Vec<Box<dyn Material>>,
     named_materials: HashMap<String, usize>,
+    
+    pub tlas: crate::tlas::BvhNode,
+    pub lights: Vec<Box<dyn Light>>,
 }
 
 pub struct SceneLoader {
@@ -632,7 +635,7 @@ impl SceneLoader {
             "rgb" | "color" => Color::new(nums[0], nums[1], nums[2]),
             "xyz" => Color::from_xyz(nums[0], nums[1], nums[2]),
             "spectrum" => unimplemented!("spectrum color"),
-            "blackbody" => crate::spectrum::temperature_to_color(nums[0]) * nums[1],
+            "blackbody" => radiometry::spectrum::temperature_to_color(nums[0]) * nums[1],
             _ => panic!("unrecognized spectrum type \'{}\'", spectrum_type),
         }
     }

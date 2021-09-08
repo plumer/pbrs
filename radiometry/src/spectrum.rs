@@ -1,4 +1,4 @@
-use crate::image::Color;
+use crate::color::Color;
 
 pub fn blackbody(kelvin: f32, lambdas_nm: &Vec<f32>) -> Vec<f32> {
     if kelvin < 0.0 {
@@ -451,11 +451,11 @@ const CIE_LAMBDA: [usize; NUM_CIE_SAMPLES] = [
 ];
 
 mod test {
-    
+
     #[test]
     fn test_temperature_to_color() {
         use super::Color;
-        use crate::assert_le;
+        use math::assert_le;
         let temperatures = [2700.0f32, 3500.0, 4500.0, 5000.0, 6500.0];
         let true_colors = [
             Color::new(0.533494, 0.221571, 0.052902),
@@ -464,14 +464,17 @@ mod test {
             Color::new(1.190014, 0.942058, 0.747937),
             Color::new(0.922219, 0.869496, 0.915217),
         ];
-        
-        temperatures.iter().zip(true_colors.iter()).for_each(|(kelvin, true_color)| {
-            let c = super::temperature_to_color(*kelvin);
-            const THRESHOLD: f32 = 3e-3;
-            assert_le!((c.r - true_color.r).abs(), THRESHOLD);
-            assert_le!((c.g - true_color.g).abs(), THRESHOLD);
-            assert_le!((c.b - true_color.b).abs(), THRESHOLD);
-        });
+
+        temperatures
+            .iter()
+            .zip(true_colors.iter())
+            .for_each(|(kelvin, true_color)| {
+                let c = super::temperature_to_color(*kelvin);
+                const THRESHOLD: f32 = 3e-3;
+                assert_le!((c.r - true_color.r).abs(), THRESHOLD);
+                assert_le!((c.g - true_color.g).abs(), THRESHOLD);
+                assert_le!((c.b - true_color.b).abs(), THRESHOLD);
+            });
     }
 }
 

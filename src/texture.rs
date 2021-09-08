@@ -1,4 +1,4 @@
-use crate::image::Color;
+use radiometry::color::Color;
 use math::hcm::*;
 use std::fs::File;
 
