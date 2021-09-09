@@ -1,5 +1,7 @@
 use geometry::bxdf::{self, BxDF, Fresnel};
 use math::hcm::Vec3;
+use radiometry::color::Color;
+use rand::seq::index::sample;
 
 fn f32_close(a: f32, b: f32) -> bool {
     b / a > 0.999 && b / a < 1.001
@@ -41,12 +43,10 @@ fn fresnel_test() {
 
 #[test]
 fn specular_refl_test() {
-    let glass = bxdf::SpecularReflection::new(
-        Vec3::new(1.0, 1.0, 1.0),
-        bxdf::FresnelDielectric::new(1.0, 2.0),
-    );
+    let glass =
+        bxdf::SpecularReflection::new(Color::white(), bxdf::FresnelDielectric::new(1.0, 2.0));
     let bsdf_value = glass.eval(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.2, -0.2, 0.7));
-    assert!(bsdf_value.is_zero());
+    assert!(bsdf_value.is_black());
 
     let (wi_local, pdf, bsdf_value) = glass.sample(Vec3::new(0.8, 0.0, 0.6), (0.0, 0.0));
     assert_eq!(wi_local.x, -0.8);
@@ -69,11 +69,37 @@ fn linspace(interval: (f32, f32), count: i32) -> (Vec<f32>, f32) {
 
 #[test]
 fn pdf_test() {
-    let matte = bxdf::LambertianReflection::new(Vec3::new(0.4, 0.5, 0.7));
-    assert!(f32_close(riemann_integral_pdf(matte), 1.0));
+    let albedo = Color::new(0.4, 0.5, 0.7);
+    let matte = bxdf::LambertianReflection::new(albedo);
+    assert!(f32_close(riemann_integral_pdf(&matte), 1.0));
+    let stochastic_rho = montecarlo_integrate_rho(&matte);
+    assert!(
+        color_is_close(albedo, stochastic_rho),
+        "Lambertian: albedo = {}, stochastic rho = {}",
+        albedo,
+        stochastic_rho
+    );
+
+    let oren_nayar = bxdf::OrenNayar::new(albedo, math::hcm::Degree(0.0));
+    let stochastic_rho = montecarlo_integrate_rho(&oren_nayar);
+    println!(
+        "Oren-Nayar: albedo = {}, stochastic rho = {}",
+        albedo, stochastic_rho
+    );
 }
 
-fn riemann_integral_pdf<BSDF: BxDF>(bsdf: BSDF) -> f32 {
+fn color_is_close(c0: Color, c1: Color) -> bool {
+    let v0 = Vec3::new(c0.r, c0.g, c0.b);
+    let v1 = Vec3::new(c1.r, c1.g, c1.b);
+    if v0.is_zero() || v1.is_zero() {
+        (v0 - v1).norm_squared() < 1e-6
+    } else {
+        let longer_length = v0.norm_squared().max(v1.norm_squared());
+        (v0 - v1).norm_squared() / longer_length < 1e-3
+    }
+}
+
+fn riemann_integral_pdf<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
     let mut pdf_integral = 0.0;
     const N: i32 = 100;
     let (thetas, d_theta) = linspace((0.0, std::f32::consts::FRAC_PI_2), N);
@@ -88,4 +114,23 @@ fn riemann_integral_pdf<BSDF: BxDF>(bsdf: BSDF) -> f32 {
         }
     }
     pdf_integral
+}
+
+fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    const TRIALS: i32 = 800;
+    (1.0 / TRIALS as f32)
+        * (0..TRIALS)
+            .map(|_| {
+                let u = rng.gen::<f32>();
+                let v = rng.gen::<f32>();
+                let (wi, pdf, bsdf_value) = bsdf.sample(Vec3::new(0.4, 0.5, 0.7), (u, v));
+                if let bxdf::HemiPdf::Regular(pdf) = pdf {
+                    bsdf_value * bxdf::local::cos_theta(wi).abs() / pdf
+                } else {
+                    panic!()
+                }
+            })
+            .fold(Color::black(), |c0, c1| c0 + c1)
 }

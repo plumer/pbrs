@@ -1,7 +1,6 @@
 use math::float::Float;
 use math::hcm::Vec3;
-
-type Color = Vec3;
+use radiometry::color::Color;
 
 pub enum HemiPdf {
     Regular(f32),
@@ -40,19 +39,28 @@ pub mod local {
     }
 
     pub fn cos_phi(w: Vec3) -> f32 {
-        let sin_theta = sin_theta(w);
-        if sin_theta == 0.0 {
+        let xy_hypot = w.x.hypot(w.y);
+        if xy_hypot == 0.0 {
             1.0
         } else {
-            (w.x / sin_theta).clamp(-1.0, 1.0)
+            w.x / xy_hypot
         }
     }
     pub fn sin_phi(w: Vec3) -> f32 {
-        let sin_theta = sin_theta(w);
-        if sin_theta == 0.0 {
-            1.0
+        let xy_hypot = w.x.hypot(w.y);
+        if xy_hypot == 0.0 {
+            0.0
         } else {
-            (w.y / sin_theta).clamp(-1.0, 1.0)
+            w.y / xy_hypot
+        }
+    }
+
+    pub fn sin_cos_phi(w: Vec3) -> (f32, f32) {
+        let xy_hypot = w.x.hypot(w.y);
+        if xy_hypot == 0.0 {
+            (0.0, 1.0)
+        } else {
+            (w.x / xy_hypot, w.y / xy_hypot)
         }
     }
 }
@@ -124,6 +132,18 @@ pub trait BxDF {
     fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color);
 
     fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32;
+
+    /// A default implementation of the `sample` method. Uses cosine-hemisphere distribution
+    /// to map the 2D random variable, and uses `pdf` and `eval` to compute the return values.
+    fn cosine_hemisphere_sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
+        assert!(local::cos_theta(wo_local) >= 0.0);
+        let wi_local = cos_sample_hemisphere(rnd2);
+        (
+            wi_local,
+            HemiPdf::Regular(self.pdf(wo_local, wi_local)),
+            self.eval(wo_local, wi_local),
+        )
+    }
 }
 
 // ----------------------------
@@ -217,7 +237,7 @@ impl<Fr: Fresnel> BxDF for SpecularReflection<Fr> {
         )
     }
 
-    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
+    fn pdf(&self, _wo_local: Vec3, _wi_local: Vec3) -> f32 {
         0.0
     }
 }
@@ -270,7 +290,7 @@ impl BxDF for SpecularTransmission {
         };
 
         match math::hcm::refract(normal, wo_local, eta_i / eta_t) {
-            math::hcm::FullReflect(_) => (Vec3::zero(), HemiPdf::Delta(1.0), Color::zero()),
+            math::hcm::FullReflect(_) => (Vec3::zero(), HemiPdf::Delta(1.0), Color::black()),
             math::hcm::Transmit(wi_local) => {
                 // Transmissivity = 1 - reflectivity
                 let f_tr = 1.0 - self.fresnel.refl_coeff(local::cos_theta(wi_local));
@@ -284,7 +304,7 @@ impl BxDF for SpecularTransmission {
         }
     }
 
-    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
+    fn pdf(&self, _wo_local: Vec3, _wi_local: Vec3) -> f32 {
         0.0
     }
 }
@@ -343,7 +363,7 @@ impl BxDF for FresnelSpecular {
             };
             match math::hcm::refract(normal, wo_local, eta_i / eta_t) {
                 math::hcm::FullReflect(wi_local) => {
-                    (wi_local, HemiPdf::Delta(refl_coeff), Color::zero())
+                    (wi_local, HemiPdf::Delta(refl_coeff), Color::black())
                 }
                 math::hcm::Transmit(wi_local) => {
                     // Transmissivity = 1 - reflectivity
@@ -359,7 +379,7 @@ impl BxDF for FresnelSpecular {
         }
     }
 
-    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
+    fn pdf(&self, _wo_local: Vec3, _wi_local: Vec3) -> f32 {
         0.0
     }
 }
@@ -387,17 +407,68 @@ impl BxDF for LambertianReflection {
     }
 
     fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
-        assert!(local::cos_theta(wo_local) >= 0.0);
-        let wi_local = cos_sample_hemisphere(rnd2);
-        (
-            wi_local,
-            HemiPdf::Regular(self.pdf(wo_local, wi_local)),
-            self.eval(wo_local, wi_local),
-        )
+        self.cosine_hemisphere_sample(wo_local, rnd2)
     }
 
     fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
         assert!(wo_local.z * wi_local.z >= 0.0);
-        local::cos_theta(wi_local) * Self::FRAC_1_PI
+        cos_hemisphere_pdf(wi_local)
+    }
+}
+
+// Oren-Nayar
+pub struct OrenNayar {
+    albedo: Color,
+    coeff_a: f32,
+    coeff_b: f32,
+}
+
+impl OrenNayar {
+    pub fn new(albedo: Color, sigma: math::hcm::Degree) -> Self {
+        let math::hcm::Radian(sigma_rad) = sigma.to_radian();
+        let sigma_sqr = sigma_rad.powi(2);
+        let coeff_a = 1.0 - (sigma_sqr / (2.0 * (sigma_sqr + 0.33)));
+        let coeff_b = 0.45 * sigma_sqr / (sigma_sqr + 0.09);
+        Self {
+            albedo,
+            coeff_a,
+            coeff_b,
+        }
+    }
+}
+
+impl BxDF for OrenNayar {
+    fn get_type(&self) -> BxDFType {
+        BxDFType {
+            intrusion: IntrusionType::Reflection,
+            smooth: SmoothnessType::Diffuse,
+        }
+    }
+
+    fn eval(&self, wo_local: Vec3, wi_local: Vec3) -> Color {
+        let sin_theta_i = local::sin_theta(wi_local);
+        let sin_theta_o = local::sin_theta(wo_local);
+        let (sin_phi_i, cos_phi_i) = local::sin_cos_phi(wi_local);
+        let (sin_phi_o, cos_phi_o) = local::sin_cos_phi(wo_local);
+        let delta_cos_phi = (cos_phi_i * cos_phi_o + sin_phi_i * sin_phi_o).max(0.0);
+        let abs_cos_theta_i = local::cos_theta(wi_local).abs();
+        let abs_cos_theta_o = local::cos_theta(wo_local).abs();
+        let (sin_alpha, tan_beta) = if abs_cos_theta_i > abs_cos_theta_o {
+            (sin_theta_o, sin_theta_i / abs_cos_theta_i)
+        } else {
+            (sin_theta_i, sin_theta_o / abs_cos_theta_o)
+        };
+        self.albedo
+            * std::f32::consts::FRAC_1_PI
+            * (self.coeff_a + self.coeff_b * delta_cos_phi * sin_alpha * tan_beta)
+    }
+    
+    fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
+        self.cosine_hemisphere_sample(wo_local, rnd2)
+    }
+    
+    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
+        assert!(wo_local.z * wi_local.z >= 0.0);
+        cos_hemisphere_pdf(wi_local)
     }
 }
