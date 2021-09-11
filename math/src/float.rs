@@ -10,7 +10,7 @@ pub const ONE_PLUS_EPSILON: f32 = 1.0 + f32::EPSILON;
 pub const ONE_MINUS_EPSILON: f32 = 1.0 - f32::EPSILON;
 
 /// Computes the linear interpolation between `a` and `b`: (0, 1) -> (a, b).
-/// 
+///
 /// This function also works if `a` and `b` are not "Scalable" by themselves - as long as `a-b` can
 /// be scaled by a `f32`, and the difference can be added to either `a` or `b` to get back `T` then
 /// `lerp` can be used.
@@ -28,7 +28,7 @@ where
 }
 
 /// Computes the barycentric interpolation given 3 attribute values and 3 barycentric coordinates.
-/// The attribute can be of various types. If types can be `lerp`ed, then there's a great chance 
+/// The attribute can be of various types. If types can be `lerp`ed, then there's a great chance
 /// that they can be `barycentric_lerp`ed.
 ///
 /// One more constraint on difference type (type of `T - T`): `U + U -> U`. If only this constraint
@@ -108,7 +108,7 @@ macro_rules! assert_le {
             panic!(
                 "Assertion failed: {} <= {} (values: {} vs. {})",
                 stringify!($left),
-                stringify! {$right},
+                stringify!($right),
                 $left,
                 $right
             )
@@ -153,7 +153,7 @@ macro_rules! assert_ge {
             panic!(
                 "Assertion failed: {} >= {} (values: {} vs. {})",
                 stringify!($left),
-                stringify! {$right},
+                stringify!($right),
                 $left,
                 $right
             )

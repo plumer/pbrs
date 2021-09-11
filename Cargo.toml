@@ -26,12 +26,16 @@ path = "shape"
 [dependencies.scene]
 path = "scene"
 
+[dependencies.radiometry]
+path = "radiometry"
+
 [workspace]
 members = [
     "math",
     "shape",
     "geometry",
     "scene",
+    "radiometry"
 ]
 
 [profile.release]

@@ -1,9 +1,10 @@
+use crate::Interaction;
+use crate::Shape;
 use geometry::bvh::{self, BBox};
 use geometry::ray::Ray;
-use crate::{Shape, Interaction};
+use math::hcm::{Point3, Vec3};
 use partition::partition;
 use std::ops::Range;
-use math::hcm::{Point3, Vec3};
 
 enum IsoBvhNodeContent {
     Children([Box<IsoBvhNode>; 2]),
@@ -213,7 +214,6 @@ impl std::fmt::Display for Vertex {
         )
     }
 }
-
 
 impl<T> Shape for IsoBlas<T>
 where

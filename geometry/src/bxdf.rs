@@ -1,4 +1,3 @@
-use math::float::Float;
 use math::hcm::Vec3;
 use radiometry::color::Color;
 
@@ -176,7 +175,7 @@ impl Fresnel for FresnelDielectric {
             (self.eta_t, self.eta_i, -cos_theta_i)
         };
 
-        let sin_theta_i = 1.0.cathetus(cos_theta_i); // (1.0 - cos_theta_i.powi(2)).max(0.0).sqrt();
+        let sin_theta_i = (1.0 - cos_theta_i.powi(2)).max(0.0).sqrt();
         let sin_theta_t = eta_i / eta_t * sin_theta_i;
         let ratio = if sin_theta_t >= 1.0 {
             1.0

@@ -4,9 +4,9 @@ use std::fmt::{Debug,Formatter,Result};
 use geometry::bvh::{self,BBox};
 use geometry::ray::Ray;
 use shape::Interaction;
-
 use crate::instance::Instance;
 use crate::material::Material;
+
 
 #[derive(Debug)]
 enum BvhNodeContent {
