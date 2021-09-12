@@ -1,7 +1,6 @@
 use geometry::bxdf::{self, BxDF, Fresnel};
 use math::hcm::Vec3;
 use radiometry::color::Color;
-use rand::seq::index::sample;
 
 fn f32_close(a: f32, b: f32) -> bool {
     b / a > 0.999 && b / a < 1.001
@@ -11,8 +10,8 @@ fn f32_close(a: f32, b: f32) -> bool {
 fn local_trigonometry_test() {
     let local_w = math::hcm::Vec3::new(0.64, 0.48, 0.6);
     assert_eq!(bxdf::local::cos_theta(local_w), 0.6);
-    assert_eq!(bxdf::local::cos_theta_sqr(local_w), 0.36);
-    assert_eq!(bxdf::local::sin_theta_sqr(local_w), 0.64);
+    assert_eq!(bxdf::local::cos2_theta(local_w), 0.36);
+    assert_eq!(bxdf::local::sin2_theta(local_w), 0.64);
     assert_eq!(bxdf::local::sin_theta(local_w), 0.8);
     assert!(f32_close(bxdf::local::cos_phi(local_w), 0.8));
     assert!(f32_close(bxdf::local::sin_phi(local_w), 0.6));

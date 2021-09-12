@@ -27,14 +27,18 @@ pub mod local {
     pub fn cos_theta(w: Vec3) -> f32 {
         w.z
     }
-    pub fn cos_theta_sqr(w: Vec3) -> f32 {
+    pub fn cos2_theta(w: Vec3) -> f32 {
         w.z.powi(2)
     }
     pub fn sin_theta(w: Vec3) -> f32 {
-        sin_theta_sqr(w).max(0.0).sqrt()
+        sin2_theta(w).max(0.0).sqrt()
     }
-    pub fn sin_theta_sqr(w: Vec3) -> f32 {
-        1.0 - cos_theta_sqr(w)
+    pub fn sin2_theta(w: Vec3) -> f32 {
+        1.0 - cos2_theta(w)
+    }
+    
+    pub fn tan2_theta(w: Vec3) -> f32 {
+        sin2_theta(w) / cos2_theta(w)
     }
 
     pub fn cos_phi(w: Vec3) -> f32 {
@@ -51,6 +55,22 @@ pub mod local {
             0.0
         } else {
             w.y / xy_hypot
+        }
+    }
+    pub fn cos2_phi(w: Vec3) -> f32 {
+        let xy_length2 = w.x * w.x + w.y + w.y;
+        if xy_length2 == 0.0 {
+            1.0
+        } else {
+            w.x * w.x / xy_length2
+        }
+    }
+    pub fn sin2_phi(w: Vec3) -> f32 {
+        let xy_length2 = w.x * w.x + w.y + w.y;
+        if xy_length2 == 0.0 {
+            0.0
+        } else {
+            w.y * w.y / xy_length2
         }
     }
 
