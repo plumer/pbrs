@@ -17,6 +17,8 @@ pub enum IntrusionType {
     Transmission,
     ReflectTransmit,
 }
+
+#[allow(dead_code)]
 pub struct BxDFType {
     intrusion: IntrusionType,
     smooth: SmoothnessType,
@@ -36,7 +38,6 @@ pub mod local {
     pub fn sin2_theta(w: Vec3) -> f32 {
         1.0 - cos2_theta(w)
     }
-    
     pub fn tan2_theta(w: Vec3) -> f32 {
         sin2_theta(w) / cos2_theta(w)
     }
@@ -58,7 +59,7 @@ pub mod local {
         }
     }
     pub fn cos2_phi(w: Vec3) -> f32 {
-        let xy_length2 = w.x * w.x + w.y + w.y;
+        let xy_length2 = w.x * w.x + w.y * w.y;
         if xy_length2 == 0.0 {
             1.0
         } else {
@@ -66,7 +67,7 @@ pub mod local {
         }
     }
     pub fn sin2_phi(w: Vec3) -> f32 {
-        let xy_length2 = w.x * w.x + w.y + w.y;
+        let xy_length2 = w.x * w.x + w.y * w.y;
         if xy_length2 == 0.0 {
             0.0
         } else {
@@ -114,13 +115,13 @@ pub fn cos_hemisphere_pdf(w_local: Vec3) -> f32 {
 /// should convert the outgoing/incident directions to local coordinates.
 ///
 /// BSDF plays a key role in the rendering integration:
-/// ```
+/// ```ignore
 ///             /
 /// L_o - L_e = | L(wi) * f(wo, wi) * abscos(wi) d(wi)
 ///            / Sphere
 /// ```
 /// By Monte-Carlo integration, the integral is estimated as the expectation of the following:
-/// ```
+/// ```ignore
 /// L_o - L_e = L(wi) * f(wo, wi) * abscos(wi) / pdf(wi)
 /// ```
 /// where `wi` is a randomly generated unit-length 3D vector, denoting the incident direction.
@@ -166,51 +167,51 @@ pub trait BxDF {
 }
 
 // ----------------------------
-
-pub trait Fresnel {
-    /// Computes the ratio of refracted energy.
-    fn refl_coeff(&self, cos_theta_i: f32) -> f32;
+#[derive(Debug, Clone, Copy)]
+#[rustfmt::skip]
+pub enum Fresnel {
+    Nop,
+    /// Fresnel reflectivity ratio computation for dielectric materials (e.g., glass).
+    Dielectric { eta_i: f32, eta_t: f32 },
+    // TODO(zixun): Conductor(f32, f32)
 }
 
-/// Fresnel reflectivity ratio computation for dielectric materials (e.g., glass).
-pub struct FresnelDielectric {
-    eta_i: f32,
-    eta_t: f32,
-}
-
-impl FresnelDielectric {
-    pub fn new(eta_i: f32, eta_t: f32) -> Self {
-        Self { eta_i, eta_t }
+impl Fresnel {
+    pub fn dielectric(eta_i: f32, eta_t: f32) -> Self {
+        Self::Dielectric { eta_i, eta_t }
     }
-}
 
-impl Fresnel for FresnelDielectric {
-    /// Computes ratio of reflected radiance from the surface scattering.
-    /// If `cos_theta_i` is negative, then the refractive index will be inverted before calculation.
-    fn refl_coeff(&self, cos_theta_i: f32) -> f32 {
-        let cos_theta_i = cos_theta_i.clamp(-1.0, 1.0);
-        let (eta_i, eta_t, cos_theta_i) = if cos_theta_i > 0.0 {
-            (self.eta_i, self.eta_t, cos_theta_i)
-        } else {
-            (self.eta_t, self.eta_i, -cos_theta_i)
-        };
+    /// Computes the ratio of refracted energy.
+    pub fn refl_coeff(&self, cos_theta_i: f32) -> f32 {
+        match self {
+            Self::Nop => 1.0,
+            Self::Dielectric { eta_i, eta_t } => {
+                let cos_theta_i = cos_theta_i.clamp(-1.0, 1.0);
+                let (eta_i, eta_t, cos_theta_i) = if cos_theta_i > 0.0 {
+                    (eta_i, eta_t, cos_theta_i)
+                } else {
+                    (eta_t, eta_i, -cos_theta_i)
+                };
 
-        let sin_theta_i = (1.0 - cos_theta_i.powi(2)).max(0.0).sqrt();
-        let sin_theta_t = eta_i / eta_t * sin_theta_i;
-        let ratio = if sin_theta_t >= 1.0 {
-            1.0
-        } else {
-            let cos_theta_t = (1.0 - sin_theta_t.powi(2)).max(0.0).sqrt();
-            // perp  /n_i cos_i - n_t cos_t\ 2  parl  /n_i cos_t - n_t cos_i\ 2
-            // R_s = |---------------------|    R_p = |---------------------|
-            //       \n_i cos_i + n_t cos_t/          \n_i cos_t + n_t cos_i/
-            let r_perpendicular = (eta_i * cos_theta_i - eta_t * cos_theta_t)
-                / (eta_i * cos_theta_i + eta_t * cos_theta_t);
-            let r_parallel = (eta_t * cos_theta_i - eta_i * cos_theta_t)
-                / (eta_t * cos_theta_i + eta_i * cos_theta_t);
-            (r_parallel.powi(2) + r_perpendicular.powi(2)) * 0.5
-        };
-        ratio
+                let sin_theta_i = (1.0 - cos_theta_i.powi(2)).max(0.0).sqrt();
+                let sin_theta_t = eta_i / eta_t * sin_theta_i;
+                let ratio = if sin_theta_t >= 1.0 {
+                    1.0
+                } else {
+                    let cos_theta_t = (1.0 - sin_theta_t.powi(2)).max(0.0).sqrt();
+                    //       perpendicular           2        parallel                2
+                    //       /n_i cos_i - n_t cos_t\          /n_i cos_t - n_t cos_i\
+                    // R_s = |---------------------|    R_p = |---------------------|
+                    //       \n_i cos_i + n_t cos_t/          \n_i cos_t + n_t cos_i/
+                    let r_perpendicular = (eta_i * cos_theta_i - eta_t * cos_theta_t)
+                        / (eta_i * cos_theta_i + eta_t * cos_theta_t);
+                    let r_parallel = (eta_t * cos_theta_i - eta_i * cos_theta_t)
+                        / (eta_t * cos_theta_i + eta_i * cos_theta_t);
+                    (r_parallel.powi(2) + r_perpendicular.powi(2)) * 0.5
+                };
+                ratio
+            }
+        }
     }
 }
 
@@ -223,18 +224,21 @@ impl Fresnel for FresnelDielectric {
 /// [`sample()`] returns perfect reflected direction across
 /// the normal (z-axis in the local coordinate), and uses the underlying Fresnel model to determine
 /// reflectivity modulation on the BSDF value.
-pub struct SpecularReflection<Fr: Fresnel> {
+pub struct SpecularReflection {
     albedo: Color,
-    fresnel: Fr,
+    fresnel: Fresnel,
 }
 
-impl<Fr: Fresnel> SpecularReflection<Fr> {
-    pub fn new(albedo: Color, fresnel: Fr) -> Self {
-        Self { albedo, fresnel }
+impl SpecularReflection {
+    pub fn dielectric(albedo: Color, eta_i: f32, eta_t: f32) -> Self {
+        Self {
+            albedo,
+            fresnel: Fresnel::Dielectric { eta_i, eta_t },
+        }
     }
 }
 
-impl<Fr: Fresnel> BxDF for SpecularReflection<Fr> {
+impl BxDF for SpecularReflection {
     fn get_type(&self) -> BxDFType {
         BxDFType {
             intrusion: IntrusionType::Reflection,
@@ -273,7 +277,7 @@ pub struct SpecularTransmission {
     albedo: Color,
     eta_outer: f32,
     eta_inner: f32,
-    fresnel: FresnelDielectric,
+    fresnel: Fresnel,
 }
 
 impl SpecularTransmission {
@@ -282,7 +286,7 @@ impl SpecularTransmission {
     pub fn new(albedo: Color, eta_outer: f32, eta_inner: f32) -> Self {
         Self {
             albedo, eta_outer, eta_inner,
-            fresnel: FresnelDielectric::new(eta_outer, eta_inner),
+            fresnel: Fresnel::dielectric(eta_outer, eta_inner),
         }
     }
 }
@@ -340,6 +344,7 @@ pub struct FresnelSpecular {
 
 impl FresnelSpecular {
     #[rustfmt::skip]
+    #[allow(dead_code)]
     /// Makes a new specular dielectric BSDF.
     /// - `reflect_albedo` and `transmit_albedo` is often the same.
     /// - `eta_a` is the IOR of the medium on the positive side of the normal vector, and `eta_b`
@@ -363,7 +368,7 @@ impl BxDF for FresnelSpecular {
 
     fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
         let refl_coeff =
-            FresnelDielectric::new(self.eta_a, self.eta_b).refl_coeff(local::cos_theta(wo_local));
+            Fresnel::dielectric(self.eta_a, self.eta_b).refl_coeff(local::cos_theta(wo_local));
         let (u, _v) = rnd2;
         if u < refl_coeff {
             // Samples a reflective direction.
@@ -481,11 +486,11 @@ impl BxDF for OrenNayar {
             * std::f32::consts::FRAC_1_PI
             * (self.coeff_a + self.coeff_b * delta_cos_phi * sin_alpha * tan_beta)
     }
-    
+
     fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
         self.cosine_hemisphere_sample(wo_local, rnd2)
     }
-    
+
     fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
         assert!(wo_local.z * wi_local.z >= 0.0);
         cos_hemisphere_pdf(wi_local)

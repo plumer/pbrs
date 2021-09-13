@@ -50,8 +50,26 @@ where
 
 /// Returns the length of other leg of the triangle given the hypotenuse and a known one.
 #[allow(dead_code)]
-pub fn cathetus(hypot: f32, other: f32) -> f32 {
-    (hypot.powi(2) - other.powi(2)).max(0.0).sqrt()
+
+pub trait Float {
+    fn cathetus(self, other: Self) -> Self;
+}
+
+impl Float for f32 {
+    fn cathetus(self, other: f32) -> f32 {
+        (self.powi(2) - other.powi(2)).max(0.0).sqrt()
+    }
+}
+
+pub fn linspace(interval: (f32, f32), count: i32) -> (Vec<f32>, f32) {
+    let (a, b) = interval;
+    (
+        (0..count)
+            .into_iter()
+            .map(|i| (i as f32 + 0.5) / count as f32 * (b - a) + a)
+            .collect::<Vec<_>>(),
+        (b - a) / count as f32,
+    )
 }
 
 /// Represents intervals on the real-number axis. Any `Interval`s covers at least 1 point.

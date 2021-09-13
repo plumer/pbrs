@@ -1,5 +1,6 @@
-use geometry::bxdf::{self, BxDF, Fresnel};
+use geometry::bxdf::{self, BxDF};
 use math::hcm::Vec3;
+use math::float::linspace;
 use radiometry::color::Color;
 
 fn f32_close(a: f32, b: f32) -> bool {
@@ -19,8 +20,8 @@ fn local_trigonometry_test() {
 
 #[test]
 fn fresnel_test() {
-    let glass = bxdf::FresnelDielectric::new(1.0, 2.0);
-    let invert_glass = bxdf::FresnelDielectric::new(2.0, 1.0);
+    let glass = bxdf::Fresnel::dielectric(1.0, 2.0);
+    let invert_glass = bxdf::Fresnel::dielectric(2.0, 1.0);
 
     let cos_thetas = [0.3f32, 0.9];
     let expected_forward_values = [0.26872247f32, 0.112083375];
@@ -42,8 +43,7 @@ fn fresnel_test() {
 
 #[test]
 fn specular_refl_test() {
-    let glass =
-        bxdf::SpecularReflection::new(Color::white(), bxdf::FresnelDielectric::new(1.0, 2.0));
+    let glass = bxdf::SpecularReflection::dielectric(Color::white(), 1.0, 2.0);
     let bsdf_value = glass.eval(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.2, -0.2, 0.7));
     assert!(bsdf_value.is_black());
 
@@ -53,17 +53,6 @@ fn specular_refl_test() {
     assert_eq!(wi_local.z, 0.6);
     assert!(matches!(pdf, bxdf::HemiPdf::Delta(_)));
     println!("bsdf value = {}", bsdf_value);
-}
-
-fn linspace(interval: (f32, f32), count: i32) -> (Vec<f32>, f32) {
-    let (a, b) = interval;
-    (
-        (0..count)
-            .into_iter()
-            .map(|i| (i as f32 + 0.5) / count as f32 * (b - a) + a)
-            .collect::<Vec<_>>(),
-        (b - a) / count as f32,
-    )
 }
 
 #[test]
