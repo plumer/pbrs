@@ -1,6 +1,11 @@
 use crate::bxdf::local;
 use math::hcm::Vec3;
 
+/// Microfacet distribution functions. Can be modelled by either Beckmann-Spizzichino or Trowbridge-
+/// Reitz functions.
+///
+/// Models the micro-structure of many rough surfaces (including metas, plastic, frosted glass),
+/// by providing the distribution of microfacet normals as a continuous hemisphere distribution.
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 pub enum MicrofacetDistrib {
@@ -46,7 +51,10 @@ impl MicrofacetDistrib {
             }
         }
     }
-
+    
+    /// Measures invisible masked microfacet area, per visibile microfacet area, or in math:
+    ///
+    /// A-(w) / (A+(w) - A-(w))
     fn lambda(&self, w_local: Vec3) -> f32 {
         let abs_tan_theta = local::tan2_theta(w_local).sqrt().abs();
         if abs_tan_theta.is_infinite() {
@@ -74,10 +82,22 @@ impl MicrofacetDistrib {
         }
     }
 
-    fn g1(&self, w_local: Vec3) -> f32 {
+    /// Masking-shadowing function, giving the fraction of microfacets that is visible from angle
+    /// `w_local`. Usually this is a function of the normal of the microfacet as well, but we assume
+    /// the indenpendence here. This implies the following property:
+    /// ```ignore
+    /// integrate(g1(w) * max(0.0, dot(w, wh)) * diffarea(wh) d(wh) in hemisphere) = cos_theta(w)
+    /// ```
+    /// In math it is closely related to lambda:
+    ///
+    /// [A+(w) - A-(w)] / A+(w)
+    pub fn g1(&self, w_local: Vec3) -> f32 {
         (1.0 + self.lambda(w_local)).recip()
     }
 
+    /// Measures the fraction microfacets visible from both `wo` and `wi` angles.
+    /// Usually the assumption that G(wo, wi) = G1(wo) * G1(wi) does not hold. A more accurate
+    /// method is (1.0 + Lambda(wo) + Lambda(wi)) ^ {-1}
     fn g(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
         (1.0 + self.lambda(wo_local) + self.lambda(wi_local)).recip()
     }
