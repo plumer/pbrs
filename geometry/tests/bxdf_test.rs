@@ -1,6 +1,7 @@
-use geometry::bxdf::{self, BxDF};
-use math::hcm::Vec3;
+use geometry::bxdf::{self, BxDF, MicrofacetReflection};
+use geometry::microfacet::MicrofacetDistrib;
 use math::float::linspace;
+use math::hcm::Vec3;
 use radiometry::color::Color;
 
 fn f32_close(a: f32, b: f32) -> bool {
@@ -16,6 +17,8 @@ fn local_trigonometry_test() {
     assert_eq!(bxdf::local::sin_theta(local_w), 0.8);
     assert!(f32_close(bxdf::local::cos_phi(local_w), 0.8));
     assert!(f32_close(bxdf::local::sin_phi(local_w), 0.6));
+    assert!(f32_close(bxdf::local::cos2_phi(local_w), 0.64));
+    assert!(f32_close(bxdf::local::sin2_phi(local_w), 0.36));
 }
 
 #[test]
@@ -56,25 +59,23 @@ fn specular_refl_test() {
 }
 
 #[test]
-fn pdf_test() {
-    let albedo = Color::new(0.4, 0.5, 0.7);
+fn diffuse_refl_test() {
+    let albedo = Color::new(1.0, 2.0, 5.0);
     let matte = bxdf::LambertianReflection::new(albedo);
-    assert!(f32_close(riemann_integral_pdf(&matte), 1.0));
-    let stochastic_rho = montecarlo_integrate_rho(&matte);
-    assert!(
-        color_is_close(albedo, stochastic_rho),
-        "Lambertian: albedo = {}, stochastic rho = {}",
+    let oren_nayar = bxdf::OrenNayar::new(albedo, math::hcm::Degree(0.0));
+    let mf_refl = bxdf::MicrofacetReflection::new(
         albedo,
-        stochastic_rho
+        MicrofacetDistrib::beckmann(0.2, 0.2),
+        bxdf::Fresnel::dielectric(1.0, 1.2),
     );
 
-    let oren_nayar = bxdf::OrenNayar::new(albedo, math::hcm::Degree(0.0));
-    let stochastic_rho = montecarlo_integrate_rho(&oren_nayar);
-    println!(
-        "Oren-Nayar: albedo = {}, stochastic rho = {}",
-        albedo, stochastic_rho
-    );
+    test_one_diffuse_brdf(&matte, albedo);
+    test_one_diffuse_brdf(&oren_nayar, albedo);
+    // test_one_diffuse_brdf(&mf_refl, albedo);
 }
+
+// Utility functions.
+// ----------------------------------------------------------------------------
 
 fn color_is_close(c0: Color, c1: Color) -> bool {
     let v0 = Vec3::new(c0.r, c0.g, c0.b);
@@ -85,6 +86,23 @@ fn color_is_close(c0: Color, c1: Color) -> bool {
         let longer_length = v0.norm_squared().max(v1.norm_squared());
         (v0 - v1).norm_squared() / longer_length < 1e-3
     }
+}
+
+fn test_one_diffuse_brdf<BRDF: BxDF>(brdf: &BRDF, albedo: Color) {
+    let pdf_hemisphere_integral = riemann_integral_pdf(brdf);
+    assert!(
+        (pdf_hemisphere_integral - 1.0) < 1e-3,
+        "Hemisphere pdf doesn't integrate to 1.0 ({} instead)",
+        pdf_hemisphere_integral
+    );
+
+    let mc_rho = montecarlo_integrate_rho(brdf);
+    assert!(
+        color_is_close(albedo, mc_rho),
+        "Monte-carlo integrated rho doesn't euqal to albedo: {} vs {}",
+        albedo,
+        mc_rho
+    );
 }
 
 fn riemann_integral_pdf<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
@@ -113,12 +131,45 @@ fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {
             .map(|_| {
                 let u = rng.gen::<f32>();
                 let v = rng.gen::<f32>();
-                let (wi, pdf, bsdf_value) = bsdf.sample(Vec3::new(0.4, 0.5, 0.7), (u, v));
+                let wo_local = Vec3::new(0.2, -0.1, 0.9).hat();
+                let (wi, pdf, bsdf_value) = bsdf.sample(wo_local, (u, v));
+                assert!(!wi.has_nan());
                 if let bxdf::HemiPdf::Regular(pdf) = pdf {
-                    bsdf_value * bxdf::local::cos_theta(wi).abs() / pdf
+                    // println!("pdf = {}", pdf);
+                    if pdf == 0.0 {
+                        Color::black()
+                    } else {
+                        bsdf_value * bxdf::local::cos_theta(wi).abs() / pdf
+                    }
                 } else {
                     panic!()
                 }
             })
             .fold(Color::black(), |c0, c1| c0 + c1)
+}
+
+#[test]
+fn play_with_mf_brdf() {
+    let albedo = Color::new(3.0, 3.4, 2.9);
+    let mf = MicrofacetDistrib::beckmann(0.2, 0.3);
+    let brdf = MicrofacetReflection::new(albedo, mf, bxdf::Fresnel::Nop);
+
+    let wo_local = Vec3::new(0.6, 0.8, 0.1).hat();
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for _ in 0..10 {
+        let u = rng.gen::<f32>();
+        let v = rng.gen::<f32>();
+        let wh_from_mf = mf.sample_wh(wo_local, (u, v));
+        let (wi_from_brdf, pdf, fval) = brdf.sample(wo_local, (u, v));
+
+        let wh_from_bisector = (wo_local + wi_from_brdf).hat();
+        let dist_squared = (wh_from_bisector - wh_from_mf).norm_squared();
+        assert!(dist_squared < 1e-3,
+            "dist_squared = {},from mf_distrib: {:.4}; from bisector: {:.4}",
+            dist_squared,
+            wh_from_mf,
+            wh_from_bisector
+        );
+    }
 }

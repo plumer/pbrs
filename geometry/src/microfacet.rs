@@ -51,7 +51,7 @@ impl MicrofacetDistrib {
             }
         }
     }
-    
+
     /// Measures invisible masked microfacet area, per visibile microfacet area, or in math:
     ///
     /// A-(w) / (A+(w) - A-(w))
@@ -98,11 +98,11 @@ impl MicrofacetDistrib {
     /// Measures the fraction microfacets visible from both `wo` and `wi` angles.
     /// Usually the assumption that G(wo, wi) = G1(wo) * G1(wi) does not hold. A more accurate
     /// method is (1.0 + Lambda(wo) + Lambda(wi)) ^ {-1}
-    fn g(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
+    pub fn g(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
         (1.0 + self.lambda(wo_local) + self.lambda(wi_local)).recip()
     }
 
-    fn pdf(&self, wo_local: Vec3, wh_local: Vec3) -> f32 {
+    pub fn pdf(&self, wo_local: Vec3, wh_local: Vec3) -> f32 {
         #[cfg(sample_visible_area)]
         {
             self.d(wh_local) * self.g1(wo_local) * wo_local.dot(wh_local).abs()
@@ -111,6 +111,43 @@ impl MicrofacetDistrib {
         #[cfg(not(sample_visible_area))]
         {
             self.d(wh_local) * local::cos_theta(wo_local).abs()
+        }
+    }
+
+    #[cfg(not(sample_visible_area))]
+    pub fn sample_wh(&self, wo_local: Vec3, rnd2: (f32, f32)) -> Vec3 {
+        use std::f32::consts::{FRAC_PI_2, PI};
+
+        let (u, v) = rnd2;
+        match self {
+            Self::Beckmann { alpha_x, alpha_y } => {
+                let (tan2_theta, phi) = if alpha_x == alpha_y {
+                    let log_sample = (1.0 - u).ln();
+                    assert!(log_sample.is_finite());
+                    // if log_sample.is_infinite() {
+                    //     log_sample = 0.0;
+                    // }
+                    (-alpha_x.powi(2) * log_sample, v * 2.0 * PI)
+                } else {
+                    let log_sample = (1.0 - u).ln();
+                    assert!(log_sample.is_finite());
+                    let mut phi = (alpha_y / alpha_x * (2.0 * PI * v + FRAC_PI_2).tan()).atan();
+                    if v >= 0.5 {
+                        phi += PI;
+                    }
+                    let (sin_phi, cos_phi) = phi.sin_cos();
+                    let alpha2 = (cos_phi / alpha_x).powi(2) + (sin_phi / alpha_y).powi(2);
+                    (-log_sample / alpha2, phi)
+                };
+                let cos_theta = (1.0 + tan2_theta).sqrt().recip();
+                let sin_theta = cos_theta * tan2_theta.sqrt();
+                let wh =
+                    math::hcm::spherical_direction(sin_theta, cos_theta, math::hcm::Radian(phi));
+                (wo_local.z * wh.z).signum() * wh
+            }
+            Self::TrowbridgeReitz { alpha_x, alpha_y } => {
+                todo!("{} / {}", alpha_x, alpha_y)
+            }
         }
     }
 }

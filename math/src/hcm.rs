@@ -140,6 +140,10 @@ impl Vec3 {
             res
         }
     }
+    
+    pub fn has_nan(self) -> bool {
+        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
+    }
 }
 
 impl Add for Vec3 {

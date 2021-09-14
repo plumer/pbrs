@@ -1,3 +1,4 @@
+use crate::microfacet as mf;
 use math::hcm::Vec3;
 use radiometry::color::Color;
 
@@ -82,6 +83,10 @@ pub mod local {
         } else {
             (w.x / xy_hypot, w.y / xy_hypot)
         }
+    }
+
+    pub fn same_hemisphere(w0: Vec3, w1: Vec3) -> bool {
+        w0.z * w1.z >= 0.0
     }
 }
 
@@ -494,5 +499,83 @@ impl BxDF for OrenNayar {
     fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
         assert!(wo_local.z * wi_local.z >= 0.0);
         cos_hemisphere_pdf(wi_local)
+    }
+}
+
+/// Implements a general microfacet-based BRDF using Torrance-Sparrow model.
+pub struct MicrofacetReflection {
+    albedo: Color,
+    distrib: mf::MicrofacetDistrib,
+    fresnel: Fresnel,
+}
+
+impl MicrofacetReflection {
+    pub fn new(albedo: Color, distrib: mf::MicrofacetDistrib, fresnel: Fresnel) -> Self {
+        Self {
+            albedo,
+            distrib,
+            fresnel,
+        }
+    }
+}
+
+impl BxDF for MicrofacetReflection {
+    fn get_type(&self) -> BxDFType {
+        BxDFType {
+            intrusion: IntrusionType::Reflection,
+            smooth: SmoothnessType::Glossy,
+        }
+    }
+
+    fn eval(&self, wo_local: Vec3, wi_local: Vec3) -> Color {
+        let cos_theta_o = local::cos_theta(wo_local).abs();
+        let cos_theta_i = local::cos_theta(wi_local).abs();
+        let wh_local = wo_local + wi_local;
+        if cos_theta_o == 0.0 || cos_theta_i == 0.0 || wh_local.is_zero() {
+            return Color::black();
+        }
+        let wh_local = wh_local.hat();
+        let wh_local = wh_local * wh_local.z.signum();
+        let refl_coeff = self.fresnel.refl_coeff(wi_local.dot(wh_local));
+        println!("fresnel cos_theta = {}, refl coeff = {}", wi_local.dot(wh_local), refl_coeff);
+        self.albedo * self.distrib.d(wh_local) * self.distrib.g(wo_local, wi_local) //* refl_coeff
+            // / (4.0 * cos_theta_o * cos_theta_i)
+    }
+
+    fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
+        // Samples microfacet normal wh and reflected direction wi.
+        let wh_local = self.distrib.sample_wh(wo_local, rnd2);
+        let wi_local = math::hcm::reflect(wh_local, wo_local);
+        {
+            let bisector = (wi_local + wo_local).hat();
+            println!("similarity: {}", bisector.dot(wh_local));
+        }
+        if !local::same_hemisphere(wo_local, wi_local) {
+            return (Vec3::zero(), HemiPdf::Regular(0.0), Color::black());
+        }
+        // Computes pdf of wi_local for microfacet reflection.
+        // The pdf of wi_local is converted from that of wh_local and the following identities (that
+        // only holds in the reflection coordinate using wo_local as the normal):
+        //  - dw = sin(theta_w) * d theta * d phi
+        //  - theta_h * 2 = theta_i
+        let pdf = self.distrib.pdf(wo_local, wh_local) / (4.0 * wo_local.dot(wh_local));
+        (
+            wi_local,
+            HemiPdf::Regular(pdf),
+            self.eval(wo_local, wi_local),
+        )
+    }
+
+    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
+        if !local::same_hemisphere(wo_local, wi_local) {
+            println!("not same hemisphere");
+            return 0.0;
+        }
+        let wh_local = wo_local + wi_local;
+        if wh_local.is_zero() {
+            println!("degenerate");
+            return 0.0;
+        }
+        self.distrib.pdf(wo_local, wh_local.hat()) / (4.0 * wo_local.dot(wh_local))
     }
 }

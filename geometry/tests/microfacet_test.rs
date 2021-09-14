@@ -1,6 +1,8 @@
 use geometry::{bxdf::local, microfacet as mf};
 use math::{float::linspace, hcm::Vec3};
 
+/// Tests if the differential area distribution function `d()` integrates to 1 over the hemisphere.
+
 #[test]
 fn diff_area_validate() {
     let beck_mf = mf::MicrofacetDistrib::beckmann(0.2, 0.2);
@@ -16,6 +18,7 @@ fn diff_area_validate() {
     }
 }
 
+/// Integrates the differential area distribution function - `d()` - over the hemisphere.
 fn integrate_differental_area(mf_distrib: mf::MicrofacetDistrib) -> f32 {
     const N: i32 = 100;
     let mut integral_area = 0.0;
@@ -48,4 +51,29 @@ fn integrate_masking(mf_distrib: mf::MicrofacetDistrib, w_local: Vec3) -> f32 {
         }
     }
     integral_masked_area
+}
+
+#[test]
+fn observe_normals() {
+    let mf = mf::MicrofacetDistrib::beckmann(0.9, 0.9);
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    let mut phis = vec![];
+    let mut thetas = vec![];
+    let mut whs = vec![];
+    for _ in 0..100 {
+        let u = rng.gen::<f32>();
+        let v = rng.gen::<f32>();
+        let wh = mf.sample_wh(Vec3::new(0.8, 0.6, 0.1).hat(), (u, v));
+        let phi = f32::atan2(wh.y, wh.x);
+        let cos_theta = local::cos_theta(wh);
+        phis.push(phi);
+        thetas.push(cos_theta.acos());
+        whs.push(wh);
+    }
+
+    println!("x = {:?};", whs.iter().map(|vec| vec.x).collect::<Vec<_>>());
+    println!("y = {:?};", whs.iter().map(|vec| vec.y).collect::<Vec<_>>());
+    println!("z = {:?};", whs.iter().map(|vec| vec.z).collect::<Vec<_>>());
 }
