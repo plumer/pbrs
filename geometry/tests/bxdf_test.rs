@@ -63,14 +63,14 @@ fn diffuse_refl_test() {
     let albedo = Color::new(1.0, 2.0, 5.0);
     let matte = bxdf::LambertianReflection::new(albedo);
     let oren_nayar = bxdf::OrenNayar::new(albedo, math::hcm::Degree(0.0));
-    let mf_refl = bxdf::MicrofacetReflection::new(
-        albedo,
-        MicrofacetDistrib::beckmann(0.2, 0.2),
-        bxdf::Fresnel::dielectric(1.0, 1.2),
-    );
-
     test_one_diffuse_brdf(&matte, albedo);
     test_one_diffuse_brdf(&oren_nayar, albedo);
+    
+    // let mf_refl = bxdf::MicrofacetReflection::new(
+    //     albedo,
+    //     MicrofacetDistrib::beckmann(0.2, 0.2),
+    //     bxdf::Fresnel::dielectric(1.0, 1.2),
+    // );
     // test_one_diffuse_brdf(&mf_refl, albedo);
 }
 
@@ -91,7 +91,7 @@ fn color_is_close(c0: Color, c1: Color) -> bool {
 fn test_one_diffuse_brdf<BRDF: BxDF>(brdf: &BRDF, albedo: Color) {
     let pdf_hemisphere_integral = riemann_integral_pdf(brdf);
     assert!(
-        (pdf_hemisphere_integral - 1.0) < 1e-3,
+        (pdf_hemisphere_integral - 1.0).abs() < 1e-3,
         "Hemisphere pdf doesn't integrate to 1.0 ({} instead)",
         pdf_hemisphere_integral
     );
@@ -154,22 +154,26 @@ fn play_with_mf_brdf() {
     let mf = MicrofacetDistrib::beckmann(0.2, 0.3);
     let brdf = MicrofacetReflection::new(albedo, mf, bxdf::Fresnel::Nop);
 
-    let wo_local = Vec3::new(0.6, 0.8, 0.1).hat();
+    let wo_local = Vec3::new(0.6, 0.8, 0.3).hat();
+    assert!((wo_local.norm_squared() - 1.0).abs() < 1e-3);
     use rand::Rng;
     let mut rng = rand::thread_rng();
     for _ in 0..10 {
         let u = rng.gen::<f32>();
         let v = rng.gen::<f32>();
         let wh_from_mf = mf.sample_wh(wo_local, (u, v));
-        let (wi_from_brdf, pdf, fval) = brdf.sample(wo_local, (u, v));
-
+        let (wi_from_brdf, _pdf, fval) = brdf.sample(wo_local, (u, v));
+        
+        if fval.is_black() {
+            continue;
+        }
         let wh_from_bisector = (wo_local + wi_from_brdf).hat();
         let dist_squared = (wh_from_bisector - wh_from_mf).norm_squared();
         assert!(dist_squared < 1e-3,
-            "dist_squared = {},from mf_distrib: {:.4}; from bisector: {:.4}",
+            "dist_squared = {}, wh from mf_distrib: {:.4}; wh from bisector: {:.4}, wo = {}, wi = {}",
             dist_squared,
             wh_from_mf,
-            wh_from_bisector
+            wh_from_bisector, wo_local, wi_from_brdf
         );
     }
 }

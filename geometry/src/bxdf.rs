@@ -546,10 +546,6 @@ impl BxDF for MicrofacetReflection {
         // Samples microfacet normal wh and reflected direction wi.
         let wh_local = self.distrib.sample_wh(wo_local, rnd2);
         let wi_local = math::hcm::reflect(wh_local, wo_local);
-        {
-            let bisector = (wi_local + wo_local).hat();
-            println!("similarity: {}", bisector.dot(wh_local));
-        }
         if !local::same_hemisphere(wo_local, wi_local) {
             return (Vec3::zero(), HemiPdf::Regular(0.0), Color::black());
         }
@@ -568,12 +564,10 @@ impl BxDF for MicrofacetReflection {
 
     fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
         if !local::same_hemisphere(wo_local, wi_local) {
-            println!("not same hemisphere");
             return 0.0;
         }
         let wh_local = wo_local + wi_local;
         if wh_local.is_zero() {
-            println!("degenerate");
             return 0.0;
         }
         self.distrib.pdf(wo_local, wh_local.hat()) / (4.0 * wo_local.dot(wh_local))

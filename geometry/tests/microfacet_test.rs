@@ -2,7 +2,6 @@ use geometry::{bxdf::local, microfacet as mf};
 use math::{float::linspace, hcm::Vec3};
 
 /// Tests if the differential area distribution function `d()` integrates to 1 over the hemisphere.
-
 #[test]
 fn diff_area_validate() {
     let beck_mf = mf::MicrofacetDistrib::beckmann(0.2, 0.2);
