@@ -1,4 +1,4 @@
-use geometry::bxdf::{self, BxDF, MicrofacetReflection};
+use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega};
 use geometry::microfacet::MicrofacetDistrib;
 use math::float::linspace;
 use math::hcm::Vec3;
@@ -10,15 +10,15 @@ fn f32_close(a: f32, b: f32) -> bool {
 
 #[test]
 fn local_trigonometry_test() {
-    let local_w = math::hcm::Vec3::new(0.64, 0.48, 0.6);
-    assert_eq!(bxdf::local::cos_theta(local_w), 0.6);
-    assert_eq!(bxdf::local::cos2_theta(local_w), 0.36);
-    assert_eq!(bxdf::local::sin2_theta(local_w), 0.64);
-    assert_eq!(bxdf::local::sin_theta(local_w), 0.8);
-    assert!(f32_close(bxdf::local::cos_phi(local_w), 0.8));
-    assert!(f32_close(bxdf::local::sin_phi(local_w), 0.6));
-    assert!(f32_close(bxdf::local::cos2_phi(local_w), 0.64));
-    assert!(f32_close(bxdf::local::sin2_phi(local_w), 0.36));
+    let w = Omega::new(0.64, 0.48, 0.6);
+    assert_eq!(w.cos_theta(), 0.6);
+    assert_eq!(w.cos2_theta(), 0.36);
+    assert_eq!(w.sin2_theta(), 0.64);
+    assert_eq!(w.sin_theta(), 0.8);
+    assert!(f32_close(w.cos_phi(), 0.8));
+    assert!(f32_close(w.sin_phi(), 0.6));
+    assert!(f32_close(w.cos2_phi(), 0.64), "actual value = {}", w.cos2_phi());
+    assert!(f32_close(w.sin2_phi(), 0.36), "actual value = {}", w.sin2_phi());
 }
 
 #[test]
@@ -47,13 +47,13 @@ fn fresnel_test() {
 #[test]
 fn specular_refl_test() {
     let glass = bxdf::SpecularReflection::dielectric(Color::white(), 1.0, 2.0);
-    let bsdf_value = glass.eval(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.2, -0.2, 0.7));
+    let bsdf_value = glass.eval(Omega::new(0.5, 0.5, 0.5), Omega::new(0.2, -0.2, 0.7));
     assert!(bsdf_value.is_black());
 
-    let (wi_local, pdf, bsdf_value) = glass.sample(Vec3::new(0.8, 0.0, 0.6), (0.0, 0.0));
-    assert_eq!(wi_local.x, -0.8);
-    assert_eq!(wi_local.y, -0.0);
-    assert_eq!(wi_local.z, 0.6);
+    let (wi, pdf, bsdf_value) = glass.sample(Omega::new(0.8, 0.0, 0.6), (0.0, 0.0));
+    assert_eq!(wi.x(), -0.8);
+    assert_eq!(wi.y(), -0.0);
+    assert_eq!(wi.z(), 0.6);
     assert!(matches!(pdf, bxdf::HemiPdf::Delta(_)));
     println!("bsdf value = {}", bsdf_value);
 }
@@ -65,7 +65,7 @@ fn diffuse_refl_test() {
     let oren_nayar = bxdf::OrenNayar::new(albedo, math::hcm::Degree(0.0));
     test_one_diffuse_brdf(&matte, albedo);
     test_one_diffuse_brdf(&oren_nayar, albedo);
-    
+
     // let mf_refl = bxdf::MicrofacetReflection::new(
     //     albedo,
     //     MicrofacetDistrib::beckmann(0.2, 0.2),
@@ -114,7 +114,7 @@ fn riemann_integral_pdf<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
         for phi in phis.iter().copied() {
             let (sin_theta, cos_theta) = theta.sin_cos();
             let wi = math::hcm::spherical_direction(sin_theta, cos_theta, math::hcm::Radian(phi));
-            let pdf = bsdf.pdf(Vec3::new(0.48, 0.64, 0.6), wi);
+            let pdf = bsdf.pdf(Omega::new(0.48, 0.64, 0.6), Omega(wi));
 
             pdf_integral += pdf * sin_theta * d_theta * d_phi;
         }
@@ -131,15 +131,15 @@ fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {
             .map(|_| {
                 let u = rng.gen::<f32>();
                 let v = rng.gen::<f32>();
-                let wo_local = Vec3::new(0.2, -0.1, 0.9).hat();
-                let (wi, pdf, bsdf_value) = bsdf.sample(wo_local, (u, v));
-                assert!(!wi.has_nan());
+                let wo = Omega::normalize(0.2, -0.1, 0.9);
+                let (wi, pdf, bsdf_value) = bsdf.sample(wo, (u, v));
+                assert!(!wi.0.has_nan());
                 if let bxdf::HemiPdf::Regular(pdf) = pdf {
                     // println!("pdf = {}", pdf);
                     if pdf == 0.0 {
                         Color::black()
                     } else {
-                        bsdf_value * bxdf::local::cos_theta(wi).abs() / pdf
+                        bsdf_value * wi.cos_theta().abs() / pdf
                     }
                 } else {
                     panic!()
@@ -154,26 +154,27 @@ fn play_with_mf_brdf() {
     let mf = MicrofacetDistrib::beckmann(0.2, 0.3);
     let brdf = MicrofacetReflection::new(albedo, mf, bxdf::Fresnel::Nop);
 
-    let wo_local = Vec3::new(0.6, 0.8, 0.3).hat();
-    assert!((wo_local.norm_squared() - 1.0).abs() < 1e-3);
+    let wo = Omega::normalize(0.6, 0.8, 0.3);
+    assert!((wo.0.norm_squared() - 1.0).abs() < 1e-3);
     use rand::Rng;
     let mut rng = rand::thread_rng();
     for _ in 0..10 {
         let u = rng.gen::<f32>();
         let v = rng.gen::<f32>();
-        let wh_from_mf = mf.sample_wh(wo_local, (u, v));
-        let (wi_from_brdf, _pdf, fval) = brdf.sample(wo_local, (u, v));
-        
+        let wh_from_mf = mf.sample_wh(wo, (u, v));
+        let (wi_from_brdf, _pdf, fval) = brdf.sample(wo, (u, v));
+
         if fval.is_black() {
             continue;
         }
-        let wh_from_bisector = (wo_local + wi_from_brdf).hat();
-        let dist_squared = (wh_from_bisector - wh_from_mf).norm_squared();
-        assert!(dist_squared < 1e-3,
+        if let Some(wh_from_bisector) = Omega::bisector(wo, wi_from_brdf) {
+            let dist_squared = (wh_from_bisector.0 - wh_from_mf.0).norm_squared();
+            assert!(dist_squared < 1e-3,
             "dist_squared = {}, wh from mf_distrib: {:.4}; wh from bisector: {:.4}, wo = {}, wi = {}",
             dist_squared,
-            wh_from_mf,
-            wh_from_bisector, wo_local, wi_from_brdf
+            wh_from_mf.0,
+            wh_from_bisector.0, wo.0, wi_from_brdf.0
         );
+        }
     }
 }

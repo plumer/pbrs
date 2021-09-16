@@ -2,6 +2,32 @@ use crate::microfacet as mf;
 use math::hcm::Vec3;
 use radiometry::color::Color;
 
+/// A wrapper of `Vec3` representing unit-length vectors.
+///
+/// In describing ray scattering behavior on a surface, one often uses the lower-case greek letter
+/// omega (ω) to represent the directions. One convention is that the normal vector is assumed to be
+/// (0, 0, 1) (+z axis). The `Omega` class takes this convention and provides geometric semantics
+/// in the reflection coordinate.
+///
+/// Any direction (2-DOF assuming unit-length), `w`, is described by 2 values:
+///  - theta, the angle between `w` and the normal;
+///  - phi, the angle of `w`'s projection onto the xy-plane from the x-axis.
+///
+/// `Omega` provides fast computation of trigonometric functions over theta and phi, assuming that
+/// the vectors are unit-length:
+///  - `cos_theta()`, `cos2_theta()`, `sin2_theta()`, `tan2_theta()`, `sin_theta()`
+///     (in decreasing reliability)
+///  - `sin_phi()`, `cos_phi()`, `sin2_phi()`, `cos2_phi()` (similar reliability)
+///  - `same_hemisphere()`, checking if two `Omega`s are on the same side of the normal.
+///  - `x()`, `y()`, `z()` accessors; `dot()`, `refract()`, `reflect()` (wrapper)
+///  - `bisector()`, computes `(w0 + w1).hat()` or `None` in the degenerate case (w0 + w1 == 0).
+#[derive(Clone, Copy)]
+pub struct Omega(pub Vec3);
+pub enum RefractResult {
+    FullReflect(Omega),
+    Transmit(Omega),
+}
+
 pub enum HemiPdf {
     Regular(f32),
     Delta(f32),
@@ -25,68 +51,117 @@ pub struct BxDFType {
     smooth: SmoothnessType,
 }
 
-pub mod local {
-    use super::Vec3;
-    pub fn cos_theta(w: Vec3) -> f32 {
-        w.z
+fn try_divide(dividend: f32, divisor: f32) -> Option<f32> {
+    if divisor == 0.0 {
+        None
+    } else {
+        Some(dividend / divisor)
     }
-    pub fn cos2_theta(w: Vec3) -> f32 {
-        w.z.powi(2)
+}
+
+impl Omega {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self(Vec3::new(x, y, z))
     }
-    pub fn sin_theta(w: Vec3) -> f32 {
-        sin2_theta(w).max(0.0).sqrt()
+    pub fn normalize(x: f32, y: f32, z: f32) -> Self {
+        Self(Vec3::new(x, y, z).hat())
     }
-    pub fn sin2_theta(w: Vec3) -> f32 {
-        1.0 - cos2_theta(w)
+    pub fn normal() -> Self {
+        Self(Vec3::zbase())
     }
-    pub fn tan2_theta(w: Vec3) -> f32 {
-        sin2_theta(w) / cos2_theta(w)
+    pub fn cos_theta(self) -> f32 {
+        self.0.z
+    }
+    pub fn cos2_theta(self) -> f32 {
+        self.0.z.powi(2)
+    }
+    pub fn sin_theta(self) -> f32 {
+        self.sin2_theta().max(0.0).sqrt()
+    }
+    pub fn sin2_theta(self) -> f32 {
+        1.0 - self.cos2_theta()
+    }
+    pub fn tan2_theta(self) -> f32 {
+        self.sin2_theta() / self.cos2_theta()
     }
 
-    pub fn cos_phi(w: Vec3) -> f32 {
-        let xy_hypot = w.x.hypot(w.y);
-        if xy_hypot == 0.0 {
-            1.0
-        } else {
-            w.x / xy_hypot
-        }
+    pub fn cos_phi(self) -> f32 {
+        let Self(Vec3 { x, y, z: _ }) = self;
+        try_divide(x, x.hypot(y)).unwrap_or(1.0)
     }
-    pub fn sin_phi(w: Vec3) -> f32 {
-        let xy_hypot = w.x.hypot(w.y);
-        if xy_hypot == 0.0 {
-            0.0
-        } else {
-            w.y / xy_hypot
-        }
+    pub fn sin_phi(self) -> f32 {
+        let Self(Vec3 { x, y, z: _ }) = self;
+        try_divide(y, x.hypot(y)).unwrap_or(0.0)
     }
-    pub fn cos2_phi(w: Vec3) -> f32 {
-        let xy_length2 = w.x * w.x + w.y * w.y;
-        if xy_length2 == 0.0 {
-            1.0
-        } else {
-            w.x * w.x / xy_length2
-        }
+    pub fn cos2_phi(self) -> f32 {
+        let Self(Vec3 { x, y, z: _ }) = self;
+        try_divide(x * x, x * x + y * y).unwrap_or(1.0)
     }
-    pub fn sin2_phi(w: Vec3) -> f32 {
-        let xy_length2 = w.x * w.x + w.y * w.y;
-        if xy_length2 == 0.0 {
-            0.0
-        } else {
-            w.y * w.y / xy_length2
-        }
+    pub fn sin2_phi(self) -> f32 {
+        let Self(Vec3 { x, y, z: _ }) = self;
+        try_divide(y * y, x * x + y * y).unwrap_or(0.0)
     }
 
-    pub fn sin_cos_phi(w: Vec3) -> (f32, f32) {
-        let xy_hypot = w.x.hypot(w.y);
+    pub fn sin_cos_phi(self) -> (f32, f32) {
+        let Self(Vec3 { x, y, z: _ }) = self;
+        let xy_hypot = x.hypot(y);
         if xy_hypot == 0.0 {
             (0.0, 1.0)
         } else {
-            (w.x / xy_hypot, w.y / xy_hypot)
+            (x / xy_hypot, y / xy_hypot)
         }
     }
 
-    pub fn same_hemisphere(w0: Vec3, w1: Vec3) -> bool {
-        w0.z * w1.z >= 0.0
+    /// Returns true if 2 vectors are on the same side of the surface.
+    /// The normal of the surface is implicitly (0, 0, 1).
+    pub fn same_hemisphere(w0: Omega, w1: Omega) -> bool {
+        w0.cos_theta() * w1.cos_theta() >= 0.0
+    }
+
+    pub fn dot(self, other: Self) -> f32 {
+        self.0.dot(other.0)
+    }
+
+    pub fn x(self) -> f32 {
+        self.0.x
+    }
+    pub fn y(self) -> f32 {
+        self.0.y
+    }
+    pub fn z(self) -> f32 {
+        self.0.z
+    }
+
+    pub fn refract(normal: Omega, wi: Omega, ni_over_no: f32) -> RefractResult {
+        let Omega(normal) = normal;
+        let Omega(wi) = wi;
+        match math::hcm::refract(normal, wi, ni_over_no) {
+            math::hcm::FullReflect(wo) => RefractResult::FullReflect(Omega(wo)),
+            math::hcm::Transmit(wo) => RefractResult::Transmit(Omega(wo)),
+        }
+    }
+
+    pub fn reflect(normal: Omega, wi: Omega) -> Omega {
+        let wo = math::hcm::reflect(normal.0, wi.0);
+        Omega(wo)
+    }
+
+    pub fn bisector(w0: Omega, w1: Omega) -> Option<Omega> {
+        let mid = w0.0 + w1.0;
+        if mid.is_zero() {
+            None
+        } else {
+            Some(Omega(mid.hat()))
+        }
+    }
+
+    /// Flips the direction if it is opposite to the given normal.
+    pub fn face_forward(self, normal: Self) -> Self {
+        if self.dot(normal).is_sign_negative() {
+            Self(-self.0)
+        } else {
+            self
+        }
     }
 }
 
@@ -105,14 +180,14 @@ pub fn concentric_sample_disk(uv: (f32, f32)) -> (f32, f32) {
     (r * cos_theta, r * sin_theta)
 }
 
-pub fn cos_sample_hemisphere(uv: (f32, f32)) -> Vec3 {
+pub fn cos_sample_hemisphere(uv: (f32, f32)) -> Omega {
     let (x, y) = concentric_sample_disk(uv);
     let z = (1.0 - x * x - y * y).max(0.0).sqrt();
-    Vec3::new(x, y, z)
+    Omega::new(x, y, z)
 }
 
-pub fn cos_hemisphere_pdf(w_local: Vec3) -> f32 {
-    local::cos_theta(w_local) * std::f32::consts::FRAC_1_PI
+pub fn cos_hemisphere_pdf(w: Omega) -> f32 {
+    w.cos_theta() * std::f32::consts::FRAC_1_PI
 }
 
 /// Describes the ray scattering behaviors in a probabilistic way. All vectors involved are in the
@@ -146,7 +221,7 @@ pub trait BxDF {
 
     /// Evaluates the BSDF function at given in-out angles. Note that specular BSDFs always return
     /// 0. Use [`sample()`] in those cases instead.
-    fn eval(&self, wo_local: Vec3, wi_local: Vec3) -> Color;
+    fn eval(&self, wo: Omega, wi: Omega) -> Color;
 
     /// Produces a possible incident direction given the outgoing direction, returning the
     /// probability density of the resulting direction and consumes a 2D random variable
@@ -154,20 +229,16 @@ pub trait BxDF {
     ///
     /// Returned values from one such invocation produces values needed for one sample of
     /// contribution to the monte-carlo integration process.
-    fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color);
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color);
 
-    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32;
+    fn pdf(&self, wo: Omega, wi: Omega) -> f32;
 
     /// A default implementation of the `sample` method. Uses cosine-hemisphere distribution
     /// to map the 2D random variable, and uses `pdf` and `eval` to compute the return values.
-    fn cosine_hemisphere_sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
-        assert!(local::cos_theta(wo_local) >= 0.0);
-        let wi_local = cos_sample_hemisphere(rnd2);
-        (
-            wi_local,
-            HemiPdf::Regular(self.pdf(wo_local, wi_local)),
-            self.eval(wo_local, wi_local),
-        )
+    fn cosine_hemisphere_sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+        assert!(wo.cos_theta() >= 0.0);
+        let wi = cos_sample_hemisphere(rnd2);
+        (wi, HemiPdf::Regular(self.pdf(wo, wi)), self.eval(wo, wi))
     }
 }
 
@@ -251,21 +322,21 @@ impl BxDF for SpecularReflection {
         }
     }
 
-    fn eval(&self, _wo_local: Vec3, _wi_local: Vec3) -> Color {
+    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
         Color::new(0.0, 0.0, 0.0)
     }
 
-    fn sample(&self, wo_local: Vec3, _rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
-        let wi_local = Vec3::new(-wo_local.x, -wo_local.y, wo_local.z);
+    fn sample(&self, wo: Omega, _rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+        let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
+        let fr_refl = self.fresnel.refl_coeff(wi.cos_theta());
         (
-            wi_local,
+            wi,
             HemiPdf::Delta(1.0),
-            self.fresnel.refl_coeff(local::cos_theta(wi_local)) * self.albedo
-                / local::cos_theta(wi_local).abs(),
+            fr_refl * self.albedo / wi.cos_theta().abs(),
         )
     }
 
-    fn pdf(&self, _wo_local: Vec3, _wi_local: Vec3) -> f32 {
+    fn pdf(&self, _wo: Omega, _wi: Omega) -> f32 {
         0.0
     }
 }
@@ -304,35 +375,39 @@ impl BxDF for SpecularTransmission {
         }
     }
 
-    fn eval(&self, _wo_local: Vec3, _wi_local: Vec3) -> Color {
+    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
         Color::new(0.0, 0.0, 0.0)
     }
 
-    fn sample(&self, wo_local: Vec3, _rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
+    fn sample(&self, wo: Omega, _rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
         // Computes the normal for computing the refraction. It is flipped to the side forming an
-        // acute angle with `wo_local`.
-        let (eta_i, eta_t, normal) = if local::cos_theta(wo_local) > 0.0 {
+        // acute angle with `wo`.
+        let (eta_i, eta_t, normal) = if wo.cos_theta() > 0.0 {
             (self.eta_outer, self.eta_inner, Vec3::zbase())
         } else {
             (self.eta_inner, self.eta_outer, -Vec3::zbase())
         };
 
-        match math::hcm::refract(normal, wo_local, eta_i / eta_t) {
-            math::hcm::FullReflect(_) => (Vec3::zero(), HemiPdf::Delta(1.0), Color::black()),
-            math::hcm::Transmit(wi_local) => {
+        match Omega::refract(Omega(normal), wo, eta_i / eta_t) {
+            RefractResult::FullReflect(_) => (
+                Omega::new(0.0, 0.0, 0.0),
+                HemiPdf::Delta(1.0),
+                Color::black(),
+            ),
+            RefractResult::Transmit(wi) => {
                 // Transmissivity = 1 - reflectivity
-                let f_tr = 1.0 - self.fresnel.refl_coeff(local::cos_theta(wi_local));
+                let f_tr = 1.0 - self.fresnel.refl_coeff(wi.cos_theta());
                 // if transport_mode is radiance: f_t *= (eta_i / eta_t)^2
                 (
-                    wi_local,
+                    wi,
                     HemiPdf::Delta(1.0),
-                    (f_tr / local::cos_theta(wi_local).abs()) * self.albedo,
+                    (f_tr / wi.cos_theta().abs()) * self.albedo,
                 )
             }
         }
     }
 
-    fn pdf(&self, _wo_local: Vec3, _wi_local: Vec3) -> f32 {
+    fn pdf(&self, _wo: Omega, _wi: Omega) -> f32 {
         0.0
     }
 }
@@ -367,48 +442,45 @@ impl BxDF for FresnelSpecular {
         }
     }
 
-    fn eval(&self, _wo_local: Vec3, _wi_local: Vec3) -> Color {
+    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
         Color::new(0.0, 0.0, 0.0)
     }
 
-    fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
-        let refl_coeff =
-            Fresnel::dielectric(self.eta_a, self.eta_b).refl_coeff(local::cos_theta(wo_local));
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+        let refl_coeff = Fresnel::dielectric(self.eta_a, self.eta_b).refl_coeff(wo.cos_theta());
         let (u, _v) = rnd2;
         if u < refl_coeff {
             // Samples a reflective direction.
-            let wi_local = Vec3::new(-wo_local.x, -wo_local.y, wo_local.z);
+            let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
             (
-                wi_local,
+                wi,
                 HemiPdf::Regular(refl_coeff),
-                refl_coeff * self.reflect_albedo / local::cos_theta(wi_local).abs(),
+                refl_coeff * self.reflect_albedo / wi.cos_theta().abs(),
             )
         } else {
             // Samples a transmissive direction.
-            let (eta_i, eta_t, normal) = if local::cos_theta(wo_local) > 0.0 {
+            let (eta_i, eta_t, normal) = if wo.cos_theta() > 0.0 {
                 (self.eta_a, self.eta_b, Vec3::zbase())
             } else {
                 (self.eta_b, self.eta_a, -Vec3::zbase())
             };
-            match math::hcm::refract(normal, wo_local, eta_i / eta_t) {
-                math::hcm::FullReflect(wi_local) => {
-                    (wi_local, HemiPdf::Delta(refl_coeff), Color::black())
-                }
-                math::hcm::Transmit(wi_local) => {
+            match Omega::refract(Omega(normal), wo, eta_i / eta_t) {
+                RefractResult::FullReflect(wi) => (wi, HemiPdf::Delta(refl_coeff), Color::black()),
+                RefractResult::Transmit(wi) => {
                     // Transmissivity = 1 - reflectivity
                     let transmit_coeff = 1.0 - refl_coeff;
                     // if transport_mode is radiance: f_t *= (eta_i / eta_t)^2
                     (
-                        wi_local,
+                        wi,
                         HemiPdf::Delta(transmit_coeff),
-                        (transmit_coeff / local::cos_theta(wi_local).abs()) * self.transmit_albedo,
+                        (transmit_coeff / wi.cos_theta().abs()) * self.transmit_albedo,
                     )
                 }
             }
         }
     }
 
-    fn pdf(&self, _wo_local: Vec3, _wi_local: Vec3) -> f32 {
+    fn pdf(&self, _wo: Omega, _wi: Omega) -> f32 {
         0.0
     }
 }
@@ -431,17 +503,17 @@ impl BxDF for LambertianReflection {
         }
     }
 
-    fn eval(&self, _wo_local: Vec3, _wi_local: Vec3) -> Color {
+    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
         self.albedo * Self::FRAC_1_PI
     }
 
-    fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
-        self.cosine_hemisphere_sample(wo_local, rnd2)
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+        self.cosine_hemisphere_sample(wo, rnd2)
     }
 
-    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
-        assert!(wo_local.z * wi_local.z >= 0.0);
-        cos_hemisphere_pdf(wi_local)
+    fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
+        assert!(wo.z() * wi.z() >= 0.0);
+        cos_hemisphere_pdf(wi)
     }
 }
 
@@ -474,14 +546,14 @@ impl BxDF for OrenNayar {
         }
     }
 
-    fn eval(&self, wo_local: Vec3, wi_local: Vec3) -> Color {
-        let sin_theta_i = local::sin_theta(wi_local);
-        let sin_theta_o = local::sin_theta(wo_local);
-        let (sin_phi_i, cos_phi_i) = local::sin_cos_phi(wi_local);
-        let (sin_phi_o, cos_phi_o) = local::sin_cos_phi(wo_local);
+    fn eval(&self, wo: Omega, wi: Omega) -> Color {
+        let sin_theta_i = wi.sin_theta();
+        let sin_theta_o = wo.sin_theta();
+        let (sin_phi_i, cos_phi_i) = wi.sin_cos_phi();
+        let (sin_phi_o, cos_phi_o) = wo.sin_cos_phi();
         let delta_cos_phi = (cos_phi_i * cos_phi_o + sin_phi_i * sin_phi_o).max(0.0);
-        let abs_cos_theta_i = local::cos_theta(wi_local).abs();
-        let abs_cos_theta_o = local::cos_theta(wo_local).abs();
+        let abs_cos_theta_i = wi.cos_theta().abs();
+        let abs_cos_theta_o = wo.cos_theta().abs();
         let (sin_alpha, tan_beta) = if abs_cos_theta_i > abs_cos_theta_o {
             (sin_theta_o, sin_theta_i / abs_cos_theta_i)
         } else {
@@ -492,13 +564,13 @@ impl BxDF for OrenNayar {
             * (self.coeff_a + self.coeff_b * delta_cos_phi * sin_alpha * tan_beta)
     }
 
-    fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
-        self.cosine_hemisphere_sample(wo_local, rnd2)
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+        self.cosine_hemisphere_sample(wo, rnd2)
     }
 
-    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
-        assert!(wo_local.z * wi_local.z >= 0.0);
-        cos_hemisphere_pdf(wi_local)
+    fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
+        assert!(wo.z() * wi.z() >= 0.0);
+        cos_hemisphere_pdf(wi)
     }
 }
 
@@ -527,49 +599,52 @@ impl BxDF for MicrofacetReflection {
         }
     }
 
-    fn eval(&self, wo_local: Vec3, wi_local: Vec3) -> Color {
-        let cos_theta_o = local::cos_theta(wo_local).abs();
-        let cos_theta_i = local::cos_theta(wi_local).abs();
-        let wh_local = wo_local + wi_local;
-        if cos_theta_o == 0.0 || cos_theta_i == 0.0 || wh_local.is_zero() {
+    fn eval(&self, wo: Omega, wi: Omega) -> Color {
+        let cos_theta_o = wo.cos_theta().abs();
+        let cos_theta_i = wi.cos_theta().abs();
+        let wh = Omega::bisector(wo, wi);
+        if cos_theta_o == 0.0 || cos_theta_i == 0.0 || wh.is_none() {
             return Color::black();
         }
-        let wh_local = wh_local.hat();
-        let wh_local = wh_local * wh_local.z.signum();
-        let refl_coeff = self.fresnel.refl_coeff(wi_local.dot(wh_local));
-        println!("fresnel cos_theta = {}, refl coeff = {}", wi_local.dot(wh_local), refl_coeff);
-        self.albedo * self.distrib.d(wh_local) * self.distrib.g(wo_local, wi_local) //* refl_coeff
-            // / (4.0 * cos_theta_o * cos_theta_i)
+        let wh = wh.unwrap().face_forward(Omega::normal());
+        let refl_coeff = self.fresnel.refl_coeff(wi.dot(wh));
+        println!(
+            "fresnel cos_theta = {}, refl coeff = {}",
+            wi.dot(wh),
+            refl_coeff
+        );
+        self.albedo * self.distrib.d(wh) * self.distrib.g(wo, wi) //* refl_coeff
+                                                                  // / (4.0 * cos_theta_o * cos_theta_i)
     }
 
-    fn sample(&self, wo_local: Vec3, rnd2: (f32, f32)) -> (Vec3, HemiPdf, Color) {
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
         // Samples microfacet normal wh and reflected direction wi.
-        let wh_local = self.distrib.sample_wh(wo_local, rnd2);
-        let wi_local = math::hcm::reflect(wh_local, wo_local);
-        if !local::same_hemisphere(wo_local, wi_local) {
-            return (Vec3::zero(), HemiPdf::Regular(0.0), Color::black());
+        let wh = self.distrib.sample_wh(wo, rnd2);
+        let wi = Omega::reflect(wh, wo);
+        if !Omega::same_hemisphere(wo, wi) {
+            return (
+                Omega::new(0.0, 0.0, 0.0),
+                HemiPdf::Regular(0.0),
+                Color::black(),
+            );
         }
-        // Computes pdf of wi_local for microfacet reflection.
-        // The pdf of wi_local is converted from that of wh_local and the following identities (that
-        // only holds in the reflection coordinate using wo_local as the normal):
+        // Computes pdf of wi for microfacet reflection.
+        // The pdf of wi is converted from that of wh and the following identities (that
+        // only holds in the reflection coordinate using wo as the normal):
         //  - dw = sin(theta_w) * d theta * d phi
         //  - theta_h * 2 = theta_i
-        let pdf = self.distrib.pdf(wo_local, wh_local) / (4.0 * wo_local.dot(wh_local));
-        (
-            wi_local,
-            HemiPdf::Regular(pdf),
-            self.eval(wo_local, wi_local),
-        )
+        let pdf = self.distrib.pdf(wo, wh) / (4.0 * wo.dot(wh));
+        (wi, HemiPdf::Regular(pdf), self.eval(wo, wi))
     }
 
-    fn pdf(&self, wo_local: Vec3, wi_local: Vec3) -> f32 {
-        if !local::same_hemisphere(wo_local, wi_local) {
+    fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
+        if !Omega::same_hemisphere(wo, wi) {
             return 0.0;
         }
-        let wh_local = wo_local + wi_local;
-        if wh_local.is_zero() {
-            return 0.0;
+        if let Some(wh) = Omega::bisector(wo, wi) {
+            self.distrib.pdf(wo, wh) / (4.0 * wo.dot(wh))
+        } else {
+            0.0
         }
-        self.distrib.pdf(wo_local, wh_local.hat()) / (4.0 * wo_local.dot(wh_local))
     }
 }
