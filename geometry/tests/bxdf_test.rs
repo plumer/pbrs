@@ -46,23 +46,21 @@ fn fresnel_test() {
 
 #[test]
 fn specular_refl_test() {
-    let glass = bxdf::SpecularReflection::dielectric(Color::white(), 1.0, 2.0);
-    let bsdf_value = glass.eval(Omega::new(0.5, 0.5, 0.5), Omega::new(0.2, -0.2, 0.7));
-    assert!(bsdf_value.is_black());
+    let glass = bxdf::Specular::dielectric(Color::white(), 1.0, 2.0);
 
-    let (wi, pdf, bsdf_value) = glass.sample(Omega::new(0.8, 0.0, 0.6), (0.0, 0.0));
+    let (bsdf_value, wi, pdf) = glass.scatter(Omega::new(0.8, 0.0, 0.6), (0.0, 0.0));
     assert_eq!(wi.x(), -0.8);
     assert_eq!(wi.y(), -0.0);
     assert_eq!(wi.z(), 0.6);
-    assert!(matches!(pdf, bxdf::HemiPdf::Delta(_)));
+    assert!(matches!(pdf, bxdf::Prob::Mass(_)));
     println!("bsdf value = {}", bsdf_value);
 }
 
 #[test]
 fn diffuse_refl_test() {
     let albedo = Color::new(1.0, 2.0, 5.0);
-    let matte = bxdf::LambertianReflection::new(albedo);
-    let oren_nayar = bxdf::OrenNayar::new(albedo, math::hcm::Degree(0.0));
+    let matte = bxdf::DiffuseReflect::lambertian(albedo);
+    let oren_nayar = bxdf::DiffuseReflect::oren_nayar(albedo, math::hcm::Degree(0.0));
     test_one_diffuse_brdf(&matte, albedo);
     test_one_diffuse_brdf(&oren_nayar, albedo);
 
@@ -132,9 +130,9 @@ fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {
                 let u = rng.gen::<f32>();
                 let v = rng.gen::<f32>();
                 let wo = Omega::normalize(0.2, -0.1, 0.9);
-                let (wi, pdf, bsdf_value) = bsdf.sample(wo, (u, v));
+                let (bsdf_value, wi, pdf) = bsdf.sample(wo, (u, v));
                 assert!(!wi.0.has_nan());
-                if let bxdf::HemiPdf::Regular(pdf) = pdf {
+                if let bxdf::Prob::Density(pdf) = pdf {
                     // println!("pdf = {}", pdf);
                     if pdf == 0.0 {
                         Color::black()
@@ -162,7 +160,7 @@ fn play_with_mf_brdf() {
         let u = rng.gen::<f32>();
         let v = rng.gen::<f32>();
         let wh_from_mf = mf.sample_wh(wo, (u, v));
-        let (wi_from_brdf, _pdf, fval) = brdf.sample(wo, (u, v));
+        let (fval, wi_from_brdf, _pdf) = brdf.sample(wo, (u, v));
 
         if fval.is_black() {
             continue;

@@ -1,6 +1,8 @@
-use crate::microfacet as mf;
-use math::hcm::Vec3;
+use std::f32::consts::FRAC_1_PI;
+
+use crate::microfacet::{self as mf};
 use math::float::Float;
+use math::hcm::Vec3;
 use radiometry::color::Color;
 
 /// A wrapper of `Vec3` representing unit-length vectors.
@@ -29,28 +31,18 @@ pub enum RefractResult {
     Transmit(Omega),
 }
 
-pub enum HemiPdf {
-    Regular(f32),
-    Delta(f32),
+pub enum Prob {
+    Density(f32),
+    Mass(f32),
 }
 
-pub enum SmoothnessType {
-    Diffuse,
-    Glossy,
-    Specular,
-}
-
+#[derive(Debug)]
 pub enum IntrusionType {
     Reflection,
     Transmission,
-    ReflectTransmit,
+    Hybrid,
 }
 
-#[allow(dead_code)]
-pub struct BxDFType {
-    intrusion: IntrusionType,
-    smooth: SmoothnessType,
-}
 
 impl Omega {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
@@ -207,10 +199,9 @@ pub fn cos_hemisphere_pdf(w: Omega) -> f32 {
 /// monte-carlo integration of the rendering equation.
 ///
 /// Useful implementations:
-/// - [`SpecularReflection`], [`SpecularTransmission`], `FresnelSpecular`
+/// - `MatteReflection`, `MicrofacetReflection`
 pub trait BxDF {
     const FRAC_1_PI: f32 = std::f32::consts::FRAC_1_PI;
-    fn get_type(&self) -> BxDFType;
 
     /// Evaluates the BSDF function at given in-out angles. Note that specular BSDFs always return
     /// 0. Use [`sample()`] in those cases instead.
@@ -222,16 +213,16 @@ pub trait BxDF {
     ///
     /// Returned values from one such invocation produces values needed for one sample of
     /// contribution to the monte-carlo integration process.
-    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color);
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob);
 
     fn pdf(&self, wo: Omega, wi: Omega) -> f32;
 
     /// A default implementation of the `sample` method. Uses cosine-hemisphere distribution
     /// to map the 2D random variable, and uses `pdf` and `eval` to compute the return values.
-    fn cosine_hemisphere_sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+    fn cosine_hemisphere_sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
         assert!(wo.cos_theta() >= 0.0);
         let wi = cos_sample_hemisphere(rnd2);
-        (wi, HemiPdf::Regular(self.pdf(wo, wi)), self.eval(wo, wi))
+        (self.eval(wo, wi), wi, Prob::Density(self.pdf(wo, wi)))
     }
 }
 
@@ -241,20 +232,26 @@ pub trait BxDF {
 pub enum Fresnel {
     Nop,
     /// Fresnel reflectivity ratio computation for dielectric materials (e.g., glass).
-    Dielectric { eta_i: f32, eta_t: f32 },
+    Dielectric { eta_front: f32, eta_back: f32 },
     // TODO(zixun): Conductor(f32, f32)
 }
 
 impl Fresnel {
-    pub fn dielectric(eta_i: f32, eta_t: f32) -> Self {
-        Self::Dielectric { eta_i, eta_t }
+    pub fn dielectric(eta_front: f32, eta_back: f32) -> Self {
+        Self::Dielectric {
+            eta_front,
+            eta_back,
+        }
     }
 
     /// Computes the ratio of refracted energy.
     pub fn refl_coeff(&self, cos_theta_i: f32) -> f32 {
         match self {
             Self::Nop => 1.0,
-            Self::Dielectric { eta_i, eta_t } => {
+            Self::Dielectric {
+                eta_front: eta_i,
+                eta_back: eta_t,
+            } => {
                 let cos_theta_i = cos_theta_i.clamp(-1.0, 1.0);
                 let (eta_i, eta_t, cos_theta_i) = if cos_theta_i > 0.0 {
                     (eta_i, eta_t, cos_theta_i)
@@ -284,286 +281,163 @@ impl Fresnel {
     }
 }
 
-// ---------------------------
-
-/// BSDF that represents specular reflection. All transmission energy is absorbed.
-///
-/// `eval()` always return black - the reflection is specular. `sample()` is more useful.
-///
-/// [`sample()`] returns perfect reflected direction across
-/// the normal (z-axis in the local coordinate), and uses the underlying Fresnel model to determine
-/// reflectivity modulation on the BSDF value.
-pub struct SpecularReflection {
-    albedo: Color,
+pub struct Specular {
     fresnel: Fresnel,
+    albedo: Color,
+    intrusion: IntrusionType,
 }
-
-impl SpecularReflection {
-    pub fn dielectric(albedo: Color, eta_i: f32, eta_t: f32) -> Self {
+/// BSDF representing dielectric material (e.g., glass). Ray scattering is both reflective and
+/// transmissive.
+impl Specular {
+    pub fn mirror(albedo: Color) -> Self {
         Self {
+            fresnel: Fresnel::Nop,
             albedo,
-            fresnel: Fresnel::Dielectric { eta_i, eta_t },
-        }
-    }
-}
-
-impl BxDF for SpecularReflection {
-    fn get_type(&self) -> BxDFType {
-        BxDFType {
             intrusion: IntrusionType::Reflection,
-            smooth: SmoothnessType::Specular,
         }
     }
 
-    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
-        Color::new(0.0, 0.0, 0.0)
+    pub fn dielectric(albedo: Color, eta_outer: f32, eta_inner: f32) -> Self {
+        Self {
+            fresnel: Fresnel::dielectric(eta_outer, eta_inner),
+            albedo,
+            intrusion: IntrusionType::Hybrid,
+        }
     }
 
-    fn sample(&self, wo: Omega, _rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+    pub fn scatter(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
+        use Fresnel::*;
+        use IntrusionType::*;
+        match (&self.intrusion, self.fresnel) {
+            // Perfect reflection.
+            (Reflection, _) => {
+                let (wi, color) = self.reflect(wo);
+                (color, wi, Prob::Mass(1.0))
+            }
+            // Perfect refraction (no reflection, which is unintuitive...).
+            (
+                Transmission,
+                Dielectric {
+                    eta_front,
+                    eta_back,
+                },
+            ) => {
+                let (wi, color) = self.refract(wo, eta_front, eta_back);
+                (color, wi, Prob::Mass(1.0))
+            }
+            // Both reflective and refractive (seen in most dielectrics).
+            (
+                Hybrid,
+                Dielectric {
+                    eta_front,
+                    eta_back,
+                },
+            ) => {
+                let refl_coeff = self.fresnel.refl_coeff(wo.cos_theta());
+                if rnd2.0 < refl_coeff {
+                    let (wi, color) = self.reflect(wo);
+                    (color, wi, Prob::Mass(refl_coeff))
+                } else {
+                    let (wi, color) = self.refract(wo, eta_front, eta_back);
+                    (color, wi, Prob::Mass(1.0 - refl_coeff))
+                }
+            }
+            _ => panic!("Unmatched combo: {:?}, {:?}", self.intrusion, self.fresnel),
+        }
+    }
+
+    fn reflect(&self, wo: Omega) -> (Omega, Color) {
         let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
         let fr_refl = self.fresnel.refl_coeff(wi.cos_theta());
-        (
-            wi,
-            HemiPdf::Delta(1.0),
-            fr_refl * self.albedo / wi.cos_theta().abs(),
-        )
+        (wi, fr_refl * self.albedo / wi.cos_theta().abs())
     }
 
-    fn pdf(&self, _wo: Omega, _wi: Omega) -> f32 {
-        0.0
-    }
-}
-
-/// BSDF that represents specular transmission. All reflective energy is absorbed, which is uncommon
-/// in real-life.
-///
-/// `eval()` always return black - the transmission is specular. `sample()` is more useful.
-///
-/// `sample()` computes the refracted ray using the normal (z-axis in the local coordinate). The
-/// amount of energy that gets through is computed by the underlying Fresnel model. In the case of a
-/// full reflection, zero vector is returned and the BSDF value is black as well.
-pub struct SpecularTransmission {
-    albedo: Color,
-    eta_outer: f32,
-    eta_inner: f32,
-    fresnel: Fresnel,
-}
-
-impl SpecularTransmission {
-    /// Makes a new specular transmission BSDF with given
-    #[rustfmt::skip]
-    pub fn new(albedo: Color, eta_outer: f32, eta_inner: f32) -> Self {
-        Self {
-            albedo, eta_outer, eta_inner,
-            fresnel: Fresnel::dielectric(eta_outer, eta_inner),
-        }
-    }
-}
-
-impl BxDF for SpecularTransmission {
-    fn get_type(&self) -> BxDFType {
-        BxDFType {
-            intrusion: IntrusionType::Transmission,
-            smooth: SmoothnessType::Specular,
-        }
-    }
-
-    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
-        Color::new(0.0, 0.0, 0.0)
-    }
-
-    fn sample(&self, wo: Omega, _rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+    fn refract(&self, wo: Omega, eta_front: f32, eta_back: f32) -> (Omega, Color) {
         // Computes the normal for computing the refraction. It is flipped to the side forming an
         // acute angle with `wo`.
         let (eta_i, eta_t, normal) = if wo.cos_theta() > 0.0 {
-            (self.eta_outer, self.eta_inner, Vec3::zbase())
+            (eta_front, eta_back, Vec3::zbase())
         } else {
-            (self.eta_inner, self.eta_outer, -Vec3::zbase())
+            (eta_back, eta_front, -Vec3::zbase())
         };
 
         match Omega::refract(Omega(normal), wo, eta_i / eta_t) {
-            RefractResult::FullReflect(_) => (
-                Omega::new(0.0, 0.0, 0.0),
-                HemiPdf::Delta(1.0),
-                Color::black(),
-            ),
+            RefractResult::FullReflect(_) => (Omega::new(0.0, 0.0, 0.0), Color::black()),
             RefractResult::Transmit(wi) => {
                 // Transmissivity = 1 - reflectivity
                 let f_tr = 1.0 - self.fresnel.refl_coeff(wi.cos_theta());
                 // if transport_mode is radiance: f_t *= (eta_i / eta_t)^2
-                (
-                    wi,
-                    HemiPdf::Delta(1.0),
-                    (f_tr / wi.cos_theta().abs()) * self.albedo,
-                )
+                (wi, (f_tr / wi.cos_theta().abs()) * self.albedo)
             }
         }
     }
-
-    fn pdf(&self, _wo: Omega, _wi: Omega) -> f32 {
-        0.0
-    }
 }
 
-/// BSDF representing dielectric material (e.g., glass). Ray scattering is both reflective and
-/// transmissive.
-pub struct FresnelSpecular {
-    reflect_albedo: Color,
-    transmit_albedo: Color,
-    eta_a: f32,
-    eta_b: f32,
-    // TODO(zixun) transport mode?
+enum MatteModel {
+    Lambertian,
+    OrenNayar { coeff_a: f32, coeff_b: f32 },
 }
 
-impl FresnelSpecular {
-    #[rustfmt::skip]
-    #[allow(dead_code)]
-    /// Makes a new specular dielectric BSDF.
-    /// - `reflect_albedo` and `transmit_albedo` is often the same.
-    /// - `eta_a` is the IOR of the medium on the positive side of the normal vector, and `eta_b`
-    ///   the opposite side.
-    fn new(reflect_albedo: Color, transmit_albedo: Color, eta_a: f32, eta_b: f32) -> Self {
-        Self{reflect_albedo, transmit_albedo, eta_a, eta_b}
-    }
-}
-
-impl BxDF for FresnelSpecular {
-    fn get_type(&self) -> BxDFType {
-        BxDFType {
-            intrusion: IntrusionType::ReflectTransmit,
-            smooth: SmoothnessType::Specular,
-        }
-    }
-
-    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
-        Color::new(0.0, 0.0, 0.0)
-    }
-
-    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
-        let refl_coeff = Fresnel::dielectric(self.eta_a, self.eta_b).refl_coeff(wo.cos_theta());
-        let (u, _v) = rnd2;
-        if u < refl_coeff {
-            // Samples a reflective direction.
-            let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
-            (
-                wi,
-                HemiPdf::Regular(refl_coeff),
-                refl_coeff * self.reflect_albedo / wi.cos_theta().abs(),
-            )
-        } else {
-            // Samples a transmissive direction.
-            let (eta_i, eta_t, normal) = if wo.cos_theta() > 0.0 {
-                (self.eta_a, self.eta_b, Vec3::zbase())
-            } else {
-                (self.eta_b, self.eta_a, -Vec3::zbase())
-            };
-            match Omega::refract(Omega(normal), wo, eta_i / eta_t) {
-                RefractResult::FullReflect(wi) => (wi, HemiPdf::Delta(refl_coeff), Color::black()),
-                RefractResult::Transmit(wi) => {
-                    // Transmissivity = 1 - reflectivity
-                    let transmit_coeff = 1.0 - refl_coeff;
-                    // if transport_mode is radiance: f_t *= (eta_i / eta_t)^2
-                    (
-                        wi,
-                        HemiPdf::Delta(transmit_coeff),
-                        (transmit_coeff / wi.cos_theta().abs()) * self.transmit_albedo,
-                    )
-                }
-            }
-        }
-    }
-
-    fn pdf(&self, _wo: Omega, _wi: Omega) -> f32 {
-        0.0
-    }
-}
-
-pub struct LambertianReflection {
+pub struct DiffuseReflect {
     albedo: Color,
+    model: MatteModel,
 }
 
-impl LambertianReflection {
-    pub fn new(albedo: Color) -> Self {
-        Self { albedo }
-    }
-}
-
-impl BxDF for LambertianReflection {
-    fn get_type(&self) -> BxDFType {
-        BxDFType {
-            intrusion: IntrusionType::Reflection,
-            smooth: SmoothnessType::Diffuse,
+impl DiffuseReflect {
+    pub fn lambertian(albedo: Color) -> Self {
+        Self {
+            albedo,
+            model: MatteModel::Lambertian,
         }
     }
 
-    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
-        self.albedo * Self::FRAC_1_PI
-    }
-
-    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
-        self.cosine_hemisphere_sample(wo, rnd2)
-    }
-
-    fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
-        assert!(wo.z() * wi.z() >= 0.0);
-        cos_hemisphere_pdf(wi)
-    }
-}
-
-// Oren-Nayar
-pub struct OrenNayar {
-    albedo: Color,
-    coeff_a: f32,
-    coeff_b: f32,
-}
-
-impl OrenNayar {
-    pub fn new(albedo: Color, sigma: math::hcm::Degree) -> Self {
+    pub fn oren_nayar(albedo: Color, sigma: math::hcm::Degree) -> Self {
         let math::hcm::Radian(sigma_rad) = sigma.to_radian();
         let sigma_sqr = sigma_rad.powi(2);
         let coeff_a = 1.0 - (sigma_sqr / (2.0 * (sigma_sqr + 0.33)));
         let coeff_b = 0.45 * sigma_sqr / (sigma_sqr + 0.09);
         Self {
             albedo,
-            coeff_a,
-            coeff_b,
+            model: MatteModel::OrenNayar { coeff_a, coeff_b },
         }
     }
 }
 
-impl BxDF for OrenNayar {
-    fn get_type(&self) -> BxDFType {
-        BxDFType {
-            intrusion: IntrusionType::Reflection,
-            smooth: SmoothnessType::Diffuse,
+impl BxDF for DiffuseReflect {
+    fn eval(&self, wo: Omega, wi: Omega) -> Color {
+        match self.model {
+            MatteModel::Lambertian => self.albedo * FRAC_1_PI,
+            MatteModel::OrenNayar { coeff_a, coeff_b } => {
+                let sin_theta_i = wi.sin_theta();
+                let sin_theta_o = wo.sin_theta();
+                let (sin_phi_i, cos_phi_i) = wi.sin_cos_phi();
+                let (sin_phi_o, cos_phi_o) = wo.sin_cos_phi();
+                let delta_cos_phi = (cos_phi_i * cos_phi_o + sin_phi_i * sin_phi_o).max(0.0);
+                let abs_cos_theta_i = wi.cos_theta().abs();
+                let abs_cos_theta_o = wo.cos_theta().abs();
+                let (sin_alpha, tan_beta) = if abs_cos_theta_i > abs_cos_theta_o {
+                    (sin_theta_o, sin_theta_i / abs_cos_theta_i)
+                } else {
+                    (sin_theta_i, sin_theta_o / abs_cos_theta_o)
+                };
+                self.albedo
+                    * std::f32::consts::FRAC_1_PI
+                    * (coeff_a + coeff_b * delta_cos_phi * sin_alpha * tan_beta)
+            }
         }
     }
-
-    fn eval(&self, wo: Omega, wi: Omega) -> Color {
-        let sin_theta_i = wi.sin_theta();
-        let sin_theta_o = wo.sin_theta();
-        let (sin_phi_i, cos_phi_i) = wi.sin_cos_phi();
-        let (sin_phi_o, cos_phi_o) = wo.sin_cos_phi();
-        let delta_cos_phi = (cos_phi_i * cos_phi_o + sin_phi_i * sin_phi_o).max(0.0);
-        let abs_cos_theta_i = wi.cos_theta().abs();
-        let abs_cos_theta_o = wo.cos_theta().abs();
-        let (sin_alpha, tan_beta) = if abs_cos_theta_i > abs_cos_theta_o {
-            (sin_theta_o, sin_theta_i / abs_cos_theta_i)
-        } else {
-            (sin_theta_i, sin_theta_o / abs_cos_theta_o)
-        };
-        self.albedo
-            * std::f32::consts::FRAC_1_PI
-            * (self.coeff_a + self.coeff_b * delta_cos_phi * sin_alpha * tan_beta)
-    }
-
-    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
-        self.cosine_hemisphere_sample(wo, rnd2)
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
+        assert!(wo.cos_theta() >= 0.0);
+        let wi = cos_sample_hemisphere(rnd2);
+        (self.eval(wo, wi), wi, Prob::Density(self.pdf(wo, wi)))
     }
 
     fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
-        assert!(wo.z() * wi.z() >= 0.0);
-        cos_hemisphere_pdf(wi)
+        if wo.z() * wi.z() >= 0.0 {
+            cos_hemisphere_pdf(wi)
+        } else {
+            0.0
+        }
     }
 }
 
@@ -585,13 +459,6 @@ impl MicrofacetReflection {
 }
 
 impl BxDF for MicrofacetReflection {
-    fn get_type(&self) -> BxDFType {
-        BxDFType {
-            intrusion: IntrusionType::Reflection,
-            smooth: SmoothnessType::Glossy,
-        }
-    }
-
     fn eval(&self, wo: Omega, wi: Omega) -> Color {
         let cos_theta_o = wo.cos_theta().abs();
         let cos_theta_i = wi.cos_theta().abs();
@@ -610,15 +477,15 @@ impl BxDF for MicrofacetReflection {
                                                                   // / (4.0 * cos_theta_o * cos_theta_i)
     }
 
-    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Omega, HemiPdf, Color) {
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
         // Samples microfacet normal wh and reflected direction wi.
         let wh = self.distrib.sample_wh(wo, rnd2);
         let wi = Omega::reflect(wh, wo);
         if !Omega::same_hemisphere(wo, wi) {
             return (
-                Omega::new(0.0, 0.0, 0.0),
-                HemiPdf::Regular(0.0),
                 Color::black(),
+                Omega::new(0.0, 0.0, 0.0),
+                Prob::Density(0.0),
             );
         }
         // Computes pdf of wi for microfacet reflection.
@@ -627,7 +494,7 @@ impl BxDF for MicrofacetReflection {
         //  - dw = sin(theta_w) * d theta * d phi
         //  - theta_h * 2 = theta_i
         let pdf = self.distrib.pdf(wo, wh) / (4.0 * wo.dot(wh));
-        (wi, HemiPdf::Regular(pdf), self.eval(wo, wi))
+        (self.eval(wo, wi), wi, Prob::Density(pdf))
     }
 
     fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
