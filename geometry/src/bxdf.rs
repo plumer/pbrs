@@ -1,5 +1,6 @@
 use crate::microfacet as mf;
 use math::hcm::Vec3;
+use math::float::Float;
 use radiometry::color::Color;
 
 /// A wrapper of `Vec3` representing unit-length vectors.
@@ -51,14 +52,6 @@ pub struct BxDFType {
     smooth: SmoothnessType,
 }
 
-fn try_divide(dividend: f32, divisor: f32) -> Option<f32> {
-    if divisor == 0.0 {
-        None
-    } else {
-        Some(dividend / divisor)
-    }
-}
-
 impl Omega {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
@@ -87,19 +80,19 @@ impl Omega {
 
     pub fn cos_phi(self) -> f32 {
         let Self(Vec3 { x, y, z: _ }) = self;
-        try_divide(x, x.hypot(y)).unwrap_or(1.0)
+        x.try_divide(x.hypot(y)).unwrap_or(1.0)
     }
     pub fn sin_phi(self) -> f32 {
         let Self(Vec3 { x, y, z: _ }) = self;
-        try_divide(y, x.hypot(y)).unwrap_or(0.0)
+        y.try_divide(x.hypot(y)).unwrap_or(0.0)
     }
     pub fn cos2_phi(self) -> f32 {
         let Self(Vec3 { x, y, z: _ }) = self;
-        try_divide(x * x, x * x + y * y).unwrap_or(1.0)
+        (x * x).try_divide(x * x + y * y).unwrap_or(1.0)
     }
     pub fn sin2_phi(self) -> f32 {
         let Self(Vec3 { x, y, z: _ }) = self;
-        try_divide(y * y, x * x + y * y).unwrap_or(0.0)
+        (y * y).try_divide(x * x + y * y).unwrap_or(0.0)
     }
 
     pub fn sin_cos_phi(self) -> (f32, f32) {
