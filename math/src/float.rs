@@ -54,6 +54,7 @@ where
 pub trait Float : Sized {
     fn cathetus(self, other: Self) -> Self;
     fn try_divide(self, divisor: Self) -> Option<Self>;
+    fn polynomial(self, coeffs: Vec<Self>) -> Self;
 }
 
 impl Float for f32 {
@@ -82,6 +83,12 @@ impl Float for f32 {
         } else {
             Some(self / divisor)
         }
+    }
+
+    fn polynomial(self, coeffs: Vec<Self>) -> Self {
+        // a + b * x + c * x^2 + d * x^3
+        // = a + x * (b + x * (c + d * x))
+        coeffs.iter().rev().fold(0.0, |d, c| d * self + c)
     }
 }
 

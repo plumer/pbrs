@@ -192,7 +192,7 @@ pub fn cos_sample_hemisphere(uv: (f32, f32)) -> Omega {
 }
 
 pub fn cos_hemisphere_pdf(w: Omega) -> f32 {
-    w.cos_theta() * std::f32::consts::FRAC_1_PI
+    w.cos_theta() * FRAC_1_PI
 }
 
 /// Describes the ray scattering behaviors in a probabilistic way. All vectors involved are in the
@@ -221,8 +221,6 @@ pub fn cos_hemisphere_pdf(w: Omega) -> f32 {
 /// Useful implementations:
 /// - `MatteReflection`, `MicrofacetReflection`
 pub trait BxDF {
-    const FRAC_1_PI: f32 = std::f32::consts::FRAC_1_PI;
-
     /// Evaluates the BSDF function at given in-out angles. Note that specular BSDFs always return
     /// 0. Use [`sample()`] in those cases instead.
     fn eval(&self, wo: Omega, wi: Omega) -> Color;
@@ -450,9 +448,7 @@ impl BxDF for DiffuseReflect {
                 } else {
                     (sin_theta_i, sin_theta_o / abs_cos_theta_o)
                 };
-                self.albedo
-                    * std::f32::consts::FRAC_1_PI
-                    * (coeff_a + coeff_b * delta_cos_phi * sin_alpha * tan_beta)
+                self.albedo * FRAC_1_PI * (coeff_a + coeff_b * delta_cos_phi * sin_alpha * tan_beta)
             }
         }
     }

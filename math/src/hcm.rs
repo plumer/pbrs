@@ -116,6 +116,8 @@ impl Vec3 {
     pub fn is_zero(self) -> bool {
         self.norm_squared() == 0.0
     }
+
+    /// Returns a normalized (unit-length) `self` vector. Panics if the vector is all-zero.
     pub fn hat(self) -> Vec3 {
         if self.is_zero() {
             panic!("normalizing zero vector");

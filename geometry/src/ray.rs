@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter, Result};
 use math::hcm;
 
 /// Represents a ray:
-///
-///     origin + t * direction
+/// 
+///   origin + t * direction
 ///
 /// where t is positive.
 ///
