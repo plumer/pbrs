@@ -1,3 +1,5 @@
+use std::{iter::Sum, ops::{Add, Div, Mul, Sub}};
+
 #[derive(Debug, Clone, Copy)]
 pub struct Color {
     pub r: f32,
@@ -54,6 +56,11 @@ impl Color {
             saturate_cast_u8(self.b),
         ]
     }
+
+    /// Component-wise (per RGB channel) division.
+    pub fn cw_div(&self, other: &Self) -> Self {
+        Color::new(self.r / other.r, self.g / other.g, self.b / other.b)
+    }
 }
 
 impl std::ops::Add for Color {
@@ -106,5 +113,98 @@ impl std::fmt::LowerHex for Color {
             (self.g * 255.0) as u8,
             (self.b * 255.0) as u8
         )
+    }
+}
+
+impl Sum for Color {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Color::black(), |c0, c1| c0 + c1)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct XYZ {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl XYZ {
+    pub fn new(x: f32, y: f32, z:f32) -> Self {
+        Self {x, y, z}
+    }
+    pub fn all(x: f32) -> Self {
+        Self::new(x, x, x)
+    }
+    pub fn zero() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
+    }
+
+    pub fn from_color(c: Color) -> Self {
+        Self::from_rgb(c.r, c.g, c.b)
+    }
+
+    pub fn from_rgb(r: f32, g: f32, b: f32) -> Self {
+        Self {
+            x: 0.41245330 * r + 0.35757984 * g + 0.18042262 * b,
+            y: 0.21267127 * r + 0.71515972 * g + 0.07216883 * b,
+            z: 0.01933384 * r + 0.11919363 * g + 0.95022693 * b,
+        }
+    }
+    pub fn is_black(&self) -> bool {
+        self.x <= 0.0 && self.y <= 0.0 && self.z <= 0.0
+    }
+    pub fn to_color(&self) -> Color {
+        Color::from_xyz(self.x, self.y, self.z)
+    }
+    
+    pub fn sqrt(self) -> Self {
+        Self::new(self.x.sqrt(), self.y.sqrt(), self.z.sqrt())
+    }
+}
+
+impl Add for XYZ {
+    type Output = XYZ;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+    }
+}
+
+impl Sub for XYZ {
+    type Output = XYZ;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+    }
+}
+
+impl Mul for XYZ {
+    type Output = XYZ;
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self::new(self.x * rhs.x, self.y * rhs.y, self.z * rhs.z)
+    }
+}
+
+impl Div for XYZ {
+    type Output = XYZ;
+    fn div(self, rhs: Self) -> Self::Output {
+        Self::new(self.x / rhs.x, self.y / rhs.y, self.z / rhs.z)
+    }
+}
+
+impl Mul<f32> for XYZ {
+    type Output = XYZ;
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self::new(self.x * rhs, self.y * rhs, self.z * rhs)
+    }
+}
+
+impl Mul<XYZ> for f32 {
+    type Output = XYZ;
+    fn mul(self, rhs: XYZ) -> Self::Output {
+        rhs * self
     }
 }
