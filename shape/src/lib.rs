@@ -6,8 +6,8 @@ pub use simple::*;
 
 use std::fmt::{Display, Formatter, Result};
 
-use geometry::ray::Ray;
 use geometry::bvh::BBox;
+use geometry::ray::Ray;
 use math::hcm::{Point3, Vec3};
 
 #[derive(Debug, Clone, Copy)]
@@ -16,8 +16,7 @@ pub struct Interaction {
     pub ray_t: f32,
     pub uv: (f32, f32),
     pub normal: Vec3,
-    // pub _albedo: Vec3,
-    // pub dpdu: Vec3,
+    pub dpdu: Vec3,
     // pub dpdv: Vec3
 }
 
@@ -28,7 +27,11 @@ impl Interaction {
             ray_t,
             uv,
             normal,
+            dpdu: Vec3::zero(),
         }
+    }
+    pub fn with_dpdu(self, dpdu: Vec3) -> Interaction {
+        Self { dpdu, ..self }
     }
 }
 

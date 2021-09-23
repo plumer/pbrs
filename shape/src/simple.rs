@@ -169,28 +169,37 @@ impl Shape for Sphere {
             (Some(low), _) => Some(low), // It doesn't matter if the greater one is valid or not.
         };
         // print!("{:?}", best_t);
-        match best_t {
-            None => None,
-            Some(ray_t) => {
-                let pos = origin + dir * ray_t;
-                let normal = (pos - self.center).hat();
-                // When ray intersects from inside, the reflected ray should be spawn from inside.
-                let pos = self.center + normal * self.radius * 1.00001;
+        let ray_t = best_t?;
 
-                // Computes UV coordinate of the pos on the sphere.
-                let theta = normal.y.acos();
-                let phi = normal.z.atan2(normal.x) + PI;
-                let uv = (phi / (2.0 * PI), theta / PI);
+        let pos = origin + dir * ray_t;
+        let normal = (pos - self.center).hat();
+        // When ray intersects from inside, the reflected ray should be spawn from inside.
+        let pos = self.center + normal * self.radius * 1.00001;
 
-                assert!(
-                    pos.distance_to(self.center) >= self.radius,
-                    "{} >= {}",
-                    pos.distance_to(self.center),
-                    self.radius
-                );
-                Some(Interaction::new(pos, ray_t, uv, normal))
-            }
-        }
+        // Computes UV coordinate of the pos on the sphere.
+        let theta = normal.y.acos();
+        let phi = normal.z.atan2(normal.x) + PI;
+        let uv = (phi / (2.0 * PI), theta / PI);
+
+        // For an intersection at (x, y, z), the projection upon xy-plane is (x, y), 
+        // or in complex number: x + yi.
+        // multiply by i (rotates 90-degrees from x to y) equals xi - y, so dpdu is (-y, x).
+        // In case both x and y are zero, use (1, 0, 0).
+        let dpdu = Vec3::new(-pos.y, pos.x, 0.0);
+        let dpdu = if dpdu.is_zero() {
+            Vec3::xbase()
+        } else {
+            dpdu.hat()
+        };
+
+        assert!(
+            pos.distance_to(self.center) >= self.radius,
+            "{} >= {}",
+            pos.distance_to(self.center),
+            self.radius
+        );
+
+        Some(Interaction::new(pos, ray_t, uv, normal).with_dpdu(dpdu))
     }
 }
 
@@ -383,7 +392,7 @@ impl Shape for IsolatedTriangle {
     }
 }
 
-    #[rustfmt::skip]
+#[rustfmt::skip]
 
 pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option<Interaction> {
     let normal = (p0 - p1).cross(p2 - p1);
