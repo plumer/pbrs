@@ -48,7 +48,7 @@ fn fresnel_test() {
 fn specular_refl_test() {
     let glass = bxdf::Specular::dielectric(Color::white(), 1.0, 2.0);
 
-    let (bsdf_value, wi, pdf) = glass.scatter(Omega::new(0.8, 0.0, 0.6), (0.0, 0.0));
+    let (bsdf_value, wi, pdf) = glass.sample(Omega::new(0.8, 0.0, 0.6), (0.0, 0.0));
     assert_eq!(wi.x(), -0.8);
     assert_eq!(wi.y(), -0.0);
     assert_eq!(wi.z(), 0.6);

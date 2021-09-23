@@ -306,8 +306,6 @@ pub struct Specular {
     albedo: Color,
     intrusion: IntrusionType,
 }
-/// BSDF representing dielectric material (e.g., glass). Ray scattering is both reflective and
-/// transmissive.
 impl Specular {
     pub fn mirror(albedo: Color) -> Self {
         Self {
@@ -317,6 +315,8 @@ impl Specular {
         }
     }
 
+    /// BSDF representing dielectric material (e.g., glass). Ray scattering is both reflective and
+    /// transmissive.
     pub fn dielectric(albedo: Color, eta_outer: f32, eta_inner: f32) -> Self {
         Self {
             fresnel: Fresnel::dielectric(eta_outer, eta_inner),
@@ -325,7 +325,39 @@ impl Specular {
         }
     }
 
-    pub fn scatter(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
+    fn reflect(&self, wo: Omega) -> (Omega, Color) {
+        let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
+        let fr_refl = self.fresnel.eval(wi.cos_theta());
+        (wi, fr_refl * self.albedo / wi.cos_theta().abs())
+    }
+
+    fn refract(&self, wo: Omega, eta_front: f32, eta_back: f32) -> (Omega, Color) {
+        // Computes the normal for computing the refraction. It is flipped to the side forming an
+        // acute angle with `wo`.
+        let (eta_i, eta_t, normal) = if wo.cos_theta() > 0.0 {
+            (eta_front, eta_back, Vec3::zbase())
+        } else {
+            (eta_back, eta_front, -Vec3::zbase())
+        };
+
+        match Omega::refract(Omega(normal), wo, eta_i / eta_t) {
+            RefractResult::FullReflect(_) => (Omega::new(0.0, 0.0, 0.0), Color::black()),
+            RefractResult::Transmit(wi) => {
+                // Transmissivity = 1 - reflectivity
+                let f_tr = 1.0 - self.fresnel.refl_coeff(wi.cos_theta());
+                // if transport_mode is radiance: f_t *= (eta_i / eta_t)^2
+                (wi, (f_tr / wi.cos_theta().abs()) * self.albedo)
+            }
+        }
+    }
+}
+
+impl BxDF for Specular {
+    fn eval(&self, _wo: Omega, _wi: Omega) -> Color {
+        return Color::black();
+    }
+
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
         use Fresnel::*;
         use IntrusionType::*;
         match (&self.intrusion, self.fresnel) {
