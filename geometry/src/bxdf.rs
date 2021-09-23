@@ -3,7 +3,7 @@ use std::f32::consts::FRAC_1_PI;
 use crate::microfacet::{self as mf};
 use math::float::Float;
 use math::hcm::Vec3;
-use radiometry::color::Color;
+use radiometry::color::{Color, XYZ};
 
 /// A wrapper of `Vec3` representing unit-length vectors.
 ///
@@ -62,7 +62,6 @@ pub enum IntrusionType {
     Transmission,
     Hybrid,
 }
-
 
 impl Omega {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
@@ -251,7 +250,7 @@ pub enum Fresnel {
     Nop,
     /// Fresnel reflectivity ratio computation for dielectric materials (e.g., glass).
     Dielectric { eta_front: f32, eta_back: f32 },
-    // TODO(zixun): Conductor(f32, f32)
+    Conductor {eta_i: XYZ, eta_t: XYZ, k: XYZ}
 }
 
 impl Fresnel {
@@ -294,6 +293,55 @@ impl Fresnel {
                     (r_parallel.powi(2) + r_perpendicular.powi(2)) * 0.5
                 };
                 ratio
+            }
+            Self::Conductor { .. } => panic!(),
+        }
+    }
+
+    pub fn eval(&self, cos_theta_i: f32) -> Color {
+        match self {
+            Self::Nop | Self::Dielectric { .. } => Color::gray(self.refl_coeff(cos_theta_i)),
+            /*    cosThetaI = Clamp(cosThetaI, -1, 1);
+            Spectrum eta = etat / etai;
+            Spectrum etak = k / etai;
+
+            Float cosThetaI2 = cosThetaI * cosThetaI;
+            Float sinThetaI2 = 1. - cosThetaI2;
+            Spectrum eta2 = eta * eta;
+            Spectrum etak2 = etak * etak;
+
+            Spectrum t0 = eta2 - etak2 - sinThetaI2;
+            Spectrum a2plusb2 = Sqrt(t0 * t0 + 4 * eta2 * etak2);
+            Spectrum t1 = a2plusb2 + cosThetaI2;
+            Spectrum a = Sqrt(0.5f * (a2plusb2 + t0));
+            Spectrum t2 = (Float)2 * cosThetaI * a;
+            Spectrum Rs = (t1 - t2) / (t1 + t2);
+
+            Spectrum t3 = cosThetaI2 * a2plusb2 + sinThetaI2 * sinThetaI2;
+            Spectrum t4 = t2 * sinThetaI2;
+            Spectrum Rp = Rs * (t3 - t4) / (t3 + t4);
+
+            return 0.5 * (Rp + Rs); */
+            Self::Conductor { eta_i, eta_t, k } => {
+                let eta = *eta_t / *eta_i;
+                let eta2 = eta * eta;
+                let etak = *k / *eta_i;
+                let etak2 = etak * etak;
+                let cos2_theta_i = cos_theta_i.clamp(-1.0, 1.0).powi(2);
+                let sin2_theta_i = 1.0 - cos2_theta_i;
+
+                let t0 = eta2 - etak2 - XYZ::all(sin2_theta_i);
+                let a2_plus_b2 = (t0 * t0 + 4.0 * eta2 * etak2).sqrt();
+                let t1 = a2_plus_b2 + XYZ::all(cos2_theta_i);
+                let a = ((a2_plus_b2 + t0) * 0.5).sqrt();
+                let t2 = 2.0 * a * cos_theta_i;
+                let ratio_s = (t1 - t2) / (t1 + t2);
+
+                let t3 = cos2_theta_i * a2_plus_b2 + XYZ::all(sin2_theta_i.powi(2));
+                let t4 = t2 * sin2_theta_i;
+                let ratio_p = ratio_s * (t3 - t4) / (t3 + t4);
+
+                ((ratio_s + ratio_p) * 0.5).to_color()
             }
         }
     }
@@ -493,11 +541,11 @@ impl BxDF for MicrofacetReflection {
             return Color::black();
         }
         let wh = wh.unwrap().face_forward(Omega::normal());
-        let refl_coeff = self.fresnel.refl_coeff(wi.dot(wh));
+        let refl = self.fresnel.eval(wi.dot(wh));
         println!(
             "fresnel cos_theta = {}, refl coeff = {}",
             wi.dot(wh),
-            refl_coeff
+            refl
         );
         self.albedo * self.distrib.d(wh) * self.distrib.g(wo, wi) //* refl_coeff
                                                                   // / (4.0 * cos_theta_o * cos_theta_i)
