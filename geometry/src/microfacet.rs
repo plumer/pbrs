@@ -13,6 +13,14 @@ pub enum MicrofacetDistrib {
 }
 
 impl MicrofacetDistrib {
+    pub fn roughness_to_alpha(roughness: f32) -> f32 {
+        let x = roughness.max(1e-3).ln();
+        1.62142
+            + 0.819955 * x
+            + 0.1734 * x * x
+            + 0.0171201 * x * x * x
+            + 0.000640711 * x * x * x * x
+    }
     pub fn beckmann(alpha_x: f32, alpha_y: f32) -> Self {
         Self::Beckmann { alpha_x, alpha_y }
     }
