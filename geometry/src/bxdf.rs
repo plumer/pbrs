@@ -36,6 +36,26 @@ pub enum Prob {
     Mass(f32),
 }
 
+impl Prob {
+    pub fn is_density(&self) -> bool {
+        matches!(self, Self::Density(_))
+    }
+    pub fn density(&self) -> f32 {
+        if let Self::Density(pdf) = &self {
+            *pdf
+        } else {
+            0.0
+        }
+    }
+    pub fn mass(&self) -> f32 {
+        if let Self::Mass(pmf) = self {
+            *pmf
+        } else {
+            0.0
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum IntrusionType {
     Reflection,
@@ -215,14 +235,14 @@ pub trait BxDF {
     /// contribution to the monte-carlo integration process.
     fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob);
 
-    fn pdf(&self, wo: Omega, wi: Omega) -> f32;
+    fn prob(&self, wo: Omega, wi: Omega) -> Prob;
 
     /// A default implementation of the `sample` method. Uses cosine-hemisphere distribution
     /// to map the 2D random variable, and uses `pdf` and `eval` to compute the return values.
     fn cosine_hemisphere_sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
         assert!(wo.cos_theta() >= 0.0);
         let wi = cos_sample_hemisphere(rnd2);
-        (self.eval(wo, wi), wi, Prob::Density(self.pdf(wo, wi)))
+        (self.eval(wo, wi), wi, self.prob(wo, wi))
     }
 }
 
@@ -346,30 +366,8 @@ impl Specular {
         }
     }
 
-    fn reflect(&self, wo: Omega) -> (Omega, Color) {
-        let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
-        let fr_refl = self.fresnel.refl_coeff(wi.cos_theta());
-        (wi, fr_refl * self.albedo / wi.cos_theta().abs())
-    }
-
-    fn refract(&self, wo: Omega, eta_front: f32, eta_back: f32) -> (Omega, Color) {
-        // Computes the normal for computing the refraction. It is flipped to the side forming an
-        // acute angle with `wo`.
-        let (eta_i, eta_t, normal) = if wo.cos_theta() > 0.0 {
-            (eta_front, eta_back, Vec3::zbase())
-        } else {
-            (eta_back, eta_front, -Vec3::zbase())
-        };
-
-        match Omega::refract(Omega(normal), wo, eta_i / eta_t) {
-            RefractResult::FullReflect(_) => (Omega::new(0.0, 0.0, 0.0), Color::black()),
-            RefractResult::Transmit(wi) => {
-                // Transmissivity = 1 - reflectivity
-                let f_tr = 1.0 - self.fresnel.refl_coeff(wi.cos_theta());
-                // if transport_mode is radiance: f_t *= (eta_i / eta_t)^2
-                (wi, (f_tr / wi.cos_theta().abs()) * self.albedo)
-            }
-        }
+    fn prob(&self, _wo: Omega, _wi: Omega) -> Prob {
+        Prob::Mass(0.0)
     }
 }
 
@@ -429,14 +427,14 @@ impl BxDF for DiffuseReflect {
     fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
         assert!(wo.cos_theta() >= 0.0);
         let wi = cos_sample_hemisphere(rnd2);
-        (self.eval(wo, wi), wi, Prob::Density(self.pdf(wo, wi)))
+        (self.eval(wo, wi), wi, self.prob(wo, wi))
     }
 
-    fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
+    fn prob(&self, wo: Omega, wi: Omega) -> Prob {
         if wo.z() * wi.z() >= 0.0 {
-            cos_hemisphere_pdf(wi)
+            Prob::Density(cos_hemisphere_pdf(wi))
         } else {
-            0.0
+            Prob::Density(0.0)
         }
     }
 }
@@ -497,14 +495,14 @@ impl BxDF for MicrofacetReflection {
         (self.eval(wo, wi), wi, Prob::Density(pdf))
     }
 
-    fn pdf(&self, wo: Omega, wi: Omega) -> f32 {
+    fn prob(&self, wo: Omega, wi: Omega) -> Prob {
         if !Omega::same_hemisphere(wo, wi) {
-            return 0.0;
+            return Prob::Density(0.0);
         }
         if let Some(wh) = Omega::bisector(wo, wi) {
-            self.distrib.pdf(wo, wh) / (4.0 * wo.dot(wh))
+            Prob::Density(self.distrib.pdf(wo, wh) / (4.0 * wo.dot(wh)))
         } else {
-            0.0
+            Prob::Density(0.0)
         }
     }
 }

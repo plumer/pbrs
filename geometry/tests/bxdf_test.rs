@@ -1,4 +1,4 @@
-use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega};
+use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega, Prob};
 use geometry::microfacet::MicrofacetDistrib;
 use math::float::linspace;
 use math::hcm::Vec3;
@@ -112,9 +112,13 @@ fn riemann_integral_pdf<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
         for phi in phis.iter().copied() {
             let (sin_theta, cos_theta) = theta.sin_cos();
             let wi = math::hcm::spherical_direction(sin_theta, cos_theta, math::hcm::Radian(phi));
-            let pdf = bsdf.pdf(Omega::new(0.48, 0.64, 0.6), Omega(wi));
+            let pr = bsdf.prob(Omega::new(0.48, 0.64, 0.6), Omega(wi));
 
-            pdf_integral += pdf * sin_theta * d_theta * d_phi;
+            if let Prob::Density(pdf) = pr {
+                pdf_integral += pdf * sin_theta * d_theta * d_phi;
+            } else {
+                panic!("bxdf returns a prob-mass valud");
+            }
         }
     }
     pdf_integral
