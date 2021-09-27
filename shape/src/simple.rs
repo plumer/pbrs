@@ -181,7 +181,7 @@ impl Shape for Sphere {
         let phi = normal.z.atan2(normal.x) + PI;
         let uv = (phi / (2.0 * PI), theta / PI);
 
-        // For an intersection at (x, y, z), the projection upon xy-plane is (x, y), 
+        // For an intersection at (x, y, z), the projection upon xy-plane is (x, y),
         // or in complex number: x + yi.
         // multiply by i (rotates 90-degrees from x to y) equals xi - y, so dpdu is (-y, x).
         // In case both x and y are zero, use (1, 0, 0).
@@ -231,7 +231,7 @@ impl Shape for QuadXY {
             let pos = Point3::new(x, y, self.z);
             let normal = Vec3::zbase() * -r.dir.z.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal))
+            Some(Interaction::new(pos, t, (u, v), normal).with_dpdu(Vec3::xbase()))
         } else {
             None
         }
@@ -264,7 +264,7 @@ impl Shape for QuadXZ {
             let pos = Point3::new(x, self.y, z);
             let normal = Vec3::ybase() * -r.dir.y.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal))
+            Some(Interaction::new(pos, t, (u, v), normal).with_dpdu(Vec3::xbase()))
         } else {
             None
         }
@@ -297,7 +297,7 @@ impl Shape for QuadYZ {
             let pos = Point3::new(self.x, y, z);
             let normal = Vec3::xbase() * -r.dir.x.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal))
+            Some(Interaction::new(pos, t, (u, v), normal).with_dpdu(Vec3::ybase()))
         } else {
             None
         }
@@ -376,7 +376,10 @@ impl Shape for Cuboid {
         hit_pos[axis] = axis_value;
         let mut normal = Vec3::zero();
         normal[axis] = r.dir[axis].signum() * -1.0;
-        Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal))
+        let mut tangent = Vec3::zero();
+        let tangent_axis = (axis + 1) % 3;
+        tangent[tangent_axis] = 1.0;
+        Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal).with_dpdu(tangent))
     }
 }
 
