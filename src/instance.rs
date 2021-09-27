@@ -248,6 +248,7 @@ impl Instance {
                     self.shape.summary(),
                     ray
                 );
+                assert!(hit.has_valid_frame(), "shape = {}", self.shape.summary());
                 Some((self.transform.apply(hit), &self.mtl))
             }
         }
@@ -358,9 +359,10 @@ impl Transform<BBox> for AffineTransform {
 }
 impl Transform<Interaction> for AffineTransform {
     fn apply(&self, i: Interaction) -> Interaction {
-        // Note that the transform is rigid-body, so transforming the normal is straightforward.
         assert!(!i.pos.has_nan());
-        Interaction::new(self.apply(i.pos), i.ray_t, i.uv, self.apply(i.normal))
+        let inv_transpose = self.inverse.transpose();
+        Interaction::new(self.apply(i.pos), i.ray_t, i.uv, inv_transpose * i.normal)
+            .with_dpdu(self.apply(i.tangent()))
     }
 }
 
