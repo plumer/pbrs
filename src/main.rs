@@ -457,6 +457,45 @@ fn scene_cornell_box() -> Scene {
     (tlas::build_bvh(instances), cam, dark_room)
 }
 
+fn scene_plates() -> Scene {
+    let mut instances = vec![];
+    let r = 20.0;
+    // Builds the background.
+    let wall = shape::QuadXY::from_raw((-r, r), (0.0, r), r);
+    let floor = shape::QuadXZ::from_raw((-r, r), (0.0, r), 0.0);
+    let matte = mtl::Lambertian::solid(Color::gray(0.4));
+
+    let wall_instance = Instance::from_raw(wall, matte.clone());
+    let floor_instance = Instance::from_raw(floor, matte);
+    instances.push(wall_instance);
+    instances.push(floor_instance);
+
+    // axis: y = 10, z = 0
+    let (angles, spacing) = float::linspace((-PI * 0.4, -PI * 0.05), 4);
+    let delta_angle = spacing * 0.65;
+    let (left, right) = (-r * 0.68, r * 0.68);
+    let half_width = delta_angle * r * 0.5;
+    for angle in angles.iter() {
+        // let glossy = mtl::Glossy::new(Color::gray(0.5), angle * -1.0);
+        let glossy = mtl::Lambertian::solid(Color::rgb(80, 180, 50));
+        let plate = QuadXZ::from_raw((left, right), (-half_width, half_width), 4.0);
+        let trans = instance::identity()
+            .translate(Vec3::new(0.0, -r, 0.0))
+            .rotate_x(hcm::Radian(-angle))
+            .translate(Vec3::new(0.0, r * 0.8, 0.0));
+        instances.push(Instance::from_raw(plate, glossy).with_transform(trans));
+    }
+    let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
+
+    let camera = camera::Camera::new((800, 800), hcm::Radian(PI * 0.19)).looking_at(
+        Point3::new(0.0, r * 0.9, -r * 2.0),
+        Point3::new(0.0, r * 0.2, r * 2.0),
+        Vec3::ybase(),
+    );
+
+    (tlas::build_bvh(instances), camera, blue_sky)
+}
+
 #[allow(dead_code)]
 fn scene_everything() -> Scene {
     let ground = Arc::new(mtl::Lambertian::solid(Color::new(0.48, 0.83, 0.53)));
