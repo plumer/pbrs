@@ -437,10 +437,10 @@ fn scene_cornell_box() -> Scene {
         .zip(mtl_seq.into_iter())
         .map(|(shape, mtl)| Box::new(Instance::new(shape, mtl)))
         .collect();
-    instances[6].transform = instance::InstanceTransform::identity()
+    instances[6].transform = instance::identity()
         .rotate_y(hcm::Degree(15.0).to_radian())
         .translate(Vec3::new(265.0, 0.0, 105.0));
-    instances[7].transform = instance::InstanceTransform::identity()
+    instances[7].transform = instance::identity()
         .rotate_y(hcm::Degree(-18.0).to_radian())
         .translate(Vec3::new(130.0, 0.0, 225.0));
 
@@ -517,7 +517,7 @@ fn scene_everything() -> Scene {
         .map(|_| Sphere::from_raw((rand_165(), rand_165(), rand_165()), 10.0))
         .collect();
     let ping_pong_balls = shape::IsoBlas::build(ping_pong_balls);
-    let pp_trans = instance::InstanceTransform::identity()
+    let pp_trans = instance::identity()
         .rotate_y(hcm::Degree(15.0).to_radian())
         .translate(Vec3::new(-100.0, 270.0, 395.0));
     instances.push(Instance::from_raw(ping_pong_balls, matte_white).with_transform(pp_trans));

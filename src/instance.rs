@@ -18,10 +18,6 @@ pub struct AffineTransform {
     inverse: Mat4,
 }
 
-pub fn identity() -> RigidBodyTransform {
-    RigidBodyTransform::identity()
-}
-
 pub trait Transform<T> {
     fn apply(&self, x: T) -> T;
 }
@@ -197,6 +193,9 @@ impl Mul for AffineTransform {
 
 // use RigidBodyTransform as InstanceTransform;
 pub use AffineTransform as InstanceTransform;
+pub fn identity() -> InstanceTransform {
+    InstanceTransform::identity()
+}
 
 #[derive(Clone)]
 pub struct Instance {
