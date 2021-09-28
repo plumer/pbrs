@@ -1,36 +1,37 @@
+mod cli_options;
 mod instance;
-mod tlas;
 mod light;
 mod material;
 mod scene_loader;
 mod texture;
+mod tlas;
 
 use glog::Flags;
 use log::*;
+use std::f32::consts::PI;
 use std::fs::File;
 use std::io::{self, BufWriter};
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use tlas::BvhNode;
-use radiometry::color::Color;
 use instance::Instance;
 use io::Write;
 use material as mtl;
-use math::assert_le;
 use math::hcm::{self, Point3, Vec3};
+use math::{assert_le, float};
+use radiometry::color::Color;
 use texture as tex;
+use tlas::BvhNode;
 
-use geometry::{bvh, ray, camera};
-use shape::{self, Sphere};
+use geometry::{bvh, camera, ray};
 use rayon::prelude::*;
+use shape::{self, QuadXZ, Sphere};
 
 use crate::{camera::Camera, texture::Texture};
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 2;
+const MSAA: usize = 4; // 275R: 12x12 = 63.6s, 24x24=252.2s
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -47,8 +48,7 @@ fn rand_f32() -> f32 {
 pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
     assert_eq!(data.len(), (width * height * 3) as usize);
 
-    let path = Path::new(file_name);
-    let file = File::create(path).unwrap();
+    let file = File::create(file_name).unwrap();
     let ref mut w = BufWriter::new(file);
 
     let mut encoder = png::Encoder::new(w, width, height);
@@ -69,10 +69,9 @@ fn main() {
         })
         .unwrap();
 
-    // Prepares the scene and environmental lighting.
     let options = cli_options::parse_args(std::env::args().collect::<Vec<_>>());
     if let Err(message) = &options {
-        eprintln!("Can't parse command-line options: {}", message,);
+        error!("Can't parse command-line options: {}", message);
     }
     let options = options.unwrap();
 
@@ -86,9 +85,10 @@ fn main() {
             Some("quad_light") => scene_quad_light(),
             Some("quad") => scene_quad(),
             Some("cornell_box") => scene_cornell_box(),
+            Some("plates") => scene_plates(),
             Some("everything") => scene_everything(),
             None | Some(_) => {
-                eprintln!("No scene file or name specified. Abort.");
+                error!("No scene file or name specified. Abort.");
                 eprintln!("Available scenes: 125_spheres | two_perlin_spheres | earth | quad_light \
                            | quad | cornell_box | everything");
                 std::process::exit(1);
@@ -96,10 +96,7 @@ fn main() {
         }
     };
 
-    // load_pbrt_scene("assets/spheres.pbrt");
-    // scene_125_spheres();
-
-    println!(
+    info!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
         bvh.height()
