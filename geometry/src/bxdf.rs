@@ -31,6 +31,7 @@ pub enum RefractResult {
     Transmit(Omega),
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Prob {
     Density(f32),
     Mass(f32),

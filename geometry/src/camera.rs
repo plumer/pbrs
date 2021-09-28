@@ -1,5 +1,5 @@
-use math::hcm;
 use crate::ray;
+use math::hcm;
 
 /// Left-handed coordinate system camera: x rightward, y upward, z forward.
 pub struct Camera {
@@ -41,6 +41,18 @@ impl Camera {
 
         self.orientation = hcm::Mat3::from_vectors(right, up, forward);
         self.center = from;
+    }
+
+    pub fn looking_at(self, from: hcm::Point3, target: hcm::Point3, up: hcm::Vec3) -> Self {
+        let forward = (target - from).hat(); // new z-axis
+        let right = (up.cross(forward)).hat(); // new x-axis, equals to cross(y, z)
+        let up = forward.cross(right); // adjusted y-axis, equals to cross(z, x)
+
+        Self {
+            orientation: hcm::Mat3::from_vectors(right, up, forward),
+            center: from,
+            ..self
+        }
     }
 
     pub fn shoot_ray(&self, row: u32, col: u32, (dx, dy): (f32, f32)) -> Option<ray::Ray> {
