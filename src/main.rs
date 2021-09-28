@@ -69,17 +69,31 @@ fn main() {
         })
         .unwrap();
 
-    let half_right_angle = hcm::Degree(45.0);
-    info!("{} is {} ", half_right_angle, half_right_angle.to_radian());
-
     // Prepares the scene and environmental lighting.
-    let mut args_iter = std::env::args();
-    args_iter.next();
-    let pbrs_input_path = args_iter.next();
-    let (bvh, camera, env_light) = if let Some(pbrs_file_path) = pbrs_input_path {
+    let options = cli_options::parse_args(std::env::args().collect::<Vec<_>>());
+    if let Err(message) = &options {
+        eprintln!("Can't parse command-line options: {}", message,);
+    }
+    let options = options.unwrap();
+
+    let (bvh, camera, env_light) = if let Some(pbrs_file_path) = options.pbrt_file {
         load_pbrt_scene(&pbrs_file_path)
     } else {
-        load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt")
+        match options.scene_name.as_ref().map(|n| n.as_str()) {
+            Some("125_spheres") => scene_125_spheres(),
+            Some("two_perlin_spheres") => scene_two_perlin_spheres(),
+            Some("earth") => scene_earth(),
+            Some("quad_light") => scene_quad_light(),
+            Some("quad") => scene_quad(),
+            Some("cornell_box") => scene_cornell_box(),
+            Some("everything") => scene_everything(),
+            None | Some(_) => {
+                eprintln!("No scene file or name specified. Abort.");
+                eprintln!("Available scenes: 125_spheres | two_perlin_spheres | earth | quad_light \
+                           | quad | cornell_box | everything");
+                std::process::exit(1);
+            }
+        }
     };
 
     // load_pbrt_scene("assets/spheres.pbrt");
@@ -93,37 +107,45 @@ fn main() {
     let (width, height) = camera.resolution();
 
     let start_render = Instant::now();
+    let render_one_row = |row| {
+        if (row % 10) == 0 {
+            print!("{} ", row);
+            io::stdout().flush().unwrap();
+        }
+        let mut colors_for_row = vec![];
+        for col in 0..width {
+            let mut color_sum = Color::black();
 
-    let image_map: Vec<_> = (0..height)
-        .into_par_iter()
-        // .into_iter()
-        .map(|row| {
-            if (row % 10) == 0 {
-                print!("{} ", row);
-                io::stdout().flush().unwrap();
+            for i in 0..MSAA * MSAA {
+                let jitter = (
+                    ((i / MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
+                    ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
+                );
+                // let jitter = (rand::random::<f32>(), rand::random::<f32>());
+                let ray = camera.shoot_ray(row, col, jitter).unwrap();
+                // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
+                color_sum = color_sum + path_integrator(&bvh, ray, 5, env_light);
             }
-            let mut colors_for_row = vec![];
-            for col in 0..width {
-                let mut color_sum = Color::black();
 
-                for i in 0..MSAA * MSAA {
-                    let jitter = (
-                        ((i / MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
-                        ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
-                    );
-                    // let jitter = (rand::random::<f32>(), rand::random::<f32>());
-                    let ray = camera.shoot_ray(row, col, jitter).unwrap();
-                    // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
-                    color_sum = color_sum + path_integrator(&bvh, ray, 5, env_light);
-                }
+            let color = color_sum / (SAMPLES_PER_PIXEL as f32);
+            colors_for_row.push(color);
+        }
+        colors_for_row
+    };
 
-                let color = color_sum / (SAMPLES_PER_PIXEL as f32);
-                colors_for_row.push(color);
-            }
-            colors_for_row
-        })
-        .flatten()
-        .collect();
+    let image_map: Vec<_> = if options.use_multi_thread {
+        (0..height)
+            .into_par_iter()
+            .map(render_one_row)
+            .flatten()
+            .collect()
+    } else {
+        (0..height)
+            .into_iter()
+            .map(render_one_row)
+            .flatten()
+            .collect()
+    };
 
     let image_data: Vec<_> = image_map
         .iter()
@@ -133,7 +155,7 @@ fn main() {
 
     let whole_render_time = Instant::now().duration_since(start_render);
 
-    println!("whole render time = {} us", whole_render_time.as_micros());
+    println!("whole render time = {:?}", whole_render_time);
 
     write_image(r"output.png", &image_data, camera.resolution());
 }
@@ -395,7 +417,6 @@ fn scene_quad() -> Scene {
 
 #[allow(dead_code)]
 fn scene_cornell_box() -> Scene {
-
     let red = mtl::Lambertian::solid(Color::new(0.65, 0.05, 0.05));
     let white = mtl::Lambertian::solid(Color::gray(0.73));
     let green = mtl::Lambertian::solid(Color::new(0.12, 0.45, 0.15));
