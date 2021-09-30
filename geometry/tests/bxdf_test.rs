@@ -1,6 +1,7 @@
-use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega, Prob};
+use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega};
 use geometry::microfacet::MicrofacetDistrib;
 use math::float::linspace;
+use math::prob::Prob;
 use math::hcm::Vec3;
 use radiometry::color::Color;
 
@@ -52,7 +53,7 @@ fn specular_refl_test() {
     assert_eq!(wi.x(), -0.8);
     assert_eq!(wi.y(), -0.0);
     assert_eq!(wi.z(), 0.6);
-    assert!(matches!(pdf, bxdf::Prob::Mass(_)));
+    assert!(matches!(pdf, Prob::Mass(_)));
     println!("bsdf value = {}", bsdf_value);
 }
 
@@ -136,7 +137,7 @@ fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {
                 let wo = Omega::normalize(0.2, -0.1, 0.9);
                 let (bsdf_value, wi, pr) = bsdf.sample(wo, (u, v));
                 assert!(!wi.0.has_nan());
-                if let bxdf::Prob::Density(pdf) = pr {
+                if let Prob::Density(pdf) = pr {
                     // println!("pdf = {}", pdf);
                     if pdf == 0.0 {
                         Color::black()

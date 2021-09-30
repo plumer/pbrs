@@ -1,14 +1,10 @@
 use std::f32::consts;
 
 use math::hcm;
+use math::prob::Prob;
 use radiometry::color::Color;
 use crate::ray::Ray;
 use crate::shape::{self, Interaction, Shape};
-
-pub enum HemiPdf {
-    Delta,
-    Regular(f32),
-}
 
 fn spawn_ray_to(p0: &Interaction, p1: hcm::Point3) -> Ray {
     Ray::new(p0.pos, p1 - p0.pos)
@@ -22,7 +18,7 @@ pub trait Light {
         &self,
         target: &Interaction,
         u: (f32, f32),
-    ) -> (Color, hcm::Vec3, HemiPdf, Ray);
+    ) -> (Color, hcm::Vec3, Prob, Ray);
 
     fn power(&self) -> Color;
 }
@@ -46,11 +42,11 @@ impl Light for PointLight {
         &self,
         target: &Interaction,
         _u: (f32, f32),
-    ) -> (Color, hcm::Vec3, HemiPdf, Ray) {
+    ) -> (Color, hcm::Vec3, Prob, Ray) {
         let radiance = self.intensity / self.position.squared_distance_to(target.pos);
         let wi = (self.position - target.pos).hat();
         let visibility_ray = spawn_ray_to(target, self.position);
-        (radiance, wi, HemiPdf::Delta, visibility_ray)
+        (radiance, wi, Prob::Mass(1.0), visibility_ray)
     }
 
     fn power(&self) -> Color {
@@ -70,13 +66,13 @@ impl Light for DistantLight {
         &self,
         target: &Interaction,
         _u: (f32, f32),
-    ) -> (Color, hcm::Vec3, HemiPdf, Ray) {
+    ) -> (Color, hcm::Vec3, Prob, Ray) {
         let outside_world = target.pos + self.world_radius * 2.0 * self.incident_direction;
         let visibility_ray = spawn_ray_to(target, outside_world);
         (
             self.radiance,
             self.incident_direction,
-            HemiPdf::Delta,
+            Prob::Mass(1.0),
             visibility_ray,
         )
     }
@@ -140,7 +136,7 @@ impl Light for DiffuseAreaLight {
         &self,
         target: &Interaction,
         u: (f32, f32),
-    ) -> (Color, hcm::Vec3, HemiPdf, Ray) {
+    ) -> (Color, hcm::Vec3, Prob, Ray) {
         let point_on_light = self.shape.sample_towards(target, u);
         let wi = (point_on_light.pos - target.pos).hat();
         let radiance = self.radiance_from(target, -wi);
@@ -148,7 +144,7 @@ impl Light for DiffuseAreaLight {
         (
             radiance,
             wi,
-            HemiPdf::Regular(pdf),
+            Prob::Density(pdf),
             spawn_ray_to(target, point_on_light.pos),
         )
     }

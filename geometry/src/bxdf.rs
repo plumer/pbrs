@@ -2,6 +2,7 @@ use std::f32::consts::FRAC_1_PI;
 
 use crate::microfacet::{self as mf};
 use math::float::Float;
+use math::prob::Prob;
 use math::hcm::Vec3;
 use radiometry::color::{Color, XYZ};
 
@@ -29,32 +30,6 @@ pub struct Omega(pub Vec3);
 pub enum RefractResult {
     FullReflect(Omega),
     Transmit(Omega),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Prob {
-    Density(f32),
-    Mass(f32),
-}
-
-impl Prob {
-    pub fn is_density(&self) -> bool {
-        matches!(self, Self::Density(_))
-    }
-    pub fn density(&self) -> f32 {
-        if let Self::Density(pdf) = &self {
-            *pdf
-        } else {
-            0.0
-        }
-    }
-    pub fn mass(&self) -> f32 {
-        if let Self::Mass(pmf) = self {
-            *pmf
-        } else {
-            0.0
-        }
-    }
 }
 
 #[derive(Debug)]

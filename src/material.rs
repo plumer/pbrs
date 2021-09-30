@@ -1,8 +1,9 @@
 use crate::ray::Ray;
 use crate::shape::Interaction;
 use crate::texture::{self, *};
-use geometry::bxdf::{self, BxDF, Prob};
+use geometry::bxdf::{self, BxDF};
 use math::hcm::{self, Vec3};
+use math::prob::Prob;
 use radiometry::color::Color;
 use std::sync::Arc;
 pub trait Material: Sync + Send {
@@ -162,7 +163,7 @@ pub fn uniform_hemisphere() -> Vec3 {
 // ------------------------------------------------------------------------------------------------
 
 impl Material for Lambertian {
-    fn scatter(&self, wo: Vec3, isect: &Interaction) -> (Ray, Color) {
+    fn scatter(&self, _wo: Vec3, isect: &Interaction) -> (Ray, Color) {
         // let rnd2 = (rand::random::<f32>(), rand::random::<f32>());
         // let (r, f, pr) = self.sample_bsdf(wo, isect, rnd2);
         // assert!(matches!(pr, Prob::Density(_)));
