@@ -303,7 +303,10 @@ impl Transform<BBox> for RigidBodyTransform {
 impl Transform<Interaction> for RigidBodyTransform {
     fn apply(&self, i: Interaction) -> Interaction {
         // Note that the transform is rigid-body, so transforming the normal is straightforward.
-        Interaction::new(self.apply(i.pos), i.ray_t, i.uv, self.apply(i.normal))
+        let new_pos = self.apply(i.pos);
+        let new_normal = self.apply(i.normal);
+        let new_wo = self.apply(i.wo);
+        Interaction::new(new_pos, i.ray_t, i.uv, new_normal, new_wo)
     }
 }
 
@@ -359,8 +362,10 @@ impl Transform<BBox> for AffineTransform {
 impl Transform<Interaction> for AffineTransform {
     fn apply(&self, i: Interaction) -> Interaction {
         assert!(!i.pos.has_nan());
-        let inv_transpose = self.inverse.transpose();
-        Interaction::new(self.apply(i.pos), i.ray_t, i.uv, inv_transpose * i.normal)
+        let new_pos = self.apply(i.pos);
+        let new_wo = self.apply(i.wo);
+        let new_normal = self.inverse.transpose() * i.normal;
+        Interaction::new(new_pos, i.ray_t, i.uv, new_normal, new_wo)
             .with_dpdu(self.apply(i.tangent()))
     }
 }

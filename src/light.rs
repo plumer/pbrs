@@ -7,7 +7,9 @@ use crate::ray::Ray;
 use crate::shape::{self, Interaction, Shape};
 
 fn spawn_ray_to(p0: &Interaction, p1: hcm::Point3) -> Ray {
-    Ray::new(p0.pos, p1 - p0.pos)
+    let r = p0.spawn_ray(p1 - p0.pos);
+    r.t_max = p1.distance_to(p0.pos) / r.dir.norm_squared();
+    r
 }
 
 pub trait Light {
@@ -175,7 +177,7 @@ impl ShapeSample for shape::Sphere {
             phi.sin() * theta.sin(),
             2.0 * v - 1.0,
         );
-        Interaction::new(self.center() + self.radius() * dir, 0.0, rnd2, dir)
+        Interaction::rayless(self.center() + self.radius() * dir, rnd2, dir)
     }
 
     fn sample_towards(&self, target: &Interaction, rnd2: (f32, f32)) -> Interaction {
@@ -208,7 +210,7 @@ impl ShapeSample for shape::Sphere {
             hcm::Mat3::from_vectors(wcx, wcy, wc) * normal_object_space * self.radius()
                 + self.center();
 
-        Interaction::new(point_on_sphere, 0.0, rnd2, normal_object_space)
+        Interaction::rayless(point_on_sphere, rnd2, normal_object_space)
     }
 
     fn area(&self) -> f32 {
@@ -245,7 +247,7 @@ impl ShapeSample for shape::IsolatedTriangle {
         };
         let position = self.p0 + (self.p1 - self.p0) * u + (self.p2 - self.p0) * v;
         let normal = (self.p0 - self.p1).cross(self.p2 - self.p1).hat();
-        Interaction::new(position, 0.0, (u, v), normal)
+        Interaction::rayless(position, (u, v), normal)
     }
     fn sample_towards(&self, _target: &Interaction, rnd2: (f32, f32)) -> Interaction {
         self.sample(rnd2)

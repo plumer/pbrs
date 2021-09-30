@@ -199,7 +199,7 @@ impl Shape for Sphere {
             self.radius
         );
 
-        Some(Interaction::new(pos, ray_t, uv, normal).with_dpdu(dpdu))
+        Some(Interaction::new(pos, ray_t, uv, normal, -r.dir).with_dpdu(dpdu))
     }
 }
 
@@ -231,7 +231,7 @@ impl Shape for QuadXY {
             let pos = Point3::new(x, y, self.z);
             let normal = Vec3::zbase() * -r.dir.z.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal).with_dpdu(Vec3::xbase()))
+            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::xbase()))
         } else {
             None
         }
@@ -264,7 +264,7 @@ impl Shape for QuadXZ {
             let pos = Point3::new(x, self.y, z);
             let normal = Vec3::ybase() * -r.dir.y.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal).with_dpdu(Vec3::xbase()))
+            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::xbase()))
         } else {
             None
         }
@@ -297,7 +297,7 @@ impl Shape for QuadYZ {
             let pos = Point3::new(self.x, y, z);
             let normal = Vec3::xbase() * -r.dir.x.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal).with_dpdu(Vec3::ybase()))
+            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::ybase()))
         } else {
             None
         }
@@ -379,7 +379,7 @@ impl Shape for Cuboid {
         let mut tangent = Vec3::zero();
         let tangent_axis = (axis + 1) % 3;
         tangent[tangent_axis] = 1.0;
-        Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal).with_dpdu(tangent))
+        Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal, -r.dir).with_dpdu(tangent))
     }
 }
 
@@ -435,5 +435,5 @@ pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option
         return None;
     }
     // Now an intersection is truly found.
-    Some(Interaction::new(hit_pos, t, (0.0, 0.0), normal))
+    Some(Interaction::new(hit_pos, t, (0.0, 0.0), normal, -r.dir))
 }
