@@ -1,5 +1,8 @@
 use core::convert::TryFrom;
-use std::{fmt, ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub}};
+use std::{
+    fmt,
+    ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub},
+};
 
 /// Represents a 3D vector. Each component is a `f32` number.
 /// Components can be accessed using `v.x` `v.y` `v.z`,
@@ -142,7 +145,7 @@ impl Vec3 {
             res
         }
     }
-    
+
     pub fn has_nan(self) -> bool {
         self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
@@ -711,9 +714,25 @@ pub fn refract(normal: Vec3, wi: Vec3, ni_over_no: f32) -> Refract {
 /// The computed vector is (0, 0, 1) rotated `theta` radians away from the z-axis and then rotates
 /// around the z-axis with angle `phi`. Note that sin(theta) and cos(theta) values are passed in
 /// as usually the trigonometry values are more directly available rather than the angle itself.
-pub fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: Radian) -> Vec3{
+pub fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: Radian) -> Vec3 {
     let (cos_phi, sin_phi) = phi.0.sin_cos();
     Vec3::new(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta)
+}
+
+#[macro_export]
+macro_rules! assert_close {
+    ($left:expr, $right:expr) => {
+        if ($left - $right).norm_squared() > 1e-4 {
+            panic!(
+                "Assertion failed: Close({}, {}) values: {} vs. {}, dist = {}",
+                stringify!($left),
+                stringify!(right),
+                $left,
+                $right,
+                ($left - $right).norm()
+            )
+        }
+    };
 }
 
 #[cfg(test)]
@@ -740,7 +759,7 @@ mod test {
                 assert!((wo - v).norm_squared() < f32::EPSILON, "{} vs {}", v, wo)
             }
         }
-        
+
         // The critical angle for a "glass"-to-air IOR of 2.0 is 30 degrees.
         // One corresponding incident direction is (0.5, sqrt(0.75), 0.0).
         let full_reflect_wi = Vec3::new(0.51, 0.75f32.sqrt(), 0.0).hat();

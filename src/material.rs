@@ -1,7 +1,8 @@
-use math::hcm::{self,Vec3};
 use crate::ray::Ray;
 use crate::shape::Interaction;
 use crate::texture::{self, *};
+use geometry::bxdf::{self, BxDF, Prob};
+use math::hcm::{self, Vec3};
 use radiometry::color::Color;
 use std::sync::Arc;
 pub trait Material: Sync + Send {
@@ -11,12 +12,19 @@ pub trait Material: Sync + Send {
     /// If the returned color is black, then there's a possibility that the
     /// material is emissive.
     fn scatter(&self, wi: Vec3, isect: &Interaction) -> (Ray, Color);
+
+    /// Computes the scattering of a ray on a given surface interaction.
+    /// Returns the scattered ray and modulated radiance (BSDF value).
+    /// A 2D random variable is needed for most surfaces.
+    fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob);
+
     fn emission(&self) -> Color {
         Color::black()
     }
     fn summary(&self) -> String;
 }
 
+#[derive(Clone)]
 pub struct Lambertian {
     pub albedo: Arc<dyn Texture>,
 }
@@ -38,6 +46,19 @@ pub struct Metal {
 impl Metal {
     pub fn new(albedo: Color, fuzziness: f32) -> Self {
         Self { albedo, fuzziness }
+    }
+}
+
+pub struct Glossy {
+    mf_refl: bxdf::MicrofacetReflection,
+}
+
+impl Glossy {
+    pub fn new(albedo: Color, roughness: f32) -> Self {
+        let alpha = geometry::microfacet::MicrofacetDistrib::roughness_to_alpha(roughness);
+        let distrib = geometry::microfacet::MicrofacetDistrib::trowbridge_reitz(alpha, alpha);
+        let mf_refl = bxdf::MicrofacetReflection::new(albedo, distrib, bxdf::Fresnel::Nop);
+        Self { mf_refl }
     }
 }
 
@@ -141,16 +162,30 @@ pub fn uniform_hemisphere() -> Vec3 {
 // ------------------------------------------------------------------------------------------------
 
 impl Material for Lambertian {
-    fn scatter(&self, _: Vec3, isect: &Interaction) -> (Ray, Color) {
+    fn scatter(&self, wo: Vec3, isect: &Interaction) -> (Ray, Color) {
+        // let rnd2 = (rand::random::<f32>(), rand::random::<f32>());
+        // let (r, f, pr) = self.sample_bsdf(wo, isect, rnd2);
+        // assert!(matches!(pr, Prob::Density(_)));
+        // assert!(pr.density() > 0.0);
+        // return (r, f * r.dir.dot(isect.normal) / pr.density());
+        //
         let h = uniform_hemisphere();
         let wo = (h.dot(isect.normal)).signum() * h;
         // let mut wo = isect.normal + uniform_sphere();
         // if wo.norm_squared() < 1e-6 {
         //     wo = isect.normal;
         // }
-        let ray_out = Ray::new(isect.pos + isect.normal * 0.001, wo);
+        let ray_out = isect.spawn_ray(wo);
         (ray_out, self.albedo.value(isect.uv, isect.pos))
     }
+
+    fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob) {
+        let bsdf = bxdf::DiffuseReflect::lambertian(self.albedo.value(isect.uv, isect.pos));
+        let (f, wi, pr) = bsdf.sample(isect.world_to_local(wo), rnd2);
+        let ray_out = isect.spawn_ray(isect.local_to_world(wi));
+        (ray_out, f, pr)
+    }
+
     fn summary(&self) -> String {
         String::from("Lambertian")
     }
@@ -165,6 +200,38 @@ impl Material for Metal {
     fn summary(&self) -> String {
         format!("Metal{{albedo = {}}}", self.albedo)
     }
+
+    #[allow(unreachable_code)]
+    fn sample_bsdf(
+        &self,
+        _wo: Vec3,
+        _isect: &Interaction,
+        _rnd2: (f32, f32),
+    ) -> (Ray, Color, Prob) {
+        use geometry::microfacet as mf;
+        let alpha = mf::MicrofacetDistrib::roughness_to_alpha(self.fuzziness);
+        let _distrib = mf::MicrofacetDistrib::trowbridge_reitz(alpha, alpha);
+        let _fr_metal = todo!();
+        let mf_refl = bxdf::MicrofacetReflection::new(self.albedo, _distrib, _fr_metal);
+        let (f, wi, pr) = mf_refl.sample(_isect.world_to_local(_wo), _rnd2);
+        let ray_out = Ray::new(_isect.pos + _isect.normal * 0.00, _isect.local_to_world(wi));
+        (ray_out, f, pr)
+    }
+}
+
+impl Material for Glossy {
+    fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
+        todo!()
+    }
+    fn summary(&self) -> String {
+        "Glossy".to_owned()
+    }
+
+    fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob) {
+        let (f, wi, pr) = self.mf_refl.sample(isect.world_to_local(wo), rnd2);
+        let ray_out = isect.spawn_ray(isect.local_to_world(wi));
+        (ray_out, f, pr)
+    }
 }
 
 impl Material for Mirror {
@@ -175,6 +242,13 @@ impl Material for Mirror {
     }
     fn summary(&self) -> String {
         format!("Mirror{{albedo = {}}}", self.albedo)
+    }
+
+    fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob) {
+        let spec = bxdf::Specular::mirror(self.albedo);
+        let (f, wi, pr) = spec.sample(isect.world_to_local(wo), rnd2);
+        let ray_out = isect.spawn_ray(isect.local_to_world(wi));
+        (ray_out, f, pr)
     }
 }
 
@@ -201,6 +275,13 @@ impl Material for Dielectric {
     fn summary(&self) -> String {
         format!("Dielectric{{ior = {}}}", self.refract_index)
     }
+
+    fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob) {
+        let bsdf = bxdf::Specular::dielectric(self.reflect, 1.0, self.refract_index);
+        let (f, wi, pr) = bsdf.sample(isect.world_to_local(wo), rnd2);
+        let ray_out = isect.spawn_ray(isect.local_to_world(wi));
+        (ray_out, f, pr)
+    }
 }
 
 impl Material for DiffuseLight {
@@ -215,6 +296,10 @@ impl Material for DiffuseLight {
     fn summary(&self) -> String {
         format!("DiffuseLight{{emit = {}}}", self.emit)
     }
+    fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, _rnd2: (f32, f32)) -> (Ray, Color, Prob) {
+        let (r, color) = self.scatter(wo, isect);
+        (r, color, Prob::Density(std::f32::consts::FRAC_1_PI))
+    }
 }
 
 impl Material for Uber {
@@ -223,6 +308,10 @@ impl Material for Uber {
     }
     fn summary(&self) -> String {
         String::from("uber")
+    }
+
+    fn sample_bsdf(&self, _: Vec3, _: &Interaction, _: (f32, f32)) -> (Ray, Color, Prob) {
+        todo!()
     }
 }
 
@@ -233,17 +322,23 @@ impl Material for Substrate {
     fn summary(&self) -> String {
         String::from("substrate")
     }
+    fn sample_bsdf(&self, _: Vec3, _: &Interaction, _: (f32, f32)) -> (Ray, Color, Prob) {
+        todo!()
+    }
 }
 
 impl Material for Plastic {
     fn scatter(&self, _wi: Vec3, isect: &Interaction) -> (Ray, Color) {
         let h = uniform_hemisphere();
         let wo = (h.dot(isect.normal)).signum() * h;
-        let ray_out = Ray::new(isect.pos + isect.normal * 0.001, wo);
+        let ray_out = isect.spawn_ray(wo);
         (ray_out, self.diffuse)
     }
     fn summary(&self) -> String {
         String::from("plastic")
+    }
+    fn sample_bsdf(&self, _: Vec3, _: &Interaction, _: (f32, f32)) -> (Ray, Color, Prob) {
+        todo!()
     }
 }
 
@@ -255,6 +350,12 @@ fn schlick(cosine: f32, ref_index: f32) -> f32 {
 
 #[cfg(test)]
 mod test {
+    use math::hcm::{Point3, Vec3};
+    use radiometry::color::Color;
+    use shape::Interaction;
+
+    use crate::material::{Lambertian, Material};
+
     #[test]
     fn test_random_unit_sphere() {
         for _ in 0..64 {
@@ -271,5 +372,27 @@ mod test {
             let diff = v.norm_squared() - 1.0;
             assert!(diff.abs() < f32::EPSILON * 3.0, "{}", v.norm_squared());
         }
+    }
+
+    #[test]
+    fn test_lambertian() {
+        let isect = Interaction::new(
+            Point3::new(0.4, 0.5, 3.0),
+            45.0,
+            (0.3, 0.8),
+            Vec3::new(0.36, 0.48, 0.8),
+        )
+        .with_dpdu(Vec3::new(-0.8, 0.6, 0.0));
+        assert!(isect.has_valid_frame());
+        let lambertian = Lambertian::solid(Color::white());
+        let wo = Vec3::new(0.7, 0.5, 0.3);
+        let (_ray, color) = lambertian.scatter(wo, &isect);
+        let (ray, f, p) = lambertian.sample_bsdf(wo, &isect, (0.8, 0.5));
+        
+        eprintln!("Scattered color = {}, BSDF value = {}, prob = {:?}", color, f, p);
+        let v0 = Vec3::new(color.r, color.g, color.b);
+        let color1 = f * ray.dir.dot(isect.normal) / p.density();
+        let v1 = Vec3::new(color1.r, color1.g, color1.b);
+        assert!((v0 - v1).norm_squared().abs() < 1e-5, "{:.5} vs {:.5}", v0, v1)
     }
 }

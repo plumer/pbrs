@@ -48,13 +48,15 @@ where
     (a - c) * bc0 + (b - c) * bc1 + c
 }
 
-/// Returns the length of other leg of the triangle given the hypotenuse and a known one.
 #[allow(dead_code)]
-
 pub trait Float : Sized {
+    /// Returns the length of other leg of the triangle given the hypotenuse and a known one.
     fn cathetus(self, other: Self) -> Self;
+    /// Computes `x / y` if y is nonzero; returns `None` if y is zero.
     fn try_divide(self, divisor: Self) -> Option<Self>;
-    fn polynomial(self, coeffs: Vec<Self>) -> Self;
+    /// Evaluates the polynomial c0 + c1 * x + c2 * x^2 + ... + cn * x^n. The coefficients should be
+    /// given in increasing order of powers.
+    fn polynomial<const N: usize>(self, coeffs: [Self; N]) -> Self;
 }
 
 impl Float for f32 {
@@ -85,13 +87,22 @@ impl Float for f32 {
         }
     }
 
-    fn polynomial(self, coeffs: Vec<Self>) -> Self {
+    /// Evaluates the polynomial c0 + c1 * x + c2 * x^2 + ... + cn * x^n. The coefficients should be
+    /// given in increasing order of powers.
+    /// ```
+    /// let x = 0.6;
+    /// let fx = x.polynomial([4, 2, 1]);
+    /// assert!((fx - (4.0 + 2 * 0.6 + 0.6*0.6)).abs() < 1e-6);
+    /// ```
+    fn polynomial<const N: usize>(self, coeffs: [Self; N]) -> Self {
         // a + b * x + c * x^2 + d * x^3
         // = a + x * (b + x * (c + d * x))
         coeffs.iter().rev().fold(0.0, |d, c| d * self + c)
     }
 }
 
+/// Divides the given `interval` evenly into `count` pieces and returns the midpoint of each piece
+/// together with the spacing between adjacent midpoints.
 pub fn linspace(interval: (f32, f32), count: i32) -> (Vec<f32>, f32) {
     let (a, b) = interval;
     (

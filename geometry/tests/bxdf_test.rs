@@ -86,7 +86,7 @@ fn color_is_close(c0: Color, c1: Color) -> bool {
     }
 }
 
-fn test_one_diffuse_brdf<BRDF: BxDF>(brdf: &BRDF, albedo: Color) {
+fn test_one_diffuse_brdf(brdf: &bxdf::DiffuseReflect, albedo: Color) {
     let pdf_hemisphere_integral = riemann_integral_pdf(brdf);
     assert!(
         (pdf_hemisphere_integral - 1.0).abs() < 1e-3,
@@ -103,7 +103,7 @@ fn test_one_diffuse_brdf<BRDF: BxDF>(brdf: &BRDF, albedo: Color) {
     );
 }
 
-fn riemann_integral_pdf<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
+fn riemann_integral_pdf(bsdf: &bxdf::DiffuseReflect) -> f32 {
     let mut pdf_integral = 0.0;
     const N: i32 = 100;
     let (thetas, d_theta) = linspace((0.0, std::f32::consts::FRAC_PI_2), N);
@@ -117,7 +117,7 @@ fn riemann_integral_pdf<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
             if let Prob::Density(pdf) = pr {
                 pdf_integral += pdf * sin_theta * d_theta * d_phi;
             } else {
-                panic!("bxdf returns a prob-mass valud");
+                panic!("bxdf returns a prob-mass value");
             }
         }
     }
@@ -134,9 +134,9 @@ fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {
                 let u = rng.gen::<f32>();
                 let v = rng.gen::<f32>();
                 let wo = Omega::normalize(0.2, -0.1, 0.9);
-                let (bsdf_value, wi, pdf) = bsdf.sample(wo, (u, v));
+                let (bsdf_value, wi, pr) = bsdf.sample(wo, (u, v));
                 assert!(!wi.0.has_nan());
-                if let bxdf::Prob::Density(pdf) = pdf {
+                if let bxdf::Prob::Density(pdf) = pr {
                     // println!("pdf = {}", pdf);
                     if pdf == 0.0 {
                         Color::black()

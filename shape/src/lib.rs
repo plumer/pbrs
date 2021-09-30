@@ -2,12 +2,11 @@ mod blas;
 mod simple;
 mod interaction;
 
-pub use blas::*;
-pub use simple::*;
-
 use geometry::bvh::BBox;
 use geometry::ray::Ray;
 
+pub use blas::*;
+pub use simple::*;
 pub use interaction::Interaction;
 
 /// Represents the characteristics of a shape: has a bounding box, and can interact with a ray.

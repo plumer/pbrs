@@ -1,36 +1,37 @@
+mod cli_options;
 mod instance;
-mod tlas;
 mod light;
 mod material;
 mod scene_loader;
 mod texture;
+mod tlas;
 
 use glog::Flags;
 use log::*;
+use std::f32::consts::PI;
 use std::fs::File;
 use std::io::{self, BufWriter};
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use tlas::BvhNode;
-use radiometry::color::Color;
 use instance::Instance;
 use io::Write;
 use material as mtl;
-use math::assert_le;
 use math::hcm::{self, Point3, Vec3};
+use math::{assert_le, float};
+use radiometry::color::Color;
 use texture as tex;
+use tlas::BvhNode;
 
-use geometry::{bvh, ray, camera};
-use shape::{self, Sphere};
+use geometry::{bvh, camera, ray};
 use rayon::prelude::*;
+use shape::{self, QuadXZ, Sphere};
 
 use crate::{camera::Camera, texture::Texture};
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 2;
+const MSAA: usize = 4; // 275R: 12x12 = 63.6s, 24x24=252.2s
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
 type EnvLight = fn(ray::Ray) -> Color;
@@ -47,8 +48,7 @@ fn rand_f32() -> f32 {
 pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
     assert_eq!(data.len(), (width * height * 3) as usize);
 
-    let path = Path::new(file_name);
-    let file = File::create(path).unwrap();
+    let file = File::create(file_name).unwrap();
     let ref mut w = BufWriter::new(file);
 
     let mut encoder = png::Encoder::new(w, width, height);
@@ -69,23 +69,34 @@ fn main() {
         })
         .unwrap();
 
-    let half_right_angle = hcm::Degree(45.0);
-    info!("{} is {} ", half_right_angle, half_right_angle.to_radian());
+    let options = cli_options::parse_args(std::env::args().collect::<Vec<_>>());
+    if let Err(message) = &options {
+        error!("Can't parse command-line options: {}", message);
+    }
+    let options = options.unwrap();
 
-    // Prepares the scene and environmental lighting.
-    let mut args_iter = std::env::args();
-    args_iter.next();
-    let pbrs_input_path = args_iter.next();
-    let (bvh, camera, env_light) = if let Some(pbrs_file_path) = pbrs_input_path {
+    let (bvh, camera, env_light) = if let Some(pbrs_file_path) = options.pbrt_file {
         load_pbrt_scene(&pbrs_file_path)
     } else {
-        load_pbrt_scene("assets/killeroos/killeroo-simple.pbrt")
+        match options.scene_name.as_ref().map(|n| n.as_str()) {
+            Some("125_spheres") => scene_125_spheres(),
+            Some("two_perlin_spheres") => scene_two_perlin_spheres(),
+            Some("earth") => scene_earth(),
+            Some("quad_light") => scene_quad_light(),
+            Some("quad") => scene_quad(),
+            Some("cornell_box") => scene_cornell_box(),
+            Some("plates") => scene_plates(),
+            Some("everything") => scene_everything(),
+            None | Some(_) => {
+                error!("No scene file or name specified. Abort.");
+                eprintln!("Available scenes: 125_spheres | two_perlin_spheres | earth | quad_light \
+                           | quad | cornell_box | everything");
+                std::process::exit(1);
+            }
+        }
     };
 
-    // load_pbrt_scene("assets/spheres.pbrt");
-    // scene_125_spheres();
-
-    println!(
+    info!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
         bvh.height()
@@ -93,37 +104,45 @@ fn main() {
     let (width, height) = camera.resolution();
 
     let start_render = Instant::now();
+    let render_one_row = |row| {
+        if (row % 10) == 0 {
+            print!("{} ", row);
+            io::stdout().flush().unwrap();
+        }
+        let mut colors_for_row = vec![];
+        for col in 0..width {
+            let mut color_sum = Color::black();
 
-    let image_map: Vec<_> = (0..height)
-        .into_par_iter()
-        // .into_iter()
-        .map(|row| {
-            if (row % 10) == 0 {
-                print!("{} ", row);
-                io::stdout().flush().unwrap();
+            for i in 0..MSAA * MSAA {
+                let jitter = (
+                    ((i / MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
+                    ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
+                );
+                // let jitter = (rand::random::<f32>(), rand::random::<f32>());
+                let ray = camera.shoot_ray(row, col, jitter).unwrap();
+                // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
+                color_sum = color_sum + path_integrator(&bvh, ray, 5, env_light);
             }
-            let mut colors_for_row = vec![];
-            for col in 0..width {
-                let mut color_sum = Color::black();
 
-                for i in 0..MSAA * MSAA {
-                    let jitter = (
-                        ((i / MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
-                        ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
-                    );
-                    // let jitter = (rand::random::<f32>(), rand::random::<f32>());
-                    let ray = camera.shoot_ray(row, col, jitter).unwrap();
-                    // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
-                    color_sum = color_sum + path_integrator(&bvh, ray, 5, env_light);
-                }
+            let color = color_sum / (SAMPLES_PER_PIXEL as f32);
+            colors_for_row.push(color);
+        }
+        colors_for_row
+    };
 
-                let color = color_sum / (SAMPLES_PER_PIXEL as f32);
-                colors_for_row.push(color);
-            }
-            colors_for_row
-        })
-        .flatten()
-        .collect();
+    let image_map: Vec<_> = if options.use_multi_thread {
+        (0..height)
+            .into_par_iter()
+            .map(render_one_row)
+            .flatten()
+            .collect()
+    } else {
+        (0..height)
+            .into_iter()
+            .map(render_one_row)
+            .flatten()
+            .collect()
+    };
 
     let image_data: Vec<_> = image_map
         .iter()
@@ -133,7 +152,7 @@ fn main() {
 
     let whole_render_time = Instant::now().duration_since(start_render);
 
-    println!("whole render time = {} us", whole_render_time.as_micros());
+    println!("whole render time = {:?}", whole_render_time);
 
     write_image(r"output.png", &image_data, camera.resolution());
 }
@@ -395,7 +414,6 @@ fn scene_quad() -> Scene {
 
 #[allow(dead_code)]
 fn scene_cornell_box() -> Scene {
-
     let red = mtl::Lambertian::solid(Color::new(0.65, 0.05, 0.05));
     let white = mtl::Lambertian::solid(Color::gray(0.73));
     let green = mtl::Lambertian::solid(Color::new(0.12, 0.45, 0.15));
@@ -437,10 +455,10 @@ fn scene_cornell_box() -> Scene {
         .zip(mtl_seq.into_iter())
         .map(|(shape, mtl)| Box::new(Instance::new(shape, mtl)))
         .collect();
-    instances[6].transform = instance::InstanceTransform::identity()
+    instances[6].transform = instance::identity()
         .rotate_y(hcm::Degree(15.0).to_radian())
         .translate(Vec3::new(265.0, 0.0, 105.0));
-    instances[7].transform = instance::InstanceTransform::identity()
+    instances[7].transform = instance::identity()
         .rotate_y(hcm::Degree(-18.0).to_radian())
         .translate(Vec3::new(130.0, 0.0, 225.0));
 
@@ -455,6 +473,45 @@ fn scene_cornell_box() -> Scene {
     );
 
     (tlas::build_bvh(instances), cam, dark_room)
+}
+
+fn scene_plates() -> Scene {
+    let mut instances = vec![];
+    let r = 20.0;
+    // Builds the background.
+    let wall = shape::QuadXY::from_raw((-r, r), (0.0, r), r);
+    let floor = shape::QuadXZ::from_raw((-r, r), (0.0, r), 0.0);
+    let matte = mtl::Lambertian::solid(Color::gray(0.4));
+
+    let wall_instance = Instance::from_raw(wall, matte.clone());
+    let floor_instance = Instance::from_raw(floor, matte);
+    instances.push(wall_instance);
+    instances.push(floor_instance);
+
+    // axis: y = 10, z = 0
+    let (angles, spacing) = float::linspace((-PI * 0.4, -PI * 0.05), 4);
+    let delta_angle = spacing * 0.65;
+    let (left, right) = (-r * 0.68, r * 0.68);
+    let half_width = delta_angle * r * 0.5;
+    for angle in angles.iter() {
+        // let glossy = mtl::Glossy::new(Color::gray(0.5), angle * -1.0);
+        let glossy = mtl::Lambertian::solid(Color::rgb(80, 180, 50));
+        let plate = QuadXZ::from_raw((left, right), (-half_width, half_width), 4.0);
+        let trans = instance::identity()
+            .translate(Vec3::new(0.0, -r, 0.0))
+            .rotate_x(hcm::Radian(-angle))
+            .translate(Vec3::new(0.0, r * 0.8, 0.0));
+        instances.push(Instance::from_raw(plate, glossy).with_transform(trans));
+    }
+    let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
+
+    let camera = camera::Camera::new((800, 800), hcm::Radian(PI * 0.19)).looking_at(
+        Point3::new(0.0, r * 0.9, -r * 2.0),
+        Point3::new(0.0, r * 0.2, r * 2.0),
+        Vec3::ybase(),
+    );
+
+    (tlas::build_bvh(instances), camera, blue_sky)
 }
 
 #[allow(dead_code)]
@@ -517,7 +574,7 @@ fn scene_everything() -> Scene {
         .map(|_| Sphere::from_raw((rand_165(), rand_165(), rand_165()), 10.0))
         .collect();
     let ping_pong_balls = shape::IsoBlas::build(ping_pong_balls);
-    let pp_trans = instance::InstanceTransform::identity()
+    let pp_trans = instance::identity()
         .rotate_y(hcm::Degree(15.0).to_radian())
         .translate(Vec3::new(-100.0, 270.0, 395.0));
     instances.push(Instance::from_raw(ping_pong_balls, matte_white).with_transform(pp_trans));
