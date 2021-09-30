@@ -12,3 +12,4 @@ Cargo.lock
 assets
 .vs
 .vscode
+*.png
