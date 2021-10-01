@@ -70,6 +70,14 @@ impl std::ops::Add for Color {
     }
 }
 
+impl std::ops::AddAssign for Color {
+    fn add_assign(&mut self, rhs: Self) {
+        self.r += rhs.r;
+        self.g += rhs.g;
+        self.b += rhs.b;
+    }
+}
+
 impl std::ops::Mul<f32> for Color {
     type Output = Color;
     fn mul(self, s: f32) -> Self {
