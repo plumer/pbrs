@@ -1,7 +1,7 @@
 use crate::ray::Ray;
 use crate::shape::Interaction;
 use crate::texture::{self, *};
-use geometry::bxdf::{self, BxDF};
+use geometry::bxdf::{self, BxDF, Omega};
 use math::hcm::{self, Vec3};
 use math::prob::Prob;
 use radiometry::color::Color;
@@ -18,6 +18,9 @@ pub trait Material: Sync + Send {
     /// Returns the scattered ray and modulated radiance (BSDF value).
     /// A 2D random variable is needed for most surfaces.
     fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob);
+
+    fn bsdf(&self, wo: Omega, wi: Omega) -> Color;
+    fn accumulate_pdf(&self, wo: Omega, wi: Omega) -> f32;
 
     fn emission(&self) -> Color {
         Color::black()
@@ -185,6 +188,11 @@ impl Material for Lambertian {
         let (f, wi, pr) = bsdf.sample(isect.world_to_local(wo), rnd2);
         let ray_out = isect.spawn_ray(isect.local_to_world(wi));
         (ray_out, f, pr)
+    }
+
+    fn bsdf(&self, wo: Vec3, wi: Vec3, isect: &Interaction) -> Color {
+        let bxdf = bxdf::DiffuseReflect::lambertian(self.albedo.value(isect.uv, isect.pos));
+        bxdf.eval(isect.world_to_local(wo), isect.world_to_local(wi))
     }
 
     fn summary(&self) -> String {
@@ -377,9 +385,8 @@ mod test {
 
     #[test]
     fn test_lambertian() {
-        let isect = Interaction::new(
+        let isect = Interaction::rayless(
             Point3::new(0.4, 0.5, 3.0),
-            45.0,
             (0.3, 0.8),
             Vec3::new(0.36, 0.48, 0.8),
         )
@@ -389,11 +396,19 @@ mod test {
         let wo = Vec3::new(0.7, 0.5, 0.3);
         let (_ray, color) = lambertian.scatter(wo, &isect);
         let (ray, f, p) = lambertian.sample_bsdf(wo, &isect, (0.8, 0.5));
-        
-        eprintln!("Scattered color = {}, BSDF value = {}, prob = {:?}", color, f, p);
+
+        eprintln!(
+            "Scattered color = {}, BSDF value = {}, prob = {:?}",
+            color, f, p
+        );
         let v0 = Vec3::new(color.r, color.g, color.b);
         let color1 = f * ray.dir.dot(isect.normal) / p.density();
         let v1 = Vec3::new(color1.r, color1.g, color1.b);
-        assert!((v0 - v1).norm_squared().abs() < 1e-5, "{:.5} vs {:.5}", v0, v1)
+        assert!(
+            (v0 - v1).norm_squared().abs() < 1e-5,
+            "{:.5} vs {:.5}",
+            v0,
+            v1
+        )
     }
 }
