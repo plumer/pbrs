@@ -21,7 +21,7 @@ pub struct Ray {
 }
 
 impl Ray {
-    pub fn new(origin: hcm::Point3, dir: hcm::Vec3) -> Ray {
+    pub fn new(origin: hcm::Point3, dir: hcm::Vec3) -> Self {
         Ray {
             origin,
             dir,

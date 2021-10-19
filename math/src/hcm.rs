@@ -669,7 +669,7 @@ pub fn make_coord_system(v: Vec3) -> (Vec3, Vec3) {
     // v = [x, y, z] -> [x, 0, z], v1 = [-z, 0, x]
     v1[i1] = v[i2];
     v1[i2] = -v[i1];
-    assert_eq!(v1.dot(v), 0.0);
+    assert!(v1.dot(v).abs() < f32::EPSILON);
     let v2 = v.cross(v1);
     (v1.hat(), v2.hat())
 }

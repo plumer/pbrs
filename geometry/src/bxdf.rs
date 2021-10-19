@@ -2,8 +2,8 @@ use std::f32::consts::FRAC_1_PI;
 
 use crate::microfacet::{self as mf};
 use math::float::Float;
-use math::prob::Prob;
 use math::hcm::Vec3;
+use math::prob::Prob;
 use radiometry::color::{Color, XYZ};
 
 /// A wrapper of `Vec3` representing unit-length vectors.
@@ -518,11 +518,7 @@ impl BxDF for MicrofacetReflection {
         }
         let wh = wh.unwrap().face_forward(Omega::normal());
         let refl = self.fresnel.eval(wi.dot(wh));
-        println!(
-            "fresnel cos_theta = {}, refl coeff = {}",
-            wi.dot(wh),
-            refl
-        );
+        println!("fresnel cos_theta = {}, refl coeff = {}", wi.dot(wh), refl);
         self.albedo * self.distrib.d(wh) * self.distrib.g(wo, wi) //* refl_coeff
                                                                   // / (4.0 * cos_theta_o * cos_theta_i)
     }
