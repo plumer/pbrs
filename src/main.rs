@@ -1,4 +1,6 @@
+mod bsdf;
 mod cli_options;
+mod directlighting;
 mod instance;
 mod light;
 mod material;
@@ -24,6 +26,7 @@ use texture as tex;
 use tlas::BvhNode;
 
 use geometry::{bvh, camera, ray};
+use light::EnvLight;
 use rayon::prelude::*;
 use shape::{self, QuadXZ, Sphere};
 
@@ -31,10 +34,9 @@ use crate::{camera::Camera, texture::Texture};
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 4; // 275R: 12x12 = 63.6s, 24x24=252.2s
+const MSAA: usize = 12; // 275R: 12x12 = 63.6s, 24x24=252.2s
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
 
-type EnvLight = fn(ray::Ray) -> Color;
 type Scene = (Box<BvhNode>, camera::Camera, EnvLight);
 
 fn vec3_to_color(v: Vec3) -> Color {
@@ -89,8 +91,10 @@ fn main() {
             Some("everything") => scene_everything(),
             None | Some(_) => {
                 error!("No scene file or name specified. Abort.");
-                eprintln!("Available scenes: 125_spheres | two_perlin_spheres | earth | quad_light \
-                           | quad | cornell_box | everything");
+                eprintln!(
+                    "Available scenes: 125_spheres | two_perlin_spheres | earth | quad_light \
+                           | quad | cornell_box | everything"
+                );
                 std::process::exit(1);
             }
         }
@@ -144,6 +148,12 @@ fn main() {
             .collect()
     };
 
+    let direct_render = || {
+        let pbr_scene = scene_loader::Scene::new(*bvh, env_light);
+        let ray = camera.shoot_ray(32, 32, (0.25, 0.25)).unwrap();
+        let c = directlighting::direct_lighting_integrator(&pbr_scene, ray, 2);
+    };
+
     let image_data: Vec<_> = image_map
         .iter()
         .map(|color| color.gamma_encode().to_u8().to_vec())
@@ -162,10 +172,7 @@ fn main() {
 // ------------------------------------------------------------------------------------------------
 
 fn path_integrator(
-    scene: &Box<BvhNode>,
-    mut ray: ray::Ray,
-    depth: i32,
-    env_light: EnvLight,
+    scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvLight,
 ) -> Color {
     if depth <= 0 {
         return Color::black();
@@ -314,7 +321,6 @@ fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     (tlas::build_bvh(boxed_instances), camera, blue_sky)
 }
 
-#[allow(dead_code)]
 fn scene_two_perlin_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     let perlin_tex = tex::Perlin::with_freq(4.0);
 
@@ -349,7 +355,6 @@ fn scene_two_perlin_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     (tlas::build_bvh(instances), cam, blue_sky)
 }
 
-#[allow(dead_code)]
 fn scene_earth() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     let earth_tex = Arc::new(tex::Image::from_file("assets/earthmap.png").unwrap());
     let earth_mtl = Arc::new(material::Lambertian::textured(earth_tex));
@@ -367,12 +372,12 @@ fn scene_earth() -> (Box<BvhNode>, camera::Camera, EnvLight) {
     (tlas::build_bvh(instances), cam, blue_sky)
 }
 
-#[allow(dead_code)]
 fn scene_quad_light() -> Scene {
     let perlin_tex = Arc::new(tex::Perlin::with_freq(4.0));
 
     let mtl = Arc::new(mtl::Lambertian::textured(perlin_tex));
-    let light = Arc::new(mtl::DiffuseLight::new(Color::gray(4.0)));
+    let light_power = Color::gray(4.0);
+    let light = Arc::new(mtl::DiffuseLight::new(light_power));
 
     let shapes = vec![
         Arc::new(Sphere::from_raw((0.0, -1000.0, 0.0), 1000.0)),
@@ -384,12 +389,16 @@ fn scene_quad_light() -> Scene {
         .map(|sphere| Box::new(Instance::new(sphere, mtl.clone())))
         .collect();
 
-    let xy_quad = shape::QuadXY::from_raw((3.0, 5.0), (1.0, 3.0), 2.1);
-    instances.push(Box::new(Instance::new(Arc::new(xy_quad), light.clone())));
-    instances.push(Box::new(Instance::new(
-        Arc::new(Sphere::from_raw((0.0, 7.0, 0.0), 2.0)),
-        light.clone(),
-    )));
+    let light_quad = shape::QuadXY::from_raw((3.0, 5.0), (1.0, 3.0), 2.1);
+    let light_sphere = Sphere::from_raw((0.0, 7.0, 0.0), 2.0);
+    instances.extend(vec![
+        Box::new(Instance::new(Arc::new(light_quad.clone()), light.clone())),
+        Box::new(Instance::new(Arc::new(light_sphere.clone()), light.clone())),
+    ]);
+    let area_lights = vec![
+        light::DiffuseAreaLight::new(light_power, Box::new(light_quad.clone())),
+        light::DiffuseAreaLight::new(light_power, Box::new(light_sphere.clone())),
+    ];
 
     let mut cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(20.0).to_radian());
     cam.look_at(
@@ -398,10 +407,11 @@ fn scene_quad_light() -> Scene {
         Vec3::ybase(),
     );
 
+    // let pbr_scene = scene_loader::Scene::new(*tlas::build_bvh(instances), dark_room);
+
     (tlas::build_bvh(instances), cam, dark_room)
 }
 
-#[allow(dead_code)]
 fn scene_quad() -> Scene {
     let xy_quad = shape::QuadXY::from_raw((-0.5, 0.5), (-0.3, 0.6), 2.5);
     let lam = Arc::new(mtl::Lambertian::solid(Color::new(0.2, 0.3, 0.7)));
@@ -412,7 +422,6 @@ fn scene_quad() -> Scene {
     (tlas::build_bvh(instances), cam, blue_sky)
 }
 
-#[allow(dead_code)]
 fn scene_cornell_box() -> Scene {
     let red = mtl::Lambertian::solid(Color::new(0.65, 0.05, 0.05));
     let white = mtl::Lambertian::solid(Color::gray(0.73));
@@ -514,7 +523,6 @@ fn scene_plates() -> Scene {
     (tlas::build_bvh(instances), camera, blue_sky)
 }
 
-#[allow(dead_code)]
 fn scene_everything() -> Scene {
     let ground = Arc::new(mtl::Lambertian::solid(Color::new(0.48, 0.83, 0.53)));
 
@@ -591,7 +599,6 @@ fn scene_everything() -> Scene {
     (tlas::build_bvh(instances), cam, dark_room)
 }
 
-#[allow(dead_code)]
 fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
     let pbrt_scene = scene_loader::build_scene(pbrt_file_path);
     let cam = pbrt_scene.camera.expect("camera not built in the scene");
