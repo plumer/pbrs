@@ -8,7 +8,7 @@ use geometry::camera::Camera;
 
 use radiometry::color::Color;
 use crate::instance::AffineTransform;
-use crate::light;
+use crate::light::{self, DiffuseAreaLight};
 use crate::light::{Light, ShapeSample};
 use crate::material::{self as mtl, Material};
 use scene::{
@@ -20,17 +20,27 @@ use crate::texture::{self as tex, Texture};
 
 #[allow(dead_code)]
 pub struct Scene {
-    texture_descriptors: Vec<Box<dyn Texture>>,
-    named_textures: HashMap<String, usize>,
+    // texture_descriptors: Vec<Box<dyn Texture>>,
+    // named_textures: HashMap<String, usize>,
 
-    meshes: Vec<TriangleMeshRaw>,
-    named_meshes: HashMap<String, usize>,
+    // meshes: Vec<TriangleMeshRaw>,
+    // named_meshes: HashMap<String, usize>,
 
-    materials: Vec<Box<dyn Material>>,
-    named_materials: HashMap<String, usize>,
+    // materials: Vec<Box<dyn Material>>,
+    // named_materials: HashMap<String, usize>,
     
     pub tlas: crate::tlas::BvhNode,
-    pub lights: Vec<Box<dyn Light>>,
+    pub delta_lights: Vec<Box<dyn Light>>,
+    pub area_lights: Vec<DiffuseAreaLight>,
+    pub env_light: Option<light::EnvLight>,
+}
+
+impl Scene {
+    pub fn new(tlas: crate::tlas::BvhNode, env_light: light::EnvLight) -> Self {
+        Self {
+            tlas, env_light: Some(env_light), delta_lights: vec![], area_lights: vec![]
+        }
+    }
 }
 
 pub struct SceneLoader {
@@ -46,6 +56,7 @@ pub struct SceneLoader {
     pub instances: Vec<crate::instance::Instance>,
     pub camera: Option<Camera>,
     pub lights: Vec<Box<dyn Light>>,
+    pub area_lights: Vec<DiffuseAreaLight>,
 }
 
 #[allow(dead_code)]
@@ -82,6 +93,7 @@ impl SceneLoader {
             instances: vec![],
             camera: None,
             lights: vec![],
+            area_lights: vec![],
         }
     }
 
@@ -180,7 +192,7 @@ impl SceneLoader {
                     let shapes = self.parse_samplable_shape(&shape_impl, args);
                     shapes.into_iter().for_each(|shape| {
                         let diffuse_light = light::DiffuseAreaLight::new(luminance.clone(), shape);
-                        self.lights.push(Box::new(diffuse_light));
+                        self.area_lights.push(diffuse_light);
                     });
                 } else {
                     error!("Neither arealight luminance or material are set");
