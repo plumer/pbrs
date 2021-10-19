@@ -1,4 +1,3 @@
-use geometry::bxdf::Omega;
 use geometry::ray::Ray;
 use math::hcm::{Mat3, Point3, Vec3};
 use std::fmt::{Display, Formatter, Result};
@@ -31,11 +30,11 @@ impl Interaction {
             tbn_frame: Mat3::zero(),
         }
     }
-    
+
     pub fn rayless(pos: Point3, uv: (f32, f32), normal: Vec3) -> Self {
         Self::new(pos, 0.0, uv, normal, Vec3::zero())
     }
-    
+
     pub fn tangent(&self) -> Vec3 {
         self.tbn_frame.cols[0]
     }
@@ -45,7 +44,7 @@ impl Interaction {
         let normal = self.normal.hat();
         let bitangent = (normal.cross(dpdu)).hat();
         let dpdu = bitangent.cross(normal);
-        
+
         let det = dpdu.cross(bitangent).dot(normal);
         assert!((det - 1.0).abs() < 1e-4, "{}", det);
         Self {
@@ -53,23 +52,16 @@ impl Interaction {
             ..self
         }
     }
-    pub fn world_to_local(self, world: Vec3) -> Omega {
-        let cols = self.tbn_frame.cols;
-        assert!(self.has_valid_frame());
-        Omega::normalize(cols[0].dot(world), cols[1].dot(world), cols[2].dot(world))
-    }
-
-    pub fn local_to_world(self, local: Omega) -> Vec3 {
-        let cols = self.tbn_frame.cols;
-        assert!(self.has_valid_frame());
-        local.x() * cols[0] + local.y() * cols[1] + local.z() * cols[2]
-    }
 
     pub fn spawn_ray(&self, dir: Vec3) -> Ray {
         let out_normal = dir.dot(self.normal).signum() * self.normal;
         Ray::new(self.pos + out_normal * 0.001, dir)
     }
-    
+
+    pub fn spawn_limited_ray_to(&self, pos: Point3) -> Ray {
+        self.spawn_ray(pos - self.pos).with_extent(1.0 - 0.001)
+    }
+
     pub fn has_valid_frame(&self) -> bool {
         let cols = self.tbn_frame.cols;
         let det = cols[0].cross(cols[1]).dot(cols[2]);

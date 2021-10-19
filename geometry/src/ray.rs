@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter, Result};
 use math::hcm;
 
 /// Represents a ray:
-/// 
+///
 ///   origin + t * direction
 ///
 /// where t is positive.
@@ -30,6 +30,10 @@ impl Ray {
     }
     pub fn set_extent(&mut self, t_max: f32) {
         self.t_max = t_max;
+    }
+    
+    pub fn with_extent(self, t_max: f32) -> Self {
+        Ray { t_max, ..self }
     }
     /// Returns `None` if the given `t` is outside the ray's extent [0.0, `r.t_max`).
     /// `Some(t)` otherwise.

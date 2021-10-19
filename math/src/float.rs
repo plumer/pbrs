@@ -1,5 +1,6 @@
 /// Represents intervals on the real-number axis. Any `Interval`s covers at least 1 point.
 /// There is no difference between open/closed intervals.
+#[derive(Clone, Copy)]
 pub struct Interval {
     pub min: f32,
     pub max: f32,
@@ -138,6 +139,10 @@ impl Interval {
     /// Returns the left and right ends as a pair.
     pub fn as_pair(&self) -> (f32, f32) {
         (self.min, self.max)
+    }
+
+    pub fn lerp(&self, t: f32) -> f32 {
+        lerp(self.min, self.max, t)
     }
 }
 

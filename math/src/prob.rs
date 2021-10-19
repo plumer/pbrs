@@ -7,9 +7,18 @@ pub enum Prob {
     Mass(f32),
 }
 
+pub struct Density(f32);
+pub struct Mass(f32);
+
 impl Prob {
     pub fn is_density(&self) -> bool {
         matches!(self, Self::Density(_))
+    }
+    pub fn is_positive(&self) -> bool {
+        match self {
+            Self::Density(x) => *x > 0.0,
+            Self::Mass(x) => *x > 0.0,
+        }
     }
     pub fn density(&self) -> f32 {
         if let Self::Density(pdf) = &self {

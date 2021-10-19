@@ -6,7 +6,7 @@ use std::f32::consts::PI;
 use crate::{Interaction, Shape};
 use geometry::ray::Ray;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Sphere {
     center: Point3,
     radius: f32,
@@ -30,10 +30,11 @@ impl Sphere {
     }
 }
 
+#[derive(Clone)]
 pub struct QuadXY {
-    x_interval: Interval,
-    y_interval: Interval,
-    z: f32,
+    pub x_interval: Interval,
+    pub y_interval: Interval,
+    pub z: f32,
 }
 
 impl QuadXY {

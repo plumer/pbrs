@@ -96,6 +96,11 @@ impl BvhNode {
             }
         }
     }
+
+    pub fn occludes(&self, ray: &Ray) -> bool {
+        let mut ray = ray.clone();
+        self.intersect(&mut ray).is_some()
+    }
 }
 
 pub fn build_bvh(mut instances: Vec<Box<Instance>>) -> Box<BvhNode> {
