@@ -58,11 +58,13 @@ impl QuadXY {
     }
 }
 
+#[derive(Clone)]
 pub struct QuadXZ {
-    x_interval: Interval,
-    z_interval: Interval,
-    y: f32,
+    pub x_interval: Interval,
+    pub z_interval: Interval,
+    pub y: f32,
 }
+
 
 impl QuadXZ {
     pub fn from_raw(x_interval: (f32, f32), z_interval: (f32, f32), y: f32) -> Self {
@@ -76,10 +78,11 @@ impl QuadXZ {
     }
 }
 
+#[derive(Clone)]
 pub struct QuadYZ {
-    y_interval: Interval,
-    z_interval: Interval,
-    x: f32,
+    pub y_interval: Interval,
+    pub z_interval: Interval,
+    pub x: f32,
 }
 
 impl QuadYZ {

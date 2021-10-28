@@ -287,3 +287,43 @@ impl ShapeSample for shape::QuadXY {
         self.x_interval.length() * self.y_interval.length()
     }
 }
+
+impl ShapeSample for shape::QuadXZ {
+    fn sample(&self, rnd2: (f32, f32)) -> Interaction {
+        let (u, v) = rnd2;
+        let pos = hcm::Point3::new(self.x_interval.lerp(u), self.y, self.z_interval.lerp(v));
+        let normal = hcm::Vec3::ybase();
+        Interaction::rayless(pos, rnd2, normal)
+    }
+
+    fn sample_towards(&self, target: &Interaction, rnd2: (f32, f32)) -> Interaction {
+        let mut temp = self.sample(rnd2);
+        let forward = target.pos - temp.pos;
+        temp.normal = forward.dot(temp.normal).signum() * temp.normal;
+        temp
+    }
+
+    fn area(&self) -> f32 {
+        self.x_interval.length() * self.z_interval.length()
+    }
+}
+
+impl ShapeSample for shape::QuadYZ {
+    fn sample(&self, rnd2: (f32, f32)) -> Interaction {
+        let (u, v) = rnd2;
+        let pos = hcm::Point3::new(self.x, self.y_interval.lerp(u), self.z_interval.lerp(v));
+        let normal = hcm::Vec3::xbase();
+        Interaction::rayless(pos, rnd2, normal)
+    }
+
+    fn sample_towards(&self, target: &Interaction, rnd2: (f32, f32)) -> Interaction {
+        let mut temp = self.sample(rnd2);
+        let forward = target.pos - temp.pos;
+        temp.normal = forward.dot(temp.normal).signum() * temp.normal;
+        temp
+    }
+
+    fn area(&self) -> f32 {
+        self.z_interval.length() * self.y_interval.length()
+    }
+}
