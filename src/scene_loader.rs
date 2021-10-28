@@ -3,20 +3,20 @@ use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use math::hcm;
 use geometry::camera::Camera;
+use math::hcm;
 
-use radiometry::color::Color;
 use crate::instance::AffineTransform;
 use crate::light::{self, DiffuseAreaLight};
-use crate::light::{Light, ShapeSample};
+use crate::light::{DeltaLight, ShapeSample};
 use crate::material::{self as mtl, Material};
+use crate::texture::{self as tex, Texture};
+use radiometry::color::Color;
 use scene::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, plyloader, token,
 };
-use shape::{self, IsolatedTriangle, Shape, TriangleMeshRaw};
-use crate::texture::{self as tex, Texture};
+use shape::{self, IsolatedTriangle, Shape};
 
 #[allow(dead_code)]
 pub struct Scene {
@@ -28,17 +28,30 @@ pub struct Scene {
 
     // materials: Vec<Box<dyn Material>>,
     // named_materials: HashMap<String, usize>,
-    
     pub tlas: crate::tlas::BvhNode,
-    pub delta_lights: Vec<Box<dyn Light>>,
+    pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
     pub env_light: Option<light::EnvLight>,
+    pub camera: Camera,
 }
 
 impl Scene {
-    pub fn new(tlas: crate::tlas::BvhNode, env_light: light::EnvLight) -> Self {
+    pub fn new(tlas: crate::tlas::BvhNode, camera: Camera, env_light: light::EnvLight) -> Self {
         Self {
-            tlas, env_light: Some(env_light), delta_lights: vec![], area_lights: vec![]
+            tlas,
+            env_light: Some(env_light),
+            delta_lights: vec![],
+            area_lights: vec![],
+            camera,
+        }
+    }
+    pub fn with_lights(
+        self, delta_lights: Vec<DeltaLight>, area_lights: Vec<DiffuseAreaLight>,
+    ) -> Self {
+        Self {
+            delta_lights,
+            area_lights,
+            ..self
         }
     }
 }
@@ -55,7 +68,7 @@ pub struct SceneLoader {
     named_materials: HashMap<String, Arc<dyn Material>>,
     pub instances: Vec<crate::instance::Instance>,
     pub camera: Option<Camera>,
-    pub lights: Vec<Box<dyn Light>>,
+    pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
 }
 
@@ -92,7 +105,7 @@ impl SceneLoader {
             named_materials: HashMap::new(),
             instances: vec![],
             camera: None,
-            lights: vec![],
+            delta_lights: vec![],
             area_lights: vec![],
         }
     }
@@ -181,7 +194,7 @@ impl SceneLoader {
                             self.current_arealight_luminance.unwrap(),
                             shape,
                         );
-                        self.lights.push(Box::new(diffuse_light));
+                        self.area_lights.push(diffuse_light);
                     });
                 } else if let Some(mtl) = &self.current_mtl {
                     let shape = self.parse_shape(&shape_impl, args);
@@ -248,8 +261,8 @@ impl SceneLoader {
                 self.current_mtl = self.named_materials.get(&name).cloned();
             }
             WorldItem::Light(light_impl, args) => {
-                let light = Self::parse_light(light_impl, args);
-                self.lights.push(light);
+                let delta_light = Self::parse_light(light_impl, args);
+                self.delta_lights.push(delta_light);
             }
             WorldItem::AreaLight(light_impl, mut args) => {
                 if light_impl == "diffuse" {
@@ -347,9 +360,7 @@ impl SceneLoader {
     }
 
     fn parse_samplable_shape(
-        &self,
-        shape_impl: &String,
-        args: ast::ParameterSet,
+        &self, shape_impl: &String, args: ast::ParameterSet,
     ) -> Vec<Box<dyn ShapeSample>> {
         if shape_impl == "sphere" {
             let radius = args.lookup_f32("float radius").unwrap_or(1.0);
@@ -381,14 +392,59 @@ impl SceneLoader {
         }
     }
 
-    fn parse_light(light_impl: String, _args: ast::ParameterSet) -> Box<dyn Light> {
-        unimplemented!("light of {}", light_impl)
+    fn parse_light(light_impl: String, mut args: ast::ParameterSet) -> DeltaLight {
+        if light_impl == "distant" {
+            let from = match args.extract_substr("from") {
+                None => hcm::Point3::origin(),
+                Some((_key, ArgValue::Numbers(num))) => hcm::Point3::new(num[0], num[1], num[2]),
+                _ => panic!("Can't parse 3d point/vector"),
+            };
+            let to = match args.extract_substr("to") {
+                None => hcm::Point3::new(0.0, 0.0, 1.0),
+                Some((_key, ArgValue::Numbers(num))) => {
+                    hcm::Point3::new(num[0], num[1], num[2])
+                }
+                _ => panic!("Can't parse 3d point/vector for parameter 'to'"),
+            };
+            let emit_radiance = match args.extract_substr("L") {
+                None => Color::white(),
+                Some((key, ArgValue::Numbers(nums))) => {
+                    let spectrum_type = key.split(' ').next().unwrap();
+                    Self::parse_constant_color(spectrum_type, nums)
+                },
+                Some((_, ArgValue::Number(g))) => Color::gray(g),
+                Some(_) => panic!("Can't parse radiance"),
+            };
+            light::DeltaLight::distant(f32::INFINITY, to - from, emit_radiance)
+        } else if light_impl == "point" {
+            let position = match args.extract_substr("from") {
+                None => hcm::Point3::origin(),
+                Some((_key, ArgValue::Numbers(num))) => {
+                    hcm::Point3::new(num[0], num[1], num[2])
+                }
+                _ => panic!("Can't parse 3d point/vector"),
+            };
+            let intensity = match args.extract_substr("L") {
+                None => Color::white(),
+                Some((key, ArgValue::Numbers(nums))) => {
+                    let spectrum_type = key.split(' ').next().unwrap();
+                    Self::parse_constant_color(spectrum_type, nums)
+                },
+                Some((_, ArgValue::Number(g))) => Color::gray(g),
+                Some(_) => panic!("Can't parse intensity"),
+            };
+            light::DeltaLight::point(position, intensity)
+        } else if light_impl == "projection" {
+            unimplemented!("light of {}", light_impl)
+        } else if light_impl == "spot" {
+            unimplemented!("light of {}", light_impl)
+        } else {
+            unimplemented!("not delta light: {}", light_impl)
+        }
     }
 
     fn parse_material(
-        &mut self,
-        mtl_impl: String,
-        mut parameters: ast::ParameterSet,
+        &mut self, mtl_impl: String, mut parameters: ast::ParameterSet,
     ) -> Arc<dyn Material> {
         if mtl_impl == "glass" {
             let kr = match parameters.extract_substr("Kr") {

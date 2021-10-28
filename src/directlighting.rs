@@ -8,7 +8,7 @@ use shape::Interaction;
 use rand::Rng;
 
 use crate::bsdf::BSDF;
-use crate::light::{DiffuseAreaLight, Light};
+use crate::light::{DeltaLight, DiffuseAreaLight, Light};
 use crate::material::Material;
 use crate::scene_loader::Scene;
 
@@ -70,7 +70,7 @@ fn uniform_sample_one_light(hit: &Interaction, mtl: &dyn Material, scene: &Scene
 }
 
 fn estimate_direct_delta_light(
-    hit: &Interaction, mtl: &dyn Material, light: &Box<dyn Light>,
+    hit: &Interaction, mtl: &dyn Material, light: &DeltaLight,
     rnd2_light: (f32, f32), scene: &Scene,
 ) -> Color {
     // Uses multiple-importance sampling technique to combine the contribution of 2 different

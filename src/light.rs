@@ -27,50 +27,68 @@ pub trait Light {
 
 // Various kinds of lights.
 
-struct PointLight {
-    position: hcm::Point3,
-    intensity: Color,
+#[derive(Debug, Clone, Copy)]
+pub enum DeltaLight {
+    Point {
+        position: hcm::Point3,
+        intensity: Color,
+    },
+    Distant {
+        world_radius: f32,
+        incident_direction: hcm::Vec3,
+        radiance: Color,
+    },
 }
 
-impl Light for PointLight {
+impl DeltaLight {
+    /// Creates a point light with the given position and intensity of the light.
+    pub fn point(position: hcm::Point3, intensity: Color) -> Self {
+        Self::Point{position, intensity}
+    }
+    
+    /// Creates a distant light with given direction and radiance.
+    /// Usually used to model massively point lights that are very far away (e.g., sun light).
+    /// 
+    /// The `world_radius` is the radius of the bounding sphere of the entire scene. It is used for
+    /// computing a visibility tester ray. If not sure, use `f32::INFINITY` for the radius.
+    pub fn distant(world_radius: f32, incident_direction: hcm::Vec3, radiance: Color) -> Self {
+        Self::Distant{world_radius, incident_direction, radiance}
+    }
+}
+
+#[rustfmt::skip]
+impl Light for DeltaLight {
     fn sample_incident_radiance(
         &self, target: &Interaction, _u: (f32, f32),
     ) -> (Color, hcm::Vec3, Prob, Ray) {
-        let radiance = self.intensity / self.position.squared_distance_to(target.pos);
-        let wi = (self.position - target.pos).hat();
-        let visibility_ray = spawn_ray_to(target, self.position);
-        (radiance, wi, Prob::Mass(1.0), visibility_ray)
+        match self.clone() {
+            Self::Point {position, intensity} => {
+                let radiance = intensity / position.squared_distance_to(target.pos);
+                let wi = (position - target.pos).hat();
+                let visibility_ray = spawn_ray_to(target, position);
+                (radiance, wi, Prob::Mass(1.0), visibility_ray)
+            }
+            Self::Distant {world_radius, incident_direction, radiance} => {
+                let outside_world = target.pos + world_radius * 2.0 * incident_direction;
+                let visibility_ray = spawn_ray_to(target, outside_world);
+                (
+                    radiance,
+                    incident_direction,
+                    Prob::Mass(1.0),
+                    visibility_ray,
+                )
+            }
+        }
     }
 
     fn power(&self) -> Color {
-        self.intensity * 4.0 * PI
-    }
-}
-
-pub struct DistantLight {
-    _world_center: hcm::Point3,
-    world_radius: f32,
-    incident_direction: hcm::Vec3,
-    radiance: Color,
-}
-
-impl Light for DistantLight {
-    fn sample_incident_radiance(
-        &self, target: &Interaction, _u: (f32, f32),
-    ) -> (Color, hcm::Vec3, Prob, Ray) {
-        let outside_world = target.pos + self.world_radius * 2.0 * self.incident_direction;
-        let visibility_ray = spawn_ray_to(target, outside_world);
-        (
-            self.radiance,
-            self.incident_direction,
-            Prob::Mass(1.0),
-            visibility_ray,
-        )
-    }
-
-    fn power(&self) -> Color {
-        let area = consts::PI * self.world_radius.powi(2);
-        area * self.radiance
+        match self.clone() {
+            Self::Point {position: _, intensity} => intensity * 4.0 * PI,
+            Self::Distant {world_radius, radiance, ..} => {
+                let area = consts::PI * world_radius.powi(2);
+                area * radiance
+            }
+        }
     }
 }
 
