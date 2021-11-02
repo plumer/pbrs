@@ -8,7 +8,7 @@ mod scene_loader;
 mod texture;
 mod tlas;
 
-use glog::Flags;
+use io::Write;
 use log::*;
 use std::f32::consts::PI;
 use std::fs::File;
@@ -20,27 +20,24 @@ use crate::directlighting::{direct_lighting_integrator};
 use crate::scene_loader::Scene;
 use geometry::{bvh, camera, ray};
 use instance::Instance;
-use io::Write;
+use light::EnvLight;
 use material as mtl;
 use math::hcm::{self, Point3, Vec3};
 use math::{assert_le, float};
 use radiometry::color::Color;
+use shape::{self, QuadXZ, Sphere};
 use texture as tex;
 use tlas::BvhNode;
 
-use geometry::{bvh, camera, ray};
-use light::EnvLight;
+use glog::Flags;
 use rayon::prelude::*;
-use shape::{self, QuadXZ, Sphere};
 
 use crate::{camera::Camera, texture::Texture};
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;
-const MSAA: usize = 12; // 275R: 12x12 = 63.6s, 24x24=252.2s
+const MSAA: usize = 2; // 275R: 12x12 = 63.6s, 24x24=252.2s
 const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
-
-type Scene = (Box<BvhNode>, camera::Camera, EnvLight);
 
 fn vec3_to_color(v: Vec3) -> Color {
     Color::new(v.x, v.y, v.z)
@@ -80,8 +77,8 @@ fn main() {
     }
     let options = options.unwrap();
 
-    let (bvh, camera, env_light) = if let Some(pbrs_file_path) = options.pbrt_file {
-        load_pbrt_scene(&pbrs_file_path)
+    let scene = if let Some(pbrs_file_path) = options.pbrt_file.as_ref() {
+        load_pbrt_scene(pbrs_file_path)
     } else {
         match options.scene_name.as_ref().map(|n| n.as_str()) {
             Some("125_spheres") => scene_125_spheres(),
@@ -110,10 +107,10 @@ fn main() {
 
     info!(
         "building bvh success: {}, height = {}",
-        bvh.geometric_sound(),
-        bvh.height()
+        scene.tlas.geometric_sound(),
+        scene.tlas.height()
     );
-    let (width, height) = camera.resolution();
+    let (width, height) = scene.camera.resolution();
 
     let start_render = Instant::now();
     let render_one_row = |row| {
@@ -131,7 +128,7 @@ fn main() {
                     ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
                 );
                 // let jitter = (rand::random::<f32>(), rand::random::<f32>());
-                let ray = camera.shoot_ray(row, col, jitter).unwrap();
+                let ray = scene.camera.shoot_ray(row, col, jitter).unwrap();
                 // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
                 color_sum = color_sum + integrator(&scene, ray, 5);
             }
@@ -156,12 +153,6 @@ fn main() {
             .collect()
     };
 
-    let direct_render = || {
-        let pbr_scene = scene_loader::Scene::new(*bvh, env_light);
-        let ray = camera.shoot_ray(32, 32, (0.25, 0.25)).unwrap();
-        let c = directlighting::direct_lighting_integrator(&pbr_scene, ray, 2);
-    };
-
     let image_data: Vec<_> = image_map
         .iter()
         .map(|color| color.gamma_encode().to_u8().to_vec())
@@ -172,7 +163,21 @@ fn main() {
 
     println!("whole render time = {:?}", whole_render_time);
 
-    write_image(r"output.png", &image_data, camera.resolution());
+    let scene_name = match (options.scene_name, options.pbrt_file) {
+        (Some(name), None) => name,
+        (None, Some(path)) => std::path::Path::new(&path)
+            .file_stem()
+            .map(|s| s.to_owned().into_string())
+            .unwrap()
+            .unwrap(),
+        _ => "output".to_owned(),
+    };
+
+    write_image(
+        &format!("{}-{}spp.png", scene_name, MSAA.pow(2)),
+        &image_data,
+        scene.camera.resolution(),
+    );
 }
 
 // Functions that computes the radiance along a ray. One for computing the radiance correctly and
@@ -269,7 +274,7 @@ fn dark_room(r: ray::Ray) -> Color {
 
 #[allow(dead_code)]
 #[allow(unused_mut)]
-fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
+fn scene_125_spheres() -> Scene {
     let mut camera = camera::Camera::new((WIDTH, HEIGHT), hcm::Degree(25.0).to_radian());
     camera.look_at(
         Point3::new(13.0, 2.0, 3.0),
@@ -324,10 +329,10 @@ fn scene_125_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
 
     let boxed_instances: Vec<Box<Instance>> =
         instances.iter().map(|x| Box::from(x.clone())).collect();
-    (tlas::build_bvh(boxed_instances), camera, blue_sky)
+    Scene::new(*tlas::build_bvh(boxed_instances), camera, blue_sky)
 }
 
-fn scene_two_perlin_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
+fn scene_two_perlin_spheres() -> Scene {
     let perlin_tex = tex::Perlin::with_freq(4.0);
 
     let (mut cmin, mut cmax) = (0.0f32, 0.0f32);
@@ -358,10 +363,10 @@ fn scene_two_perlin_spheres() -> (Box<BvhNode>, camera::Camera, EnvLight) {
         Vec3::ybase(),
     );
 
-    (tlas::build_bvh(instances), cam, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam, blue_sky)
 }
 
-fn scene_earth() -> (Box<BvhNode>, camera::Camera, EnvLight) {
+fn scene_earth() -> Scene {
     let earth_tex = Arc::new(tex::Image::from_file("assets/earthmap.png").unwrap());
     let earth_mtl = Arc::new(material::Lambertian::textured(earth_tex));
 
@@ -375,7 +380,7 @@ fn scene_earth() -> (Box<BvhNode>, camera::Camera, EnvLight) {
         Vec3::ybase(),
     );
 
-    (tlas::build_bvh(instances), cam, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam, blue_sky)
 }
 
 fn scene_quad_light() -> Scene {
@@ -413,9 +418,7 @@ fn scene_quad_light() -> Scene {
         Vec3::ybase(),
     );
 
-    // let pbr_scene = scene_loader::Scene::new(*tlas::build_bvh(instances), dark_room);
-
-    (tlas::build_bvh(instances), cam, dark_room)
+    Scene::new(*tlas::build_bvh(instances), cam, dark_room).with_lights(vec![], area_lights)
 }
 
 fn scene_quad() -> Scene {
@@ -425,19 +428,29 @@ fn scene_quad() -> Scene {
 
     let cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(45.0).to_radian());
 
-    (tlas::build_bvh(instances), cam, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam, blue_sky)
 }
 
 fn scene_cornell_box() -> Scene {
     let red = mtl::Lambertian::solid(Color::new(0.65, 0.05, 0.05));
     let white = mtl::Lambertian::solid(Color::gray(0.73));
     let green = mtl::Lambertian::solid(Color::new(0.12, 0.45, 0.15));
-    let light = mtl::DiffuseLight::new(Color::new(15.0, 15.0, 15.0));
+    let light_color = Color::gray(15.0);
+    let light = mtl::DiffuseLight::new(light_color);
 
     let red = Arc::new(red);
     let white = Arc::new(white);
     let green = Arc::new(green);
     let light = Arc::new(light);
+
+    let area_lights = vec![light::DiffuseAreaLight::new(
+        light_color,
+        Box::new(shape::QuadXZ::from_raw(
+            (213.0, 343.0),
+            (227.0, 332.0),
+            554.0,
+        )),
+    )];
 
     let shapes: Vec<Arc<dyn shape::Shape>> = vec![
         Arc::new(shape::QuadYZ::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // green
@@ -487,7 +500,7 @@ fn scene_cornell_box() -> Scene {
         Vec3::ybase(),
     );
 
-    (tlas::build_bvh(instances), cam, dark_room)
+    Scene::new(*tlas::build_bvh(instances), cam, dark_room).with_lights(vec![], area_lights)
 }
 
 fn scene_plates() -> Scene {
@@ -526,7 +539,7 @@ fn scene_plates() -> Scene {
         Vec3::ybase(),
     );
 
-    (tlas::build_bvh(instances), camera, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), camera, blue_sky)
 }
 
 fn scene_everything() -> Scene {
@@ -556,6 +569,11 @@ fn scene_everything() -> Scene {
 
     let light = mtl::DiffuseLight::new(Color::gray(7.0));
     let light_quad = shape::QuadXZ::from_raw((123.0, 423.0), (147.0, 412.0), 554.0);
+    let area_lights = vec![light::DiffuseAreaLight::new(
+        Color::gray(7.0),
+        Box::new(light_quad.clone()),
+    )];
+
     instances.push(Instance::from_raw(light_quad, light));
 
     let glass_ball = Sphere::from_raw((260.0, 150.0, 45.0), 50.0);
@@ -602,7 +620,7 @@ fn scene_everything() -> Scene {
 
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
-    (tlas::build_bvh(instances), cam, dark_room)
+    Scene::new(*tlas::build_bvh(instances), cam, dark_room).with_lights(vec![], area_lights)
 }
 
 fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
@@ -613,7 +631,8 @@ fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
         .into_iter()
         .map(|i| Box::new(i))
         .collect::<Vec<_>>();
-    (tlas::build_bvh(tlas), cam, blue_sky)
+    Scene::new(*tlas::build_bvh(tlas), cam, blue_sky)
+        .with_lights(pbrt_scene.delta_lights, pbrt_scene.area_lights)
 }
 
 // Monte-carlo playground
