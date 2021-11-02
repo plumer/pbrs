@@ -28,7 +28,16 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
         // Computes eitted light if ray hits an area light source.
         // radiance += mtl.emission()
         //
+        uniform_sample_one_light(&hit, mtl.deref(), scene)
+    } else if let Some(env_light) = scene.env_light {
+        env_light(ray)
+    } else {
+        Color::black()
+    }
+}
 
+pub fn direct_lighting_debug_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
+    if let Some((hit, mtl)) = scene.tlas.intersect(&mut ray) {
         uniform_sample_one_light(&hit, mtl.deref(), scene)
     } else if let Some(env_light) = scene.env_light {
         env_light(ray)
@@ -38,17 +47,17 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
 }
 
 fn uniform_sample_one_light(hit: &Interaction, mtl: &dyn Material, scene: &Scene) -> Color {
-    if scene.delta_lights.is_empty() {
-        return Color::black();
-    }
     let num_lights =
         scene.delta_lights.len() + scene.area_lights.len() + (scene.env_light.is_some() as usize);
+    if num_lights == 0 {
+        return Color::black();
+    }
     let chosen_index = num_lights * rand::random::<usize>() % num_lights;
-    let light_pdf = 1.0f32 / scene.delta_lights.len() as f32;
+    let light_pdf = 1.0f32 / num_lights as f32;
     let mut rng = rand::thread_rng();
     let rnd2_light = (rng.gen::<f32>(), rng.gen::<f32>());
     let rnd2_scatter = (rng.gen::<f32>(), rng.gen::<f32>());
-    (1.0 / light_pdf) * match chosen_index {
+    let one_light_incident_radiance = match chosen_index {
         x if x < scene.delta_lights.len() => {
             let chosen_light = &scene.delta_lights[chosen_index];
             estimate_direct_delta_light(hit, mtl, chosen_light, rnd2_light, scene)
@@ -60,18 +69,22 @@ fn uniform_sample_one_light(hit: &Interaction, mtl: &dyn Material, scene: &Scene
         _ => {
             let bxdfs = mtl.bxdfs_at(hit);
             let bsdf = BSDF::new_frame(hit).with_bxdfs(&bxdfs);
-            let (_f, wi, _pr) = bsdf.sample(hit.wo, rnd2_scatter);
-            scene
-                .env_light
-                .map(|l| l(hit.spawn_ray(wi)))
-                .unwrap_or(Color::black())
+            let (f, wi, pr) = bsdf.sample(hit.wo, rnd2_scatter);
+            let incident_ray = hit.spawn_ray(wi);
+
+            let incident_radiance = match (scene.tlas.occludes(&incident_ray), scene.env_light) {
+                (false, Some(env_light)) => env_light(incident_ray),
+                _ => Color::black(),
+            };
+            incident_radiance * f * wi.dot(hit.normal).abs() / pr.density()
         }
-    }
+    };
+    one_light_incident_radiance * (1.0 / light_pdf)
 }
 
 fn estimate_direct_delta_light(
-    hit: &Interaction, mtl: &dyn Material, light: &DeltaLight,
-    rnd2_light: (f32, f32), scene: &Scene,
+    hit: &Interaction, mtl: &dyn Material, light: &DeltaLight, rnd2_light: (f32, f32),
+    scene: &Scene,
 ) -> Color {
     // Uses multiple-importance sampling technique to combine the contribution of 2 different
     // sampling strategies:
