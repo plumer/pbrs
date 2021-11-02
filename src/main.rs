@@ -16,6 +16,9 @@ use std::io::{self, BufWriter};
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::directlighting::{direct_lighting_integrator};
+use crate::scene_loader::Scene;
+use geometry::{bvh, camera, ray};
 use instance::Instance;
 use io::Write;
 use material as mtl;
@@ -100,6 +103,11 @@ fn main() {
         }
     };
 
+    let integrator = match options.integrator {
+        cli_options::Integrator::Direct => direct_lighting_integrator,
+        cli_options::Integrator::Path => path_integrator,
+    };
+
     info!(
         "building bvh success: {}, height = {}",
         bvh.geometric_sound(),
@@ -125,7 +133,7 @@ fn main() {
                 // let jitter = (rand::random::<f32>(), rand::random::<f32>());
                 let ray = camera.shoot_ray(row, col, jitter).unwrap();
                 // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
-                color_sum = color_sum + path_integrator(&bvh, ray, 5, env_light);
+                color_sum = color_sum + integrator(&scene, ray, 5);
             }
 
             let color = color_sum / (SAMPLES_PER_PIXEL as f32);
@@ -171,17 +179,15 @@ fn main() {
 // another one for debugging purposes.
 // ------------------------------------------------------------------------------------------------
 
-fn path_integrator(
-    scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvLight,
-) -> Color {
+fn path_integrator(scene: &Scene, mut ray: ray::Ray, depth: i32) -> Color {
     if depth <= 0 {
         return Color::black();
     }
 
-    let hit_info = scene.intersect(&mut ray);
+    let hit_info = scene.tlas.intersect(&mut ray);
 
     match hit_info {
-        None => env_light(ray),
+        None => scene.env_light.map(|l| l(ray)).unwrap_or(Color::black()),
         Some((hit, mtl)) => {
             if !mtl.emission().is_black() {
                 // Stops recursive path tracing if the material is emissive, and
@@ -189,7 +195,7 @@ fn path_integrator(
                 mtl.emission()
             } else {
                 let (scattered_ray, attenuation) = mtl.scatter(-ray.dir, &hit);
-                let in_radiance = path_integrator(scene, scattered_ray, depth - 1, env_light);
+                let in_radiance = path_integrator(scene, scattered_ray, depth - 1);
                 attenuation * in_radiance
             }
         }

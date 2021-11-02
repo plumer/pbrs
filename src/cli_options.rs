@@ -1,9 +1,25 @@
 use std::collections::HashMap;
 
+pub enum Integrator {
+    Direct,
+    Path,
+}
+
+impl Integrator {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "direct" => Some(Self::Direct),
+            "path" => Some(Self::Path),
+            _ => None,
+        }
+    }
+}
+
 pub struct CliOptions {
     pub use_multi_thread: bool,
     pub scene_name: Option<String>,
     pub pbrt_file: Option<String>,
+    pub integrator: Integrator,
 }
 
 impl Default for CliOptions {
@@ -12,6 +28,7 @@ impl Default for CliOptions {
             use_multi_thread: true,
             scene_name: None,
             pbrt_file: None,
+            integrator: Integrator::Path,
         }
     }
 }
@@ -22,6 +39,7 @@ impl CliOptions {
         --use_multi_thread | --use_single_thread
         --scene_name <scene_name>
         --pbrt_file <file.pbrt>
+        --integrator <direct|path>
         "#
     }
 }
@@ -58,6 +76,13 @@ pub fn parse_args(args: Vec<String>) -> Result<CliOptions, String> {
             "--pbrt_file" => options.pbrt_file = v,
             "--help" => {
                 println!("usage: {}", CliOptions::message());
+                std::process::exit(0);
+            }
+            "--integrator" => {
+                options.integrator = v
+                    .map(|s| Integrator::from_str(&s))
+                    .flatten()
+                    .expect("unsupported")
             }
             _ => return Err(format!("Unrecognized key {}", k)),
         }
