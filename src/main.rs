@@ -16,7 +16,7 @@ use std::io::{self, BufWriter};
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::directlighting::{direct_lighting_integrator};
+use crate::directlighting::direct_lighting_integrator;
 use crate::scene_loader::Scene;
 use geometry::{bvh, camera, ray};
 use instance::Instance;
@@ -71,6 +71,8 @@ fn main() {
         })
         .unwrap();
 
+    // Parses options from the command line arguments: input file or hard-coded scene name, choice
+    // of integrator, etc.
     let options = cli_options::parse_args(std::env::args().collect::<Vec<_>>());
     if let Err(message) = &options {
         error!("Can't parse command-line options: {}", message);
@@ -110,9 +112,9 @@ fn main() {
         scene.tlas.geometric_sound(),
         scene.tlas.height()
     );
-    let (width, height) = scene.camera.resolution();
 
-    let start_render = Instant::now();
+    let (width, height) = scene.camera.resolution();
+    // Function lambda to render one row. It's going to be used in the main rendering process.
     let render_one_row = |row| {
         if (row % 10) == 0 {
             print!("{} ", row);
@@ -139,6 +141,10 @@ fn main() {
         colors_for_row
     };
 
+    // Initiates rendering. Based on command line options, the process may or may not use 
+    // multi-threading.
+    let start_render = Instant::now();
+
     let image_map: Vec<_> = if options.use_multi_thread {
         (0..height)
             .into_par_iter()
@@ -153,6 +159,7 @@ fn main() {
             .collect()
     };
 
+    // Collects image data as a huge array of `Color`.
     let image_data: Vec<_> = image_map
         .iter()
         .map(|color| color.gamma_encode().to_u8().to_vec())
@@ -160,9 +167,9 @@ fn main() {
         .collect();
 
     let whole_render_time = Instant::now().duration_since(start_render);
-
     println!("whole render time = {:?}", whole_render_time);
 
+    // Builds the file name using scene name and SPP, and writes the resulting image to a file.
     let scene_name = match (options.scene_name, options.pbrt_file) {
         (Some(name), None) => name,
         (None, Some(path)) => std::path::Path::new(&path)
