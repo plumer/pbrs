@@ -36,6 +36,7 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
     }
 }
 
+#[allow(dead_code)]
 pub fn direct_lighting_debug_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
     if let Some((hit, mtl)) = scene.tlas.intersect(&mut ray) {
         uniform_sample_one_light(&hit, mtl.deref(), scene)

@@ -401,9 +401,7 @@ impl SceneLoader {
             };
             let to = match args.extract_substr("to") {
                 None => hcm::Point3::new(0.0, 0.0, 1.0),
-                Some((_key, ArgValue::Numbers(num))) => {
-                    hcm::Point3::new(num[0], num[1], num[2])
-                }
+                Some((_key, ArgValue::Numbers(num))) => hcm::Point3::new(num[0], num[1], num[2]),
                 _ => panic!("Can't parse 3d point/vector for parameter 'to'"),
             };
             let emit_radiance = match args.extract_substr("L") {
@@ -411,7 +409,7 @@ impl SceneLoader {
                 Some((key, ArgValue::Numbers(nums))) => {
                     let spectrum_type = key.split(' ').next().unwrap();
                     Self::parse_constant_color(spectrum_type, nums)
-                },
+                }
                 Some((_, ArgValue::Number(g))) => Color::gray(g),
                 Some(_) => panic!("Can't parse radiance"),
             };
@@ -419,9 +417,7 @@ impl SceneLoader {
         } else if light_impl == "point" {
             let position = match args.extract_substr("from") {
                 None => hcm::Point3::origin(),
-                Some((_key, ArgValue::Numbers(num))) => {
-                    hcm::Point3::new(num[0], num[1], num[2])
-                }
+                Some((_key, ArgValue::Numbers(num))) => hcm::Point3::new(num[0], num[1], num[2]),
                 _ => panic!("Can't parse 3d point/vector"),
             };
             let intensity = match args.extract_substr("L") {
@@ -429,7 +425,7 @@ impl SceneLoader {
                 Some((key, ArgValue::Numbers(nums))) => {
                     let spectrum_type = key.split(' ').next().unwrap();
                     Self::parse_constant_color(spectrum_type, nums)
-                },
+                }
                 Some((_, ArgValue::Number(g))) => Color::gray(g),
                 Some(_) => panic!("Can't parse intensity"),
             };
