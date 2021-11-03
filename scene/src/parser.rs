@@ -1,6 +1,6 @@
 use core::panic;
 
-use math::hcm::{Degree, Point3, Vec3};
+use math::hcm::{Point3, Vec3};
 use crate::ast::*;
 use crate::token::Token;
 
@@ -286,11 +286,11 @@ impl Parser {
                 Transform::Scale(Vec3::new(x, y, z))
             }
             Token::KwRotate => {
-                if let Token::Float(angle) = self.peek {
+                if let Token::Float(deg) = self.peek {
                     self.goto_next();
                     let raw_numbers = self.get_next_3_numbers();
                     let [x, y, z] = raw_numbers;
-                    Transform::Rotate(Vec3::new(x, y, z), Degree(angle))
+                    Transform::Rotate(Vec3::new(x, y, z), math::new_deg(deg))
                 } else {
                     self.raise_syntax_error("4th number expected in rotate");
                 }

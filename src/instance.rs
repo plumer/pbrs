@@ -3,7 +3,8 @@ use std::{ops::Mul, sync::Arc};
 use crate::ray::Ray;
 use crate::shape::Shape;
 use crate::{bvh::BBox, material::Material};
-use math::hcm::{Mat3, Mat4, Point3, Radian, Vec3, Vec4};
+use math::hcm::{Mat3, Mat4, Point3, Vec3, Vec4};
+use math::Angle;
 use shape::Interaction;
 
 #[derive(Debug, Clone, Copy)]
@@ -40,19 +41,19 @@ impl RigidBodyTransform {
 
     // rotation: [1, 0] -> [cosT, sinT], [0, 1] -> [-sinT, cosT]
 
-    pub fn rotater_x(angle: Radian) -> Self {
+    pub fn rotater_x(angle: Angle) -> Self {
         Self::build(Mat3::rotater_x(angle), Vec3::zero())
     }
 
-    pub fn rotater_y(angle: Radian) -> Self {
+    pub fn rotater_y(angle: Angle) -> Self {
         Self::build(Mat3::rotater_y(angle), Vec3::zero())
     }
 
-    pub fn rotater_z(angle: Radian) -> Self {
+    pub fn rotater_z(angle: Angle) -> Self {
         Self::build(Mat3::rotater_z(angle), Vec3::zero())
     }
 
-    pub fn rotater(axis: Vec3, angle: Radian) -> Self {
+    pub fn rotater(axis: Vec3, angle: Angle) -> Self {
         Self::build(Mat3::rotater(axis, angle), Vec3::zero())
     }
 
@@ -69,15 +70,15 @@ impl RigidBodyTransform {
     }
 
     /// Applies rotation onto the transform, and returns Rotate(angle) * self.
-    pub fn rotate_x(self, angle: Radian) -> Self {
+    pub fn rotate_x(self, angle: Angle) -> Self {
         let rot = Mat3::rotater_x(angle);
         Self::build(rot * self.rotation, rot * self.translation)
     }
-    pub fn rotate_y(self, angle: Radian) -> Self {
+    pub fn rotate_y(self, angle: Angle) -> Self {
         let rot = Mat3::rotater_y(angle);
         Self::build(rot * self.rotation, rot * self.translation)
     }
-    pub fn rotate_z(self, angle: Radian) -> Self {
+    pub fn rotate_z(self, angle: Angle) -> Self {
         let rot = Mat3::rotater_z(angle);
         Self::build(rot * self.rotation, rot * self.translation)
     }
@@ -141,7 +142,7 @@ impl AffineTransform {
             inverse: Mat4::translater(-t),
         }
     }
-    pub fn rotater(axis: Vec3, angle: Radian) -> Self {
+    pub fn rotater(axis: Vec3, angle: Angle) -> Self {
         let forward = Mat4::rotater(axis, angle);
         Self {
             forward: Mat4::rotater(axis, angle),
@@ -169,13 +170,13 @@ impl AffineTransform {
     }
 
     /// Applies rotation onto the transform, and returns Rotate(angle) * self.
-    pub fn rotate_x(self, angle: Radian) -> Self {
+    pub fn rotate_x(self, angle: Angle) -> Self {
         Self::rotater(Vec3::xbase(), angle) * self
     }
-    pub fn rotate_y(self, angle: Radian) -> Self {
+    pub fn rotate_y(self, angle: Angle) -> Self {
         Self::rotater(Vec3::ybase(), angle) * self
     }
-    pub fn rotate_z(self, angle: Radian) -> Self {
+    pub fn rotate_z(self, angle: Angle) -> Self {
         Self::rotater(Vec3::zbase(), angle) * self
     }
 }
@@ -377,7 +378,7 @@ mod test {
     #[test]
     pub fn test_inverse() {
         type Trans = super::RigidBodyTransform;
-        let trans = Trans::rotater(super::Vec3::new(0.6, 0.8, 0.0), super::Radian(0.3));
+        let trans = Trans::rotater(super::Vec3::new(0.6, 0.8, 0.0), math::new_rad(0.3));
         let trans = trans * Trans::translater(super::Vec3::new(0.3, 0.4, 0.6));
 
         let inv = trans.inverse();
@@ -395,7 +396,7 @@ mod test {
     pub fn test_bbox_transform() {
         use super::*;
         type Trans = RigidBodyTransform;
-        let trans = Trans::rotater(Vec3::new(0.6, 0.8, 0.0), Radian(0.3));
+        let trans = Trans::rotater(Vec3::new(0.6, 0.8, 0.0), math::new_rad(0.3));
         let trans = trans * Trans::translater(Vec3::new(7.0, 8.0, -13.0));
 
         let bbox = BBox::new(Point3::new(-0.3, 0.4, 0.8), Point3::new(3.4, 2.3, 4.4));

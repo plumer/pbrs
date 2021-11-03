@@ -22,35 +22,13 @@ pub struct Point3 {
     pub z: f32,
 }
 
+#[deprecated]
 #[derive(Debug, Clone, Copy)]
 pub struct Radian(pub f32);
 
+#[deprecated]
 #[derive(Debug, Clone, Copy)]
 pub struct Degree(pub f32);
-
-impl From<Degree> for Radian {
-    fn from(d: Degree) -> Self {
-        let Degree(deg) = d;
-        Radian(deg.to_radians())
-    }
-}
-impl Degree {
-    pub fn to_radian(self) -> Radian {
-        let Degree(d) = self;
-        Radian(d.to_radians())
-    }
-}
-
-impl fmt::Display for Degree {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}deg", self.0)
-    }
-}
-impl fmt::Display for Radian {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}rad", self.0)
-    }
-}
 
 impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -458,36 +436,32 @@ impl Mat3 {
         mat.cols[2][2] = s;
         mat
     }
-    pub fn rotater_x(angle: Radian) -> Self {
-        let Radian(rad) = angle;
-        let (sin_t, cos_t) = rad.sin_cos();
+    pub fn rotater_x(angle: crate::Angle) -> Self {
+        let (sin_t, cos_t) = angle.sin_cos();
         let rot_y = Vec3::new(0.0, cos_t, sin_t);
         let rot_z = Vec3::new(0.0, -sin_t, cos_t);
 
         Mat3::from_vectors(Vec3::xbase(), rot_y, rot_z)
     }
 
-    pub fn rotater_y(angle: Radian) -> Self {
-        let Radian(rad) = angle;
-        let (sin_t, cos_t) = rad.sin_cos();
+    pub fn rotater_y(angle: crate::Angle) -> Self {
+        let (sin_t, cos_t) = angle.sin_cos();
         let rot_x = Vec3::new(cos_t, 0.0, -sin_t);
         let rot_z = Vec3::new(sin_t, 0.0, cos_t);
 
         Mat3::from_vectors(rot_x, Vec3::ybase(), rot_z)
     }
 
-    pub fn rotater_z(angle: Radian) -> Self {
-        let Radian(rad) = angle;
-        let (sin_t, cos_t) = rad.sin_cos();
+    pub fn rotater_z(angle: crate::Angle) -> Self {
+        let (sin_t, cos_t) = angle.sin_cos();
         let rot_x = Vec3::new(cos_t, sin_t, 0.0);
         let rot_y = Vec3::new(-sin_t, cos_t, 0.0);
 
         Mat3::from_vectors(rot_x, rot_y, Vec3::zbase())
     }
-    pub fn rotater(axis: Vec3, angle: Radian) -> Self {
-        let Radian(rad) = angle;
+    pub fn rotater(axis: Vec3, angle: crate::Angle) -> Self {
         let mut mat = Self::identity();
-        let (sin_t, cos_t) = rad.sin_cos();
+        let (sin_t, cos_t) = angle.sin_cos();
         for i in 0..3 {
             let mut base = Vec3::zero();
             base[i] = 1.0;
@@ -583,11 +557,9 @@ impl Mat4 {
         mat.cols[2][2] = s;
         mat
     }
-    pub fn rotater(axis: Vec3, angle: Radian) -> Mat4 {
-        let Radian(rad) = angle;
+    pub fn rotater(axis: Vec3, angle: crate::Angle) -> Mat4 {
         let mut mat = Self::identity();
-        let cos_t = f32::cos(rad);
-        let sin_t = f32::sin(rad);
+        let (sin_t, cos_t) = angle.sin_cos();
         for i in 0..3 {
             let mut base = Vec3::zero();
             base[i] = 1.0;
@@ -714,8 +686,8 @@ pub fn refract(normal: Vec3, wi: Vec3, ni_over_no: f32) -> Refract {
 /// The computed vector is (0, 0, 1) rotated `theta` radians away from the z-axis and then rotates
 /// around the z-axis with angle `phi`. Note that sin(theta) and cos(theta) values are passed in
 /// as usually the trigonometry values are more directly available rather than the angle itself.
-pub fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: Radian) -> Vec3 {
-    let (cos_phi, sin_phi) = phi.0.sin_cos();
+pub fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: crate::Angle) -> Vec3 {
+    let (cos_phi, sin_phi) = phi.sin_cos();
     Vec3::new(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta)
 }
 

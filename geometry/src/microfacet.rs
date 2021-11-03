@@ -144,7 +144,7 @@ impl MicrofacetDistrib {
                 let cos_theta = (1.0 + tan2_theta).sqrt().recip();
                 let sin_theta = cos_theta * tan2_theta.sqrt();
                 let wh =
-                    math::hcm::spherical_direction(sin_theta, cos_theta, math::hcm::Radian(phi));
+                    math::hcm::spherical_direction(sin_theta, cos_theta, math::new_rad(phi));
                 Omega(wh).face_forward(wo)
             }
             Self::TrowbridgeReitz { alpha_x, alpha_y } => {

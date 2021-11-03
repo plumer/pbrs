@@ -122,8 +122,8 @@ impl SceneLoader {
                         error!("Non perspective camera {} unsupported", camera_impl);
                     }
                     fov = match args.extract("float fov") {
-                        None => Some(hcm::Degree(60.0)),
-                        Some(ArgValue::Number(deg)) => Some(hcm::Degree(deg)),
+                        None => Some(math::new_deg(60.0)),
+                        Some(ArgValue::Number(deg)) => Some(math::new_deg(deg)),
                         Some(wtf) => panic!("complicated fov degree: {:?}", wtf),
                     };
                 }
@@ -146,8 +146,8 @@ impl SceneLoader {
         }
         let mut camera: Camera;
         match (fov, w, h) {
-            (Some(degree), Some(width), Some(height)) => {
-                camera = Camera::new((width as u32, height as u32), degree.to_radian());
+            (Some(angle), Some(width), Some(height)) => {
+                camera = Camera::new((width as u32, height as u32), angle);
             }
             _ => return None,
         }
@@ -729,7 +729,7 @@ impl SceneLoader {
             Transform::Identity => AffineTransform::identity(),
             Transform::Translate(v) => AffineTransform::translater(v),
             Transform::Scale(s) => AffineTransform::scaler(s),
-            Transform::Rotate(axis, angle) => AffineTransform::rotater(axis, angle.to_radian()),
+            Transform::Rotate(axis, angle) => AffineTransform::rotater(axis, angle),
             Transform::LookAt(_, _, _) => panic!("unsupported lookat in modeling step"),
         }
     }
@@ -744,7 +744,7 @@ impl SceneLoader {
                 error!("scaling of {} unsupported", s);
                 RBTrans::identity()
             }
-            Transform::Rotate(axis, angle) => RBTrans::rotater(axis, angle.to_radian()),
+            Transform::Rotate(axis, angle) => RBTrans::rotater(axis, angle),
             Transform::LookAt(..) => panic!("unsupported lookat in modeling step"),
         }
     }

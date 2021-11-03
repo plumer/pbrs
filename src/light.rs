@@ -43,16 +43,23 @@ pub enum DeltaLight {
 impl DeltaLight {
     /// Creates a point light with the given position and intensity of the light.
     pub fn point(position: hcm::Point3, intensity: Color) -> Self {
-        Self::Point{position, intensity}
+        Self::Point {
+            position,
+            intensity,
+        }
     }
-    
+
     /// Creates a distant light with given direction and radiance.
     /// Usually used to model massively point lights that are very far away (e.g., sun light).
-    /// 
+    ///
     /// The `world_radius` is the radius of the bounding sphere of the entire scene. It is used for
     /// computing a visibility tester ray. If not sure, use `f32::INFINITY` for the radius.
     pub fn distant(world_radius: f32, incident_direction: hcm::Vec3, radiance: Color) -> Self {
-        Self::Distant{world_radius, incident_direction, radiance}
+        Self::Distant {
+            world_radius,
+            incident_direction,
+            radiance,
+        }
     }
 }
 
@@ -238,7 +245,8 @@ impl ShapeSample for shape::Sphere {
         let cos_alpha =
             (wc.norm_squared() + self.radius().powi(2) - ds.powi(2)) / (2.0 * dc * self.radius());
         let sin_alpha = (1.0 - cos_alpha.powi(2)).max(0.0).sqrt();
-        let normal_object_space = hcm::spherical_direction(sin_alpha, cos_alpha, hcm::Radian(phi));
+        let normal_object_space =
+            hcm::spherical_direction(sin_alpha, cos_alpha, math::new_rad(phi));
         let (wcx, wcy) = hcm::make_coord_system(wc.hat());
         let point_on_sphere =
             hcm::Mat3::from_vectors(wcx, wcy, wc) * normal_object_space * self.radius()

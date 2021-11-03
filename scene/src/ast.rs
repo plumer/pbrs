@@ -1,4 +1,5 @@
-use math::hcm::{Degree, Point3, Vec3};
+use math::hcm::{Point3, Vec3};
+use math::Angle;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -64,7 +65,7 @@ pub enum Transform {
     Identity,
     Translate(Vec3),
     Scale(Vec3),
-    Rotate(Vec3, Degree),
+    Rotate(Vec3, Angle),
     LookAt(Point3, Point3, Vec3),
     // CoordSys,
     // Matrix4x4(Mat4),
@@ -144,7 +145,7 @@ impl fmt::Display for Transform {
             Transform::Identity => write!(f, "Identity"),
             Transform::Translate(t) => write!(f, " Translate({})", t),
             Transform::Scale(s) => write!(f, " Scale({})", s),
-            Transform::Rotate(axis, Degree(d)) => write!(f, "Rotate({}, {})", axis, d),
+            Transform::Rotate(axis, angle) => write!(f, "Rotate({}, {})", axis, angle),
             Transform::LookAt(e, t, u) => write!(f, "LookAt({} -> {} ^ {})", e, t, u),
         }
     }

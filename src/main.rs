@@ -22,7 +22,7 @@ use geometry::{bvh, camera, ray};
 use instance::Instance;
 use light::EnvLight;
 use material as mtl;
-use math::hcm::{self, Point3, Vec3};
+use math::hcm::{Point3, Vec3};
 use math::{assert_le, float};
 use radiometry::color::Color;
 use shape::{self, QuadXZ, Sphere};
@@ -141,7 +141,7 @@ fn main() {
         colors_for_row
     };
 
-    // Initiates rendering. Based on command line options, the process may or may not use 
+    // Initiates rendering. Based on command line options, the process may or may not use
     // multi-threading.
     let start_render = Instant::now();
 
@@ -282,7 +282,7 @@ fn dark_room(r: ray::Ray) -> Color {
 #[allow(dead_code)]
 #[allow(unused_mut)]
 fn scene_125_spheres() -> Scene {
-    let mut camera = camera::Camera::new((WIDTH, HEIGHT), hcm::Degree(25.0).to_radian());
+    let mut camera = camera::Camera::new((WIDTH, HEIGHT), math::new_deg(25.0));
     camera.look_at(
         Point3::new(13.0, 2.0, 3.0),
         Point3::new(0.0, 0.0, 0.0),
@@ -363,7 +363,7 @@ fn scene_two_perlin_spheres() -> Scene {
         .into_iter()
         .map(|sphere| Box::new(Instance::new(sphere, mtl.clone())))
         .collect();
-    let mut cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(20.0).to_radian());
+    let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
     cam.look_at(
         Point3::new(13.0, 2.0, -3.0),
         Point3::origin(),
@@ -380,7 +380,7 @@ fn scene_earth() -> Scene {
     let globe = Arc::new(Sphere::new(Point3::origin(), 2.0));
     let instances = vec![Box::new(Instance::new(globe, earth_mtl))];
 
-    let mut cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(20.0).to_radian());
+    let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
     cam.look_at(
         Point3::new(13.0, 2.0, -3.0),
         Point3::origin(),
@@ -418,7 +418,7 @@ fn scene_quad_light() -> Scene {
         light::DiffuseAreaLight::new(light_power, Box::new(light_sphere.clone())),
     ];
 
-    let mut cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(20.0).to_radian());
+    let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
     cam.look_at(
         Point3::new(26.0, 3.0, -6.0),
         Point3::new(0.0, 2.0, 0.0),
@@ -433,7 +433,7 @@ fn scene_quad() -> Scene {
     let lam = Arc::new(mtl::Lambertian::solid(Color::new(0.2, 0.3, 0.7)));
     let instances = vec![Box::new(Instance::new(Arc::new(xy_quad), lam))];
 
-    let cam = Camera::new((WIDTH, HEIGHT), hcm::Degree(45.0).to_radian());
+    let cam = Camera::new((WIDTH, HEIGHT), math::new_deg(45.0));
 
     Scene::new(*tlas::build_bvh(instances), cam, blue_sky)
 }
@@ -491,16 +491,16 @@ fn scene_cornell_box() -> Scene {
         .map(|(shape, mtl)| Box::new(Instance::new(shape, mtl)))
         .collect();
     instances[6].transform = instance::identity()
-        .rotate_y(hcm::Degree(15.0).to_radian())
+        .rotate_y(math::new_deg(15.0))
         .translate(Vec3::new(265.0, 0.0, 105.0));
     instances[7].transform = instance::identity()
-        .rotate_y(hcm::Degree(-18.0).to_radian())
+        .rotate_y(math::new_deg(-18.0))
         .translate(Vec3::new(130.0, 0.0, 225.0));
 
     println!("{:?}, {:?}", instances[6].transform, instances[7].transform);
     // std::process::exit(0);
 
-    let mut cam = Camera::new((600, 600), hcm::Degree(40.0).to_radian());
+    let mut cam = Camera::new((600, 600), math::new_deg(40.0));
     cam.look_at(
         Point3::new(278.0, 278.0, -800.0),
         Point3::new(278.0, 278.0, 0.0),
@@ -534,13 +534,13 @@ fn scene_plates() -> Scene {
         let plate = QuadXZ::from_raw((left, right), (-half_width, half_width), 4.0);
         let trans = instance::identity()
             .translate(Vec3::new(0.0, -r, 0.0))
-            .rotate_x(hcm::Radian(-angle))
+            .rotate_x(math::new_rad(-angle))
             .translate(Vec3::new(0.0, r * 0.8, 0.0));
         instances.push(Instance::from_raw(plate, glossy).with_transform(trans));
     }
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
-    let camera = camera::Camera::new((800, 800), hcm::Radian(PI * 0.19)).looking_at(
+    let camera = camera::Camera::new((800, 800), math::Angle::pi() * 0.19).looking_at(
         Point3::new(0.0, r * 0.9, -r * 2.0),
         Point3::new(0.0, r * 0.2, r * 2.0),
         Vec3::ybase(),
@@ -614,11 +614,11 @@ fn scene_everything() -> Scene {
         .collect();
     let ping_pong_balls = shape::IsoBlas::build(ping_pong_balls);
     let pp_trans = instance::identity()
-        .rotate_y(hcm::Degree(15.0).to_radian())
+        .rotate_y(math::new_deg(15.0))
         .translate(Vec3::new(-100.0, 270.0, 395.0));
     instances.push(Instance::from_raw(ping_pong_balls, matte_white).with_transform(pp_trans));
 
-    let mut cam = camera::Camera::new((800, 800), hcm::Degree(40.0).to_radian());
+    let mut cam = camera::Camera::new((800, 800), math::new_deg(40.0));
     cam.look_at(
         Point3::new(478.0, 278.0, -600.0),
         Point3::new(278.0, 278.0, 0.0),

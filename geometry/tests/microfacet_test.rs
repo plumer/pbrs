@@ -26,7 +26,7 @@ fn integrate_differental_area(mf_distrib: mf::MicrofacetDistrib) -> f32 {
     for theta in thetas.into_iter() {
         for phi in phis.iter().copied() {
             let (sin_theta, cos_theta) = theta.sin_cos();
-            let wh = math::hcm::spherical_direction(sin_theta, cos_theta, math::hcm::Radian(phi));
+            let wh = math::hcm::spherical_direction(sin_theta, cos_theta, math::new_rad(phi));
             let diff_area = mf_distrib.d(Omega(wh));
             assert!(!diff_area.is_infinite());
             integral_area += diff_area * cos_theta * (sin_theta * d_theta * d_phi);
@@ -43,7 +43,7 @@ fn integrate_masking(mf_distrib: mf::MicrofacetDistrib, w: Omega) -> f32 {
     for theta in thetas.into_iter() {
         for phi in phis.iter().copied() {
             let (sin_theta, cos_theta) = theta.sin_cos();
-            let wh = math::hcm::spherical_direction(sin_theta, cos_theta, math::hcm::Radian(phi));
+            let wh = math::hcm::spherical_direction(sin_theta, cos_theta, math::new_rad(phi));
             let diff_area = mf_distrib.d(Omega(wh));
             let masked_area = diff_area * mf_distrib.g1(w) * w.dot(Omega(wh)).max(0.0);
             integral_masked_area += masked_area * (sin_theta * d_theta * d_phi);

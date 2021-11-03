@@ -61,7 +61,7 @@ fn specular_refl_test() {
 fn diffuse_refl_test() {
     let albedo = Color::new(1.0, 2.0, 5.0);
     let matte = bxdf::DiffuseReflect::lambertian(albedo);
-    let oren_nayar = bxdf::DiffuseReflect::oren_nayar(albedo, math::hcm::Degree(0.0));
+    let oren_nayar = bxdf::DiffuseReflect::oren_nayar(albedo, math::new_deg(0.0));
     test_one_diffuse_brdf(&matte, albedo);
     test_one_diffuse_brdf(&oren_nayar, albedo);
 
@@ -112,7 +112,7 @@ fn riemann_integral_pdf(bsdf: &bxdf::DiffuseReflect) -> f32 {
     for theta in thetas.into_iter() {
         for phi in phis.iter().copied() {
             let (sin_theta, cos_theta) = theta.sin_cos();
-            let wi = math::hcm::spherical_direction(sin_theta, cos_theta, math::hcm::Radian(phi));
+            let wi = math::hcm::spherical_direction(sin_theta, cos_theta, math::new_rad(phi));
             let pr = bsdf.prob(Omega::new(0.48, 0.64, 0.6), Omega(wi));
 
             if let Prob::Density(pdf) = pr {

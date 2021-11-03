@@ -443,9 +443,8 @@ impl DiffuseReflect {
         }
     }
 
-    pub fn oren_nayar(albedo: Color, sigma: math::hcm::Degree) -> Self {
-        let math::hcm::Radian(sigma_rad) = sigma.to_radian();
-        let sigma_sqr = sigma_rad.powi(2);
+    pub fn oren_nayar(albedo: Color, sigma: math::Angle) -> Self {
+        let sigma_sqr = sigma.to_rad().powi(2);
         let coeff_a = 1.0 - (sigma_sqr / (2.0 * (sigma_sqr + 0.33)));
         let coeff_b = 0.45 * sigma_sqr / (sigma_sqr + 0.09);
         Self {

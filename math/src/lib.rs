@@ -14,3 +14,11 @@ pub mod hcm;
 
 /// Provides `Prob` struct representing a probability mass or probability density.
 pub mod prob;
+
+pub use float::Angle;
+pub fn new_rad(rad: f32) -> float::Angle {
+    float::Angle::new_rad(rad)
+}
+pub fn new_deg(deg: f32) -> float::Angle {
+    float::Angle::new_deg(deg)
+}

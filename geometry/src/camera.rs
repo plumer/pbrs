@@ -16,10 +16,10 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new(resolution: (u32, u32), fov_y: hcm::Radian) -> Camera {
+    pub fn new(resolution: (u32, u32), fov_y: math::Angle) -> Camera {
         let (width, height) = resolution;
         let aspect_ratio = width as f32 / (height as f32);
-        let half_vertical = f32::tan(fov_y.0 / 2.0);
+        let half_vertical = (fov_y * 0.5).tan();
         let half_horizontal = half_vertical * aspect_ratio;
 
         Camera {

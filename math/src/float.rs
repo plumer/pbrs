@@ -50,7 +50,7 @@ where
 }
 
 #[allow(dead_code)]
-pub trait Float : Sized {
+pub trait Float: Sized {
     /// Returns the length of other leg of the triangle given the hypotenuse and a known one.
     fn cathetus(self, other: Self) -> Self;
     /// Computes `x / y` if y is nonzero; returns `None` if y is zero.
@@ -71,7 +71,7 @@ impl Float for f32 {
     fn cathetus(self, other: f32) -> f32 {
         (self.powi(2) - other.powi(2)).max(0.0).sqrt()
     }
-    
+
     /// Computes `x / y` if y is nonzero; returns `None` if y is zero.
     /// ```
     /// use math::float::Float;
@@ -165,6 +165,64 @@ where
 }
 
 impl Inside for f32 {}
+
+#[derive(Debug, Clone, Copy)]
+/// Type-safe representation for an angle. Radian values are stored internally.
+///
+/// - Make a new angle using `new_rad()`, `new_deg()`, or `pi()`.
+/// - Get rad/deg values using `to_rad()` / `to_deg()`.
+/// - Scale an angle by `angle * 0.5`.
+/// - Trigonometric function wrappers are available: `sin()`, `cos()`, `sin_cos()`, `tan()`.
+pub struct Angle {
+    pub radian: f32,
+}
+
+impl Angle {
+    pub fn new_rad(rad: f32) -> Self {
+        Angle { radian: rad }
+    }
+    pub fn new_deg(deg: f32) -> Self {
+        Angle {
+            radian: deg.to_radians(),
+        }
+    }
+    pub fn pi() -> Self {
+        Angle{radian: std::f32::consts::PI}
+    }
+    
+    pub fn to_rad(self) -> f32 {
+        self.radian
+    }
+    pub fn to_deg(self) -> f32 {
+        self.radian.to_degrees()
+    }
+    
+    pub fn sin(self) -> f32 {
+        self.radian.sin()
+    }
+    pub fn cos(self) -> f32 {
+        self.radian.cos()
+    }
+    pub fn sin_cos(self) -> (f32, f32) {
+        self.radian.sin_cos()
+    }
+    pub fn tan(self) -> f32 {
+        self.radian.tan()
+    }
+}
+
+impl std::ops::Mul<f32> for Angle {
+    type Output = Self;
+    fn mul(self, rhs: f32) -> Self::Output {
+        Angle::new_rad(self.radian * rhs)
+    }
+}
+
+impl std::fmt::Display for Angle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.2}deg", self.to_deg())
+    }
+}
 
 #[macro_export]
 macro_rules! assert_le {
