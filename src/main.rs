@@ -510,7 +510,7 @@ fn scene_cornell_box() -> Scene {
         Vec3::ybase(),
     );
 
-    Scene::new(*tlas::build_bvh(instances), cam, dark_room).with_lights(vec![], area_lights)
+    Scene::new_no_envlight(*tlas::build_bvh(instances), cam).with_lights(vec![], area_lights)
 }
 
 fn scene_plates() -> Scene {

@@ -45,6 +45,15 @@ impl Scene {
             camera,
         }
     }
+    pub fn new_no_envlight(tlas: crate::tlas::BvhNode, camera: Camera) -> Self {
+        Self {
+            tlas,
+            env_light: None,
+            delta_lights: vec![],
+            area_lights: vec![],
+            camera,
+        }
+    }
     pub fn with_lights(
         self, delta_lights: Vec<DeltaLight>, area_lights: Vec<DiffuseAreaLight>,
     ) -> Self {
