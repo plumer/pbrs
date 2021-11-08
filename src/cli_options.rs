@@ -13,6 +13,13 @@ impl Integrator {
             _ => None,
         }
     }
+
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            &Self::Direct => "direct",
+            &Self::Path => "path",
+        }
+    }
 }
 
 pub struct CliOptions {

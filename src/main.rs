@@ -180,11 +180,14 @@ fn main() {
         _ => "output".to_owned(),
     };
 
-    write_image(
-        &format!("{}-{}spp.png", scene_name, MSAA.pow(2)),
-        &image_data,
-        scene.camera.resolution(),
+    let output_file_name = format!(
+        "{}-{}-{}spp.png",
+        scene_name,
+        options.integrator.to_str(),
+        MSAA.pow(2)
     );
+    println!("Image written to {}", output_file_name);
+    write_image(&output_file_name, &image_data, scene.camera.resolution());
 }
 
 // Functions that computes the radiance along a ray. One for computing the radiance correctly and
