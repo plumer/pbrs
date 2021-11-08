@@ -1,12 +1,11 @@
+use std::fmt::{Debug, Formatter, Result};
 use std::sync::Arc;
-use std::fmt::{Debug,Formatter,Result};
 
-use geometry::bvh::{self,BBox};
-use geometry::ray::Ray;
-use shape::Interaction;
 use crate::instance::Instance;
 use crate::material::Material;
-
+use geometry::bvh::{self, BBox};
+use geometry::ray::Ray;
+use shape::Interaction;
 
 #[derive(Debug)]
 enum BvhNodeContent {
@@ -98,8 +97,14 @@ impl BvhNode {
     }
 
     pub fn occludes(&self, ray: &Ray) -> bool {
-        let mut ray = ray.clone();
-        self.intersect(&mut ray).is_some()
+        let ray = ray.clone();
+        if !self.bbox.intersect(&ray) {
+            return false;
+        }
+        match &self.content {
+            BvhNodeContent::Leaf(inst) => inst.occludes(&ray),
+            BvhNodeContent::Children([left, right]) => left.occludes(&ray) || right.occludes(&ray),
+        }
     }
 }
 

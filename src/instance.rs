@@ -239,6 +239,7 @@ impl Instance {
     }
     pub fn intersect(&self, ray: &Ray) -> Option<(Interaction, &Arc<dyn Material>)> {
         let inv_ray = self.transform.inverse().apply(*ray);
+        assert!(inv_ray.dir.norm_squared() > 1e-3, "ray = {:?}", ray);
         match self.shape.intersect(&inv_ray) {
             None => None,
             Some(hit) => {
@@ -252,6 +253,11 @@ impl Instance {
                 Some((self.transform.apply(hit), &self.mtl))
             }
         }
+    }
+    pub fn occludes(&self, ray: &Ray) -> bool {
+        let inv_ray = self.transform.inverse().apply(*ray);
+        assert!(inv_ray.dir.norm_squared() > 1e-3, "ray = {:?}", ray);
+        self.shape.occludes(&inv_ray)
     }
 }
 
