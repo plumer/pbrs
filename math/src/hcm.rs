@@ -208,6 +208,9 @@ impl Point3 {
     pub fn origin() -> Point3 {
         Point3::new(0.0, 0.0, 0.0)
     }
+    pub fn as_triple(self) -> (f32, f32, f32) {
+        (self.x, self.y, self.z)
+    }
 
     pub fn distance_to(self, p: Self) -> f32 {
         (self - p).norm()
