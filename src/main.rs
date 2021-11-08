@@ -1,7 +1,6 @@
 mod bsdf;
 mod cli_options;
 mod directlighting;
-mod light;
 mod scene_loader;
 
 use io::Write;

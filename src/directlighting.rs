@@ -8,7 +8,7 @@ use shape::Interaction;
 use rand::Rng;
 
 use crate::bsdf::BSDF;
-use crate::light::{DeltaLight, DiffuseAreaLight, Light};
+use light::{DeltaLight, DiffuseAreaLight, Light};
 use material::Material;
 use crate::scene_loader::Scene;
 

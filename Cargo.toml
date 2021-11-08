@@ -38,6 +38,9 @@ path = "material"
 [dependencies.tlas]
 path = "tlas"
 
+[dependencies.light]
+path = "light"
+
 [workspace]
 members = [
     "math",

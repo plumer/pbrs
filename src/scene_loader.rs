@@ -3,8 +3,8 @@ use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::light::{self, DiffuseAreaLight};
-use crate::light::{DeltaLight, ShapeSample};
+use light::{self, DiffuseAreaLight};
+use light::{DeltaLight, ShapeSample};
 use geometry::camera::Camera;
 use material::{self as mtl, Material};
 use math::hcm;
