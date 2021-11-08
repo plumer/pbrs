@@ -14,6 +14,7 @@ pub use interaction::Interaction;
 /// - See `blas.rs` for aggregated shapes: `IsoBlas` and `TriangleMesh`.
 pub trait Shape: Send + Sync {
     fn intersect(&self, r: &Ray) -> Option<Interaction>;
+    fn occludes(&self, r: &Ray) -> bool;
     fn bbox(&self) -> BBox;
     fn summary(&self) -> String;
 }

@@ -65,7 +65,6 @@ pub struct QuadXZ {
     pub y: f32,
 }
 
-
 impl QuadXZ {
     pub fn from_raw(x_interval: (f32, f32), z_interval: (f32, f32), y: f32) -> Self {
         let (x0, x1) = x_interval;
@@ -137,6 +136,32 @@ impl Shape for Sphere {
     fn bbox(&self) -> BBox {
         let half_diagonal = Vec3::new(1.0, 1.0, 1.0) * self.radius;
         BBox::new(self.center - half_diagonal, self.center + half_diagonal)
+    }
+    fn occludes(&self, r: &Ray) -> bool {
+        // r = o + td
+        // sphere: (p-c)(p-c) = radius^2
+        // (td + o - c)^2 = radius^2
+        // t^2 d^2 + (o-c)^2 + 2t d * (o-c) = radius^2
+        // delta = 4(d*(o-c))^2 - 4d^2((o-c)^2 - radius^2)
+        let Ray { origin, dir, .. } = r.clone();
+
+        let dir = dir.hat();
+
+        let f = origin - self.center; // vector connecting the sphere center to ray origin.
+        let q = f.dot(dir) * dir; // r.o + q gives the point closest to sphere center.
+        let delta = self.radius.powi(2) - (f - q).norm_squared();
+        let (t_low, t_high) = if delta < 0.0 {
+            return false;
+        } else {
+            let c = f.norm_squared() - self.radius.powi(2);
+            let neg_b = -dir.dot(f);
+            let t0 = neg_b + neg_b.signum() * delta.sqrt();
+            let t1 = c / t0;
+            (t0, t1)
+        };
+        // Keeps only the roots that are within [0, r.t_max).
+        let (root1, root2) = (r.truncated_t(t_low), r.truncated_t(t_high));
+        root1.is_some() || root2.is_some()
     }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         // r = o + td
@@ -240,6 +265,16 @@ impl Shape for QuadXY {
             None
         }
     }
+
+    fn occludes(&self, r: &Ray) -> bool {
+        let t = (self.z - r.origin.z) / r.dir.z;
+        if let Some(t) = r.truncated_t(t) {
+            let (x, y, _) = r.position_at(t).as_triple();
+            self.x_interval.contains(x) && self.y_interval.contains(y)
+        } else {
+            false
+        }
+    }
 }
 
 impl Shape for QuadXZ {
@@ -273,6 +308,15 @@ impl Shape for QuadXZ {
             None
         }
     }
+    fn occludes(&self, r: &Ray) -> bool {
+        let t = (self.y - r.origin.y) / r.dir.y;
+        if let Some(t) = r.truncated_t(t) {
+            let (x, _, z) = r.position_at(t).as_triple();
+            self.x_interval.contains(x) && self.z_interval.contains(z)
+        } else {
+            false
+        }
+    }
 }
 
 impl Shape for QuadYZ {
@@ -304,6 +348,15 @@ impl Shape for QuadYZ {
             Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::ybase()))
         } else {
             None
+        }
+    }
+    fn occludes(&self, r: &Ray) -> bool {
+        let t = (self.x - r.origin.x) / r.dir.x;
+        if let Some(t) = r.truncated_t(t) {
+            let (_, y, z) = r.position_at(t).as_triple();
+            self.y_interval.contains(y) && self.z_interval.contains(z)
+        } else {
+            false
         }
     }
 }
@@ -385,11 +438,18 @@ impl Shape for Cuboid {
         tangent[tangent_axis] = 1.0;
         Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal, -r.dir).with_dpdu(tangent))
     }
+    fn occludes(&self, r: &Ray) -> bool {
+        // Reuses the method from BBox which returns a bool.
+        self.bbox().intersect(r)
+    }
 }
 
 impl Shape for IsolatedTriangle {
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         intersect_triangle(self.p0, self.p1, self.p2, r)
+    }
+    fn occludes(&self, r: &Ray) -> bool {
+        intersect_triangle_pred(self.p0, self.p1, self.p2, r)
     }
     fn bbox(&self) -> BBox {
         BBox::new(self.p0, self.p1).union(self.p2)
@@ -440,4 +500,27 @@ pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option
     }
     // Now an intersection is truly found.
     Some(Interaction::new(hit_pos, t, (0.0, 0.0), normal, -r.dir))
+}
+
+pub fn intersect_triangle_pred(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> bool {
+    let normal = (p0 - p1).cross(p2 - p1);
+    if normal.is_zero() {
+        return false;
+    }
+    let normal = normal.hat();
+    let t = normal.dot(p0 - r.origin) / normal.dot(r.dir);
+    if let Some(t) = r.truncated_t(t) {
+        let p = r.position_at(t);
+        let b0 = (p - p0).cross(p - p1).dot(normal);
+        let b1 = (p - p1).cross(p - p2).dot(normal);
+        let b2 = (p - p2).cross(p - p0).dot(normal);
+        let has_nans = b0.is_nan() || b1.is_nan() || b2.is_nan();
+        assert!(!has_nans);
+        match (b0 > 0.0, b1 > 0.0, b2 > 0.0) {
+            (true, true, true) | (false, false, false) => true,
+            _ => false,
+        }
+    } else {
+        false
+    }
 }

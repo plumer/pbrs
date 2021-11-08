@@ -133,9 +133,7 @@ impl TriangleMesh {
     }
 
     pub fn from_soa(
-        positions: Vec<Point3>,
-        normals: Vec<Vec3>,
-        uvs: Vec<(f32, f32)>,
+        positions: Vec<Point3>, normals: Vec<Vec3>, uvs: Vec<(f32, f32)>,
         indices: Vec<(usize, usize, usize)>,
     ) -> Self {
         let triangles = indices
@@ -164,6 +162,10 @@ impl TriangleMesh {
     fn intersect_triangle(&self, tri: &Triangle, r: &Ray) -> Option<Interaction> {
         let (i, k, j) = tri.indices;
         crate::intersect_triangle(self.positions[i], self.positions[j], self.positions[k], r)
+    }
+    fn intersect_triangle_pred(&self, tri: &Triangle, r: &Ray) -> bool {
+        let (i, k, j) = tri.indices;
+        crate::intersect_triangle_pred(self.positions[i], self.positions[j], self.positions[k], r)
     }
 
     pub fn bvh_shape_summary(&self) -> String {
@@ -239,6 +241,11 @@ where
     fn bbox(&self) -> BBox {
         self.bbox
     }
+
+    fn occludes(&self, r: &Ray) -> bool {
+        let tree = self.bvh_root.as_ref().unwrap();
+        intersect_bvh_pred(&self.shapes, tree, r, |s, r| s.occludes(r))
+    }
 }
 
 impl Shape for TriangleMesh {
@@ -260,6 +267,12 @@ impl Shape for TriangleMesh {
                 assert!(!hit.pos.has_nan());
             }
             result
+        })
+    }
+    fn occludes(&self, r: &Ray) -> bool {
+        let tree = self.bvh_root.as_ref().unwrap();
+        intersect_bvh_pred(&self.triangles, tree, r, |tri, r| {
+            self.intersect_triangle_pred(tri, r)
         })
     }
     fn bbox(&self) -> BBox {
@@ -367,10 +380,7 @@ where
 }
 
 fn intersect_bvh<S, F>(
-    shapes: &Vec<S>,
-    tree: &IsoBvhNode,
-    r: &Ray,
-    shape_intersector: F,
+    shapes: &Vec<S>, tree: &IsoBvhNode, r: &Ray, shape_intersector: F,
 ) -> Option<Interaction>
 where
     F: Fn(&S, &Ray) -> Option<Interaction> + Copy,
@@ -411,6 +421,24 @@ where
                     }
                 }
             }
+        }
+    }
+}
+
+fn intersect_bvh_pred<S, F>(
+    shapes: &[S], tree: &IsoBvhNode, r: &Ray, shape_intersect_pred: F,
+) -> bool
+where
+    F: Fn(&S, &Ray) -> bool + Copy,
+{
+    match &tree.content {
+        Leaf(range) => shapes[range.clone()]
+            .iter()
+            .any(|shape| shape_intersect_pred(shape, r)),
+
+        Children([left, right]) => {
+            intersect_bvh_pred(shapes, &*left, r, shape_intersect_pred)
+                || intersect_bvh_pred(shapes, &*right, r, shape_intersect_pred)
         }
     }
 }
