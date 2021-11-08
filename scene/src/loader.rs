@@ -9,7 +9,7 @@ use geometry::camera::Camera;
 use material::{self as mtl, Material};
 use math::hcm;
 use radiometry::color::Color;
-use scene::{
+use crate::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, plyloader, token,
 };
@@ -67,14 +67,14 @@ impl Scene {
 pub struct SceneLoader {
     root_dir: std::path::PathBuf,
     // ctm_stack: Vec<hcm::Mat4>,
-    ctm_stack: Vec<crate::instance::InstanceTransform>,
+    ctm_stack: Vec<tlas::instance::InstanceTransform>,
     current_mtl: Option<Arc<dyn Material>>,
     current_arealight_luminance: Option<Color>,
     reverse_orientation_stack: Vec<bool>,
 
     named_textures: HashMap<String, Arc<dyn Texture>>,
     named_materials: HashMap<String, Arc<dyn Material>>,
-    pub instances: Vec<crate::instance::Instance>,
+    pub instances: Vec<tlas::instance::Instance>,
     pub camera: Option<Camera>,
     pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
@@ -206,7 +206,7 @@ impl SceneLoader {
                     });
                 } else if let Some(mtl) = &self.current_mtl {
                     let shape = self.parse_shape(&shape_impl, args);
-                    let inst = crate::instance::Instance::new(shape, mtl.clone())
+                    let inst = tlas::instance::Instance::new(shape, mtl.clone())
                         .with_transform(self.ctm_stack.last().unwrap().clone());
                     self.instances.push(inst);
                 } else if let Some(luminance) = self.current_arealight_luminance {
@@ -742,8 +742,8 @@ impl SceneLoader {
         }
     }
     #[allow(dead_code)]
-    fn parse_rbtransform(t: ast::Transform) -> crate::instance::RigidBodyTransform {
-        use crate::instance::RigidBodyTransform as RBTrans;
+    fn parse_rbtransform(t: ast::Transform) -> tlas::instance::RigidBodyTransform {
+        use tlas::instance::RigidBodyTransform as RBTrans;
         use ast::Transform;
         match t {
             Transform::Identity => RBTrans::identity(),
