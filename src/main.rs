@@ -3,7 +3,6 @@ mod cli_options;
 mod directlighting;
 mod instance;
 mod light;
-mod material;
 mod scene_loader;
 mod tlas;
 
@@ -17,7 +16,7 @@ use std::time::Instant;
 
 use crate::directlighting::direct_lighting_integrator;
 use crate::scene_loader::Scene;
-use geometry::{bvh, camera, ray};
+use geometry::{camera, ray};
 use instance::Instance;
 use light::EnvLight;
 use material as mtl;

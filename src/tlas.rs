@@ -2,7 +2,7 @@ use std::fmt::{Debug, Formatter, Result};
 use std::sync::Arc;
 
 use crate::instance::Instance;
-use crate::material::Material;
+use material::Material;
 use geometry::bvh::{self, BBox};
 use geometry::ray::Ray;
 use shape::Interaction;

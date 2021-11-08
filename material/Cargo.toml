@@ -1,0 +1,13 @@
+[package]
+name = "material"
+version = "0.1.0"
+description = "Material library module for pbrs"
+edition = "2018"
+
+[dependencies]
+math = { path = "../math", version = "0.1.0"}
+geometry = {path = "../geometry", version = "0.1.0"}
+shape = {path = "../shape", version = "0.1.0"}
+radiometry = {path = "../radiometry", version = "0.1.0"}
+texture = {path = "../texture", version = "0.1.0"}
+rand = "0.8"

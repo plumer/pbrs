@@ -1,11 +1,12 @@
 use std::{ops::Mul, sync::Arc};
 
-use crate::ray::Ray;
-use crate::shape::Shape;
-use crate::{bvh::BBox, material::Material};
+use geometry::bvh::BBox;
+use geometry::ray::Ray;
+use material::Material;
 use math::hcm::{Mat3, Mat4, Point3, Vec3, Vec4};
 use math::Angle;
 use shape::Interaction;
+use shape::Shape;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RigidBodyTransform {

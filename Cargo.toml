@@ -32,6 +32,9 @@ path = "radiometry"
 [dependencies.texture]
 path = "texture"
 
+[dependencies.material]
+path = "material"
+
 [workspace]
 members = [
     "math",

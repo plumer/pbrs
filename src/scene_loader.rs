@@ -9,7 +9,7 @@ use math::hcm;
 use crate::instance::AffineTransform;
 use crate::light::{self, DiffuseAreaLight};
 use crate::light::{DeltaLight, ShapeSample};
-use crate::material::{self as mtl, Material};
+use material::{self as mtl, Material};
 use texture::{self as tex, Texture};
 use radiometry::color::Color;
 use scene::{

@@ -1,11 +1,11 @@
-use crate::ray::Ray;
-use crate::shape::Interaction;
+use shape::Interaction;
 use texture::{self, *};
 use geometry::bxdf::{self, BxDF};
-use geometry::microfacet;
+use geometry::{microfacet, ray::Ray};
 use math::hcm::{self, Vec3};
 use radiometry::color::Color;
 use std::sync::Arc;
+
 pub trait Material: Sync + Send {
     /// Computes the scattering of a ray on a given surface interation.
     /// Returns the scattered ray and radiance carried.
@@ -355,7 +355,7 @@ mod test {
     use radiometry::color::Color;
     use shape::Interaction;
 
-    use crate::material::{Lambertian, Material};
+    use super::{Lambertian, Material};
 
     #[test]
     fn test_random_unit_sphere() {

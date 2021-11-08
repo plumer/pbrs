@@ -9,7 +9,7 @@ use rand::Rng;
 
 use crate::bsdf::BSDF;
 use crate::light::{DeltaLight, DiffuseAreaLight, Light};
-use crate::material::Material;
+use material::Material;
 use crate::scene_loader::Scene;
 
 // struct Bsdf<'a> {
