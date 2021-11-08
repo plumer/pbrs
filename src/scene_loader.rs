@@ -3,20 +3,19 @@ use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use geometry::camera::Camera;
-use math::hcm;
-
-use crate::instance::AffineTransform;
 use crate::light::{self, DiffuseAreaLight};
 use crate::light::{DeltaLight, ShapeSample};
+use geometry::camera::Camera;
 use material::{self as mtl, Material};
-use texture::{self as tex, Texture};
+use math::hcm;
 use radiometry::color::Color;
 use scene::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, plyloader, token,
 };
 use shape::{self, IsolatedTriangle, Shape};
+use texture::{self as tex, Texture};
+use tlas::instance::AffineTransform;
 
 #[allow(dead_code)]
 pub struct Scene {
@@ -28,7 +27,7 @@ pub struct Scene {
 
     // materials: Vec<Box<dyn Material>>,
     // named_materials: HashMap<String, usize>,
-    pub tlas: crate::tlas::BvhNode,
+    pub tlas: tlas::bvh::BvhNode,
     pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
     pub env_light: Option<light::EnvLight>,
@@ -36,7 +35,7 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn new(tlas: crate::tlas::BvhNode, camera: Camera, env_light: light::EnvLight) -> Self {
+    pub fn new(tlas: tlas::bvh::BvhNode, camera: Camera, env_light: light::EnvLight) -> Self {
         Self {
             tlas,
             env_light: Some(env_light),
@@ -45,7 +44,7 @@ impl Scene {
             camera,
         }
     }
-    pub fn new_no_envlight(tlas: crate::tlas::BvhNode, camera: Camera) -> Self {
+    pub fn new_no_envlight(tlas: tlas::bvh::BvhNode, camera: Camera) -> Self {
         Self {
             tlas,
             env_light: None,

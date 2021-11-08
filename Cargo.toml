@@ -35,6 +35,9 @@ path = "texture"
 [dependencies.material]
 path = "material"
 
+[dependencies.tlas]
+path = "tlas"
+
 [workspace]
 members = [
     "math",

@@ -1,10 +1,8 @@
 mod bsdf;
 mod cli_options;
 mod directlighting;
-mod instance;
 mod light;
 mod scene_loader;
-mod tlas;
 
 use io::Write;
 use log::*;
@@ -17,7 +15,7 @@ use std::time::Instant;
 use crate::directlighting::direct_lighting_integrator;
 use crate::scene_loader::Scene;
 use geometry::{camera, ray};
-use instance::Instance;
+use tlas::{instance::Instance, instance, bvh::BvhNode};
 use light::EnvLight;
 use material as mtl;
 use math::hcm::{Point3, Vec3};
@@ -25,7 +23,6 @@ use math::{assert_le, float};
 use radiometry::color::Color;
 use shape::{self, QuadXZ, Sphere};
 use texture::{self as tex, Texture};
-use tlas::BvhNode;
 
 use glog::Flags;
 use rayon::prelude::*;

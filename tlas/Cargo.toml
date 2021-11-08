@@ -1,0 +1,13 @@
+[package]
+name = "tlas"
+version = "0.1.0"
+description = "Top-level Accel structure library module for pbrs"
+edition = "2018"
+
+[dependencies]
+math = { path = "../math", version = "0.1.0"}
+shape = { path = "../shape", version = "0.1.0"}
+material = { path = "../material", version = "0.1.0"}
+geometry = {path = "../geometry", version = "0.1.0"}
+rand = "0.8"
+png = "0.16"
