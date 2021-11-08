@@ -29,6 +29,9 @@ path = "scene"
 [dependencies.radiometry]
 path = "radiometry"
 
+[dependencies.texture]
+path = "texture"
+
 [workspace]
 members = [
     "math",

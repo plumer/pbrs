@@ -1,6 +1,6 @@
 use crate::ray::Ray;
 use crate::shape::Interaction;
-use crate::texture::{self, *};
+use texture::{self, *};
 use geometry::bxdf::{self, BxDF};
 use geometry::microfacet;
 use math::hcm::{self, Vec3};

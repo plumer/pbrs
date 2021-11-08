@@ -1,0 +1,11 @@
+[package]
+name = "texture"
+version = "0.1.0"
+description = "Texture library module for pbrs"
+edition = "2018"
+
+[dependencies]
+math = { path = "../math", version = "0.1.0"}
+radiometry = {path = "../radiometry", version = "0.1.0"}
+rand = "0.8"
+png = "0.16"

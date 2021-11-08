@@ -10,7 +10,7 @@ use crate::instance::AffineTransform;
 use crate::light::{self, DiffuseAreaLight};
 use crate::light::{DeltaLight, ShapeSample};
 use crate::material::{self as mtl, Material};
-use crate::texture::{self as tex, Texture};
+use texture::{self as tex, Texture};
 use radiometry::color::Color;
 use scene::{
     ast::{self, ArgValue, ParameterSet},

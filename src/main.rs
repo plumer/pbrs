@@ -5,7 +5,6 @@ mod instance;
 mod light;
 mod material;
 mod scene_loader;
-mod texture;
 mod tlas;
 
 use io::Write;
@@ -26,13 +25,13 @@ use math::hcm::{Point3, Vec3};
 use math::{assert_le, float};
 use radiometry::color::Color;
 use shape::{self, QuadXZ, Sphere};
-use texture as tex;
+use texture::{self as tex, Texture};
 use tlas::BvhNode;
 
 use glog::Flags;
 use rayon::prelude::*;
 
-use crate::{camera::Camera, texture::Texture};
+use crate::camera::Camera;
 
 const WIDTH: u32 = 1200;
 const HEIGHT: u32 = 800;

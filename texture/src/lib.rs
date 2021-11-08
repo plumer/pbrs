@@ -1,6 +1,16 @@
 use radiometry::color::Color;
 use math::hcm::*;
-use std::fs::File;
+use math::float::Float;
+use std::{fs::File};
+
+fn uniform_random_sphere() -> Vec3 {
+    let (u, v) = rand::random::<(f32, f32)>();
+    let theta = math::Angle::pi() * 2.0 * u;
+    let cos_phi = 2.0 * v - 1.0;
+    let (sin_theta, cos_theta) = theta.sin_cos();
+    let sin_phi = 1.0f32.cathetus(cos_phi);
+    Vec3::new(sin_phi * sin_theta, sin_phi * cos_theta, cos_phi)
+}
 
 pub trait Texture: Send + Sync {
     fn value(&self, uv: (f32, f32), p: Point3) -> Color;
@@ -56,7 +66,7 @@ impl Perlin {
     pub fn new() -> Perlin {
         let mut rand_vec = [Vec3::xbase(); PERLIN_NUM_POINTS];
         for v in rand_vec.iter_mut() {
-            *v = crate::material::uniform_sphere();
+            *v = uniform_random_sphere();
         }
         Perlin {
             rand_vec,
