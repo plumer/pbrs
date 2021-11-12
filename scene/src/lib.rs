@@ -1,9 +1,9 @@
-pub mod plyloader;
 pub mod loader;
+pub mod plyloader;
 pub mod preset;
 
-use light::{DeltaLight, DiffuseAreaLight};
 use geometry::camera::Camera;
+use light::{DeltaLight, DiffuseAreaLight};
 
 #[allow(dead_code)]
 pub struct Scene {
@@ -23,22 +23,19 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn new(tlas: tlas::bvh::BvhNode, camera: Camera, env_light: light::EnvLight) -> Self {
-        Self {
-            tlas,
-            env_light: Some(env_light),
-            delta_lights: vec![],
-            area_lights: vec![],
-            camera,
-        }
-    }
-    pub fn new_no_envlight(tlas: tlas::bvh::BvhNode, camera: Camera) -> Self {
+    pub fn new(tlas: tlas::bvh::BvhNode, camera: Camera) -> Self {
         Self {
             tlas,
             env_light: None,
             delta_lights: vec![],
             area_lights: vec![],
             camera,
+        }
+    }
+    pub fn with_env_light(self, env_light: light::EnvLight) -> Self {
+        Self {
+            env_light: Some(env_light),
+            ..self
         }
     }
     pub fn with_lights(

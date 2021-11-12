@@ -92,7 +92,7 @@ pub fn mixed_spheres() -> Scene {
 
     let boxed_instances: Vec<Box<Instance>> =
         instances.iter().map(|x| Box::from(x.clone())).collect();
-    Scene::new(*tlas::build_bvh(boxed_instances), camera, blue_sky)
+    Scene::new(*tlas::build_bvh(boxed_instances), camera).with_env_light(blue_sky)
 }
 
 pub fn two_perlin_spheres() -> Scene {
@@ -116,7 +116,7 @@ pub fn two_perlin_spheres() -> Scene {
         Vec3::ybase(),
     );
 
-    Scene::new(*tlas::build_bvh(instances), cam, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
 }
 
 pub fn earth() -> Scene {
@@ -133,7 +133,7 @@ pub fn earth() -> Scene {
         Vec3::ybase(),
     );
 
-    Scene::new(*tlas::build_bvh(instances), cam, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
 }
 
 pub fn quad_light() -> Scene {
@@ -171,7 +171,9 @@ pub fn quad_light() -> Scene {
         Vec3::ybase(),
     );
 
-    Scene::new(*tlas::build_bvh(instances), cam, dark_room).with_lights(vec![], area_lights)
+    Scene::new(*tlas::build_bvh(instances), cam)
+        .with_env_light(dark_room)
+        .with_lights(vec![], area_lights)
 }
 
 pub fn quad() -> Scene {
@@ -181,7 +183,7 @@ pub fn quad() -> Scene {
 
     let cam = Camera::new((WIDTH, HEIGHT), math::new_deg(45.0));
 
-    Scene::new(*tlas::build_bvh(instances), cam, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
 }
 
 pub fn cornell_box() -> Scene {
@@ -253,7 +255,7 @@ pub fn cornell_box() -> Scene {
         Vec3::ybase(),
     );
 
-    Scene::new_no_envlight(*tlas::build_bvh(instances), cam).with_lights(vec![], area_lights)
+    Scene::new(*tlas::build_bvh(instances), cam).with_lights(vec![], area_lights)
 }
 
 pub fn plates() -> Scene {
@@ -292,7 +294,9 @@ pub fn plates() -> Scene {
         Vec3::ybase(),
     );
 
-    Scene::new(*tlas::build_bvh(instances), camera, blue_sky)
+    Scene::new(*tlas::build_bvh(instances), camera)
+        .with_env_light(dark_room)
+        .with_lights(vec![], area_lights)
 }
 
 pub fn everything() -> Scene {
@@ -373,5 +377,7 @@ pub fn everything() -> Scene {
 
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
-    Scene::new(*tlas::build_bvh(instances), cam, dark_room).with_lights(vec![], area_lights)
+    Scene::new(*tlas::build_bvh(instances), cam)
+        .with_env_light(dark_room)
+        .with_lights(vec![], area_lights)
 }
