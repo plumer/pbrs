@@ -27,6 +27,7 @@ pub struct CliOptions {
     pub scene_name: Option<String>,
     pub pbrt_file: Option<String>,
     pub integrator: Integrator,
+    pub msaa: u32,
 }
 
 impl Default for CliOptions {
@@ -36,6 +37,7 @@ impl Default for CliOptions {
             scene_name: None,
             pbrt_file: None,
             integrator: Integrator::Path,
+            msaa: 2,
         }
     }
 }
@@ -47,6 +49,7 @@ impl CliOptions {
         --scene_name <scene_name>
         --pbrt_file <file.pbrt>
         --integrator <direct|path>
+        --msaa <N>
         "#
     }
 }
@@ -81,6 +84,8 @@ pub fn parse_args(args: Vec<String>) -> Result<CliOptions, String> {
             "--use_single_thread" => options.use_multi_thread = false,
             "--scene_name" => options.scene_name = v,
             "--pbrt_file" => options.pbrt_file = v,
+            "--msaa" => options.msaa = v.expect("'--msaa' should be followed by a number").
+            parse::<u32>().unwrap(),
             "--help" => {
                 println!("usage: {}", CliOptions::message());
                 std::process::exit(0);

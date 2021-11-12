@@ -58,6 +58,8 @@ pub trait Float: Sized {
     /// Evaluates the polynomial c0 + c1 * x + c2 * x^2 + ... + cn * x^n. The coefficients should be
     /// given in increasing order of powers.
     fn polynomial<const N: usize>(self, coeffs: [Self; N]) -> Self;
+    
+    fn dist_to(self, other: Self) -> Self;
 }
 
 impl Float for f32 {
@@ -99,6 +101,10 @@ impl Float for f32 {
         // a + b * x + c * x^2 + d * x^3
         // = a + x * (b + x * (c + d * x))
         coeffs.iter().rev().fold(0.0, |d, c| d * self + c)
+    }
+    
+    fn dist_to(self, other: Self) -> Self {
+        (self - other).abs()
     }
 }
 
@@ -188,6 +194,9 @@ impl Angle {
     }
     pub fn pi() -> Self {
         Angle{radian: std::f32::consts::PI}
+    }
+    pub fn half_pi() -> Self {
+        Self{radian: std::f32::consts::FRAC_PI_2}
     }
     
     pub fn to_rad(self) -> f32 {

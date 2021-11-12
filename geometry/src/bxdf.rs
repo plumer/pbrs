@@ -425,11 +425,13 @@ impl BxDF for Specular {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 enum MatteModel {
     Lambertian,
     OrenNayar { coeff_a: f32, coeff_b: f32 },
 }
 
+#[derive(Debug, Clone)]
 pub struct DiffuseReflect {
     albedo: Color,
     model: MatteModel,
@@ -442,7 +444,7 @@ impl DiffuseReflect {
             model: MatteModel::Lambertian,
         }
     }
-
+    /// `sigma`: standard deviation of the microfacet orientation angle
     pub fn oren_nayar(albedo: Color, sigma: math::Angle) -> Self {
         let sigma_sqr = sigma.to_rad().powi(2);
         let coeff_a = 1.0 - (sigma_sqr / (2.0 * (sigma_sqr + 0.33)));
@@ -490,6 +492,7 @@ impl BxDF for DiffuseReflect {
     }
 }
 
+#[derive(Debug, Clone)]
 /// Implements a general microfacet-based BRDF using Torrance-Sparrow model.
 pub struct MicrofacetReflection {
     albedo: Color,
@@ -529,7 +532,7 @@ impl BxDF for MicrofacetReflection {
         if !Omega::same_hemisphere(wo, wi) {
             return (
                 Color::black(),
-                Omega::new(0.0, 0.0, 0.0),
+                Omega::normal(),
                 Prob::Density(0.0),
             );
         }

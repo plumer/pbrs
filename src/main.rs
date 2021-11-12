@@ -20,9 +20,6 @@ use tlas::bvh::BvhNode;
 use glog::Flags;
 use rayon::prelude::*;
 
-const MSAA: usize = 2; // 275R: 12x12 = 63.6s, 24x24=252.2s
-const SAMPLES_PER_PIXEL: usize = MSAA * MSAA;
-
 fn vec3_to_color(v: Vec3) -> Color {
     Color::new(v.x, v.y, v.z)
 }
@@ -97,6 +94,7 @@ fn main() {
         scene.tlas.height()
     );
 
+    let msaa = options.msaa;
     let (width, height) = scene.camera.resolution();
     // Function lambda to render one row. It's going to be used in the main rendering process.
     let render_one_row = |row| {
@@ -108,18 +106,21 @@ fn main() {
         for col in 0..width {
             let mut color_sum = Color::black();
 
-            for i in 0..MSAA * MSAA {
+            for i in 0..msaa * msaa {
                 let jitter = (
-                    ((i / MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
-                    ((i % MSAA) as f32 + rand::random::<f32>()) / MSAA as f32,
+                    ((i / msaa) as f32 + rand::random::<f32>()) / msaa as f32,
+                    ((i % msaa) as f32 + rand::random::<f32>()) / msaa as f32,
                 );
                 // let jitter = (rand::random::<f32>(), rand::random::<f32>());
                 let ray = scene.camera.shoot_ray(row, col, jitter).unwrap();
                 // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
+                if (row, col) == (428, 364) {
+                    directlighting::direct_lighting_debug_integrator(&scene, ray, 2);
+                }
                 color_sum = color_sum + integrator(&scene, ray, 5);
             }
 
-            let color = color_sum / (SAMPLES_PER_PIXEL as f32);
+            let color = color_sum / (msaa.pow(2) as f32);
             colors_for_row.push(color);
         }
         colors_for_row
@@ -168,7 +169,7 @@ fn main() {
         "{}-{}-{}spp.png",
         scene_name,
         options.integrator.to_str(),
-        MSAA.pow(2)
+        msaa.pow(2)
     );
     println!("Image written to {}", output_file_name);
     write_image(&output_file_name, &image_data, scene.camera.resolution());
@@ -257,7 +258,8 @@ fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
         .into_iter()
         .map(|i| Box::new(i))
         .collect::<Vec<_>>();
-    Scene::new(*tlas::build_bvh(tlas), cam, preset::blue_sky)
+    Scene::new(*tlas::build_bvh(tlas), cam)
+        .with_env_light(preset::blue_sky)
         .with_lights(pbrt_scene.delta_lights, pbrt_scene.area_lights)
 }
 

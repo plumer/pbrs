@@ -293,7 +293,7 @@ impl Material for DiffuseLight {
     //     (r, color, Prob::Density(std::f32::consts::FRAC_1_PI))
     // }
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        todo!()
+        vec![]
     }
 }
 
