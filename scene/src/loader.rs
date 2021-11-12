@@ -9,10 +9,11 @@ use geometry::camera::Camera;
 use material::{self as mtl, Material};
 use math::hcm;
 use radiometry::color::Color;
-use crate::{
+use scene_parser::{
     ast::{self, ArgValue, ParameterSet},
-    lexer, parser, plyloader, token,
+    lexer, parser, token,
 };
+use crate::plyloader;
 use shape::{self, IsolatedTriangle, Shape};
 use texture::{self as tex, Texture};
 use tlas::instance::AffineTransform;

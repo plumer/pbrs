@@ -13,8 +13,8 @@ material = {path = "../material", version = "0.1.0"}
 radiometry = {path = "../radiometry", version = "0.1.0"}
 texture = {path = "../texture", version = "0.1.0"}
 tlas = {path = "../tlas", version = "0.1.0"}
+scene_parser = {path = "../scene_parser", version = "0.1.0"}
 
-logos = "0.12"
 glog = "0.1"
 log = "0.4"
 ply-rs = "0.1.3"
