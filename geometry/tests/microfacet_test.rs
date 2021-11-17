@@ -1,5 +1,12 @@
-use geometry::{bxdf::Omega, microfacet as mf};
-use math::{float::linspace};
+use rand::Rng;
+use std::f32::consts::PI;
+
+use geometry::{
+    bxdf::{self, BxDF, Omega},
+    microfacet as mf,
+};
+use math::{float::linspace, float::Float};
+use radiometry::color::Color;
 
 /// Tests if the differential area distribution function `d()` integrates to 1 over the hemisphere.
 #[test]
@@ -15,6 +22,82 @@ fn diff_area_validate() {
         println!("Differential masked area = {}", masked_area);
         assert!((masked_area - w.cos_theta()).abs() < 1e-3);
     }
+}
+
+#[test]
+fn pdf_integral_validate() {
+    let (alphas, _) = linspace((0.1, 0.9), 8);
+
+    for alpha in alphas.iter().copied() {
+        println!("Testing alpha = {}", alpha);
+
+        let beck_mf = mf::MicrofacetDistrib::beckmann(alpha, alpha);
+        let trowbridge_mf = mf::MicrofacetDistrib::trowbridge_reitz(alpha, alpha);
+        let pdf_integral: f32 = integrate_wo_wh(&beck_mf);
+        assert!(
+            pdf_integral.dist_to(1.0) < 2e-3,
+            "actually {}",
+            pdf_integral
+        );
+        let pdf_integral: f32 = integrate_wo_wh(&trowbridge_mf);
+        assert!(
+            pdf_integral.dist_to(1.0) < 2e-3,
+            "actually {}",
+            pdf_integral
+        );
+    }
+}
+
+#[test]
+fn play_integrate_wo_wh() {
+    let mf = mf::MicrofacetDistrib::beckmann(0.3, 0.3);
+    for count in [30, 50, 70, 80].iter() {
+        let (whs, (d_theta, d_phi)) = Omega::tesselate_hemi(*count);
+        let marginal_p_o = whs
+            .iter()
+            .map(|wh| mf.pdf(Omega::normal(), *wh) * wh.sin_theta() * d_theta * d_phi)
+            .sum::<f32>();
+        println!(
+            "count = {}, marginal pdf integral = {}",
+            count, marginal_p_o
+        );
+    }
+}
+
+/// Integrates the PDF of the given microfact distribution over wo and wh hemispheres.
+fn integrate_wo_wh(mf: &mf::MicrofacetDistrib) -> f32 {
+    let (whs, (d_theta, d_phi)) = Omega::tesselate_hemi(70);
+    let (wos, _) = Omega::tesselate_hemi(3);
+    let full_pdf_integral = wos
+        .iter()
+        .map(|wo| {
+            let marginal_p_o = whs
+                .iter()
+                .map(|wh| mf.pdf(*wo, *wh) * wh.sin_theta() * d_theta * d_phi)
+                .sum::<f32>();
+            marginal_p_o
+        })
+        .sum::<f32>();
+    full_pdf_integral / wos.len() as f32
+}
+
+#[allow(dead_code)]
+fn mc_integrate_wo_wh(mf: &mf::MicrofacetDistrib) -> f32 {
+    let mut rng = rand::thread_rng();
+    let num_samples = 20000;
+    let volume = PI * 2.0;
+    (0..num_samples)
+        .map(|_| {
+            // let uv = rng.gen::<(f32, f32)>();
+            // let wo = bxdf::cos_sample_hemisphere(uv);
+            let wo = Omega::normal();
+            let uv = rng.gen::<(f32, f32)>();
+            let wh = bxdf::cos_sample_hemisphere(uv);
+            mf.pdf(wo, wh)
+        })
+        .sum::<f32>()
+        * volume
+        / num_samples as f32
 }
 
 /// Integrates the differential area distribution function - `d()` - over the hemisphere.

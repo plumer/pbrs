@@ -1,8 +1,10 @@
+use std::f32::consts::FRAC_1_PI;
+
 use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega};
 use geometry::microfacet::MicrofacetDistrib;
 use math::float::linspace;
-use math::prob::Prob;
 use math::hcm::Vec3;
+use math::prob::Prob;
 use radiometry::color::Color;
 
 fn f32_close(a: f32, b: f32) -> bool {
@@ -64,13 +66,35 @@ fn diffuse_refl_test() {
     let oren_nayar = bxdf::DiffuseReflect::oren_nayar(albedo, math::new_deg(0.0));
     test_one_diffuse_brdf(&matte, albedo);
     test_one_diffuse_brdf(&oren_nayar, albedo);
+}
 
-    // let mf_refl = bxdf::MicrofacetReflection::new(
-    //     albedo,
-    //     MicrofacetDistrib::beckmann(0.2, 0.2),
-    //     bxdf::Fresnel::dielectric(1.0, 1.2),
-    // );
-    // test_one_diffuse_brdf(&mf_refl, albedo);
+#[test]
+fn microfacet_refl_test() {
+    let albedo = Color::new(0.9, 0.8, 0.6);
+    let (alphas, _) = linspace((0.1, 0.9), 8);
+    for alpha in alphas.into_iter() {
+        let mf_refl = bxdf::MicrofacetReflection::new(
+            albedo,
+            MicrofacetDistrib::beckmann(alpha, alpha),
+            bxdf::Fresnel::dielectric(1.0, 1.2),
+        );
+        let pdf_hemisphere_integral = riemann_integral_pdf_2d(&mf_refl);
+        if (pdf_hemisphere_integral - 1.0).abs() > 1e-3 {
+            eprintln!(
+                "alpha = {}, Hemisphere pdf doesn't integrate to 1.0 ({} instead)",
+                alpha, pdf_hemisphere_integral
+            );
+        }
+        if false {
+            let mc_rho = montecarlo_integrate_rho(&mf_refl);
+            assert!(
+                color_is_close(albedo, mc_rho),
+                "Monte-carlo integrated rho doesn't euqal to albedo: {} vs {}",
+                albedo,
+                mc_rho
+            );
+        }
+    }
 }
 
 // Utility functions.
@@ -95,6 +119,13 @@ fn test_one_diffuse_brdf(brdf: &bxdf::DiffuseReflect, albedo: Color) {
         pdf_hemisphere_integral
     );
 
+    let pdf_hemisphere_integral = riemann_integral_pdf_2d(brdf);
+    assert!(
+        (pdf_hemisphere_integral - 1.0).abs() < 1e-3,
+        "2D Hemisphere pdf doesn't integrate to 1.0 ({} instead)",
+        pdf_hemisphere_integral
+    );
+
     let mc_rho = montecarlo_integrate_rho(brdf);
     assert!(
         color_is_close(albedo, mc_rho),
@@ -104,25 +135,45 @@ fn test_one_diffuse_brdf(brdf: &bxdf::DiffuseReflect, albedo: Color) {
     );
 }
 
-fn riemann_integral_pdf(bsdf: &bxdf::DiffuseReflect) -> f32 {
+fn riemann_integral_pdf<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
+    riemann_integral_hemi_pdf_i(bsdf, Omega::normalize(0.48, 0.64, 0.6), 25)
+}
+
+fn riemann_integral_hemi_pdf_i<BSDF: BxDF>(bsdf: &BSDF, wo: Omega, count: i32) -> f32 {
+    let (wis, (d_theta, d_phi)) = Omega::tesselate_hemi(count);
+    let pdf_integral = wis
+        .into_iter()
+        .map(|wi| {
+            let pr = bsdf.prob(wo, wi);
+            assert!(pr.is_density(), "bxdf returns a mass value");
+            pr.density() * wi.sin_theta() * d_theta * d_phi
+        })
+        .sum();
+
+    pdf_integral
+}
+
+fn riemann_integral_pdf_2d<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
     let mut pdf_integral = 0.0;
-    const N: i32 = 100;
+    const N: i32 = 50;
     let (thetas, d_theta) = linspace((0.0, std::f32::consts::FRAC_PI_2), N);
     let (phis, d_phi) = linspace((0.0, std::f32::consts::PI * 2.0), N * 4);
+
     for theta in thetas.into_iter() {
         for phi in phis.iter().copied() {
             let (sin_theta, cos_theta) = theta.sin_cos();
-            let wi = math::hcm::spherical_direction(sin_theta, cos_theta, math::new_rad(phi));
-            let pr = bsdf.prob(Omega::new(0.48, 0.64, 0.6), Omega(wi));
+            let wo = math::hcm::spherical_direction(sin_theta, cos_theta, math::new_rad(phi));
+            let marginal_pdf_o = riemann_integral_hemi_pdf_i(bsdf, Omega(wo), N);
 
-            if let Prob::Density(pdf) = pr {
-                pdf_integral += pdf * sin_theta * d_theta * d_phi;
-            } else {
-                panic!("bxdf returns a prob-mass value");
-            }
+            pdf_integral += marginal_pdf_o * sin_theta * d_theta * d_phi;
         }
     }
-    pdf_integral
+
+    // For a perfect lambertian reflection, integrate(p(wo, wi), d(wi)) = 1, and
+    // integrate(integrate(p(wo, wi), d(wi)), d(wo)) = 2pi. So for any other things, "average" of
+    // integrate(p(wo, wi), d(wi)) for all wo's should be 2pi as well.
+
+    pdf_integral * FRAC_1_PI * 0.5
 }
 
 fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {

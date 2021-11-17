@@ -36,6 +36,8 @@ impl MicrofacetDistrib {
     pub fn d(&self, wh: Omega) -> f32 {
         let tan2_theta = wh.tan2_theta();
         let cos4_theta = wh.cos2_theta().powi(2);
+        assert!(!tan2_theta.is_nan());
+        assert!(!cos4_theta.is_nan());
 
         if tan2_theta.is_infinite() {
             0.0
@@ -105,14 +107,17 @@ impl MicrofacetDistrib {
         (1.0 + self.lambda(wo) + self.lambda(wi)).recip()
     }
 
-    pub fn pdf(&self, wo: Omega, wh: Omega) -> f32 {
+    pub fn pdf(&self, _wo: Omega, wh: Omega) -> f32 {
         #[cfg(sample_visible_area)]
         {
             self.d(wh) * self.g1(wo) * wo.dot(wh).abs() / wo.cos_theta().abs()
         }
         #[cfg(not(sample_visible_area))]
         {
-            self.d(wh) * wo.cos_theta().abs()
+            let x = self.d(wh);
+            let y = wh.cos_theta().abs();
+            assert!(!(x * y).is_nan(), "{} * {}", x, y);
+            self.d(wh) * wh.cos_theta().abs()
         }
     }
 
