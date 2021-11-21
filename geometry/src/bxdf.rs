@@ -143,6 +143,27 @@ impl Omega {
             self
         }
     }
+
+    /// Tesselates the +Z hemisphere into N x 4N cell, returning the direction at the center of
+    /// each cell and `d_theta, d_phi`.
+    pub fn tesselate_hemi(count: i32) -> (Vec<Self>, (f32, f32)) {
+        use math::float::linspace;
+        use std::f32::consts::{FRAC_PI_2, PI};
+        let (thetas, d_theta) = linspace((0.0, FRAC_PI_2), count);
+        let (phis, d_phi) = linspace((0.0, PI * 2.0), count * 4);
+
+        let mut vectors = vec![];
+        for theta in thetas.into_iter() {
+            for phi in phis.iter().copied() {
+                let (sin_theta, cos_theta) = theta.sin_cos();
+                let wo = math::hcm::spherical_direction(sin_theta, cos_theta, math::new_rad(phi));
+
+                assert!(wo.norm_squared().dist_to(1.0) < 1e-3);
+                vectors.push(Self(wo));
+            }
+        }
+        (vectors, (d_theta, d_phi))
+    }
 }
 
 pub fn concentric_sample_disk(uv: (f32, f32)) -> (f32, f32) {
