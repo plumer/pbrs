@@ -5,7 +5,7 @@ use geometry::{
     bxdf::{self, BxDF, Omega},
     microfacet as mf,
 };
-use math::{float::linspace, float::Float};
+use math::float::{linspace, Float, Inside};
 use radiometry::color::Color;
 
 /// Tests if the differential area distribution function `d()` integrates to 1 over the hemisphere.
@@ -137,17 +137,18 @@ fn integrate_masking(mf_distrib: mf::MicrofacetDistrib, w: Omega) -> f32 {
 
 #[test]
 fn observe_normals() {
-    let mf = mf::MicrofacetDistrib::beckmann(0.9, 0.9);
+    let mf = mf::MicrofacetDistrib::beckmann(0.1, 0.1);
     use rand::Rng;
     let mut rng = rand::thread_rng();
 
+    let wo = Omega::normalize(0.8, 0.6, 0.1);
     let mut phis = vec![];
     let mut thetas = vec![];
     let mut whs = vec![];
     for _ in 0..100 {
         let u = rng.gen::<f32>();
         let v = rng.gen::<f32>();
-        let wh = mf.sample_wh(Omega::normalize(0.8, 0.6, 0.1), (u, v));
+        let wh = mf.sample_wh(wo, (u, v));
         let phi = f32::atan2(wh.y(), wh.x());
         let cos_theta = wh.cos_theta();
         phis.push(phi);
@@ -155,7 +156,39 @@ fn observe_normals() {
         whs.push(wh);
     }
 
-    println!("x = {:?};", whs.iter().map(|w| w.x()).collect::<Vec<_>>());
-    println!("y = {:?};", whs.iter().map(|w| w.y()).collect::<Vec<_>>());
-    println!("z = {:?};", whs.iter().map(|w| w.z()).collect::<Vec<_>>());
+    for wh in whs.iter() {
+        let forward = wh.dot(wo).signum() * 0.25 + 0.5;
+        println!("{}, {}, {}, {}", wh.x(), wh.y(), wh.z(), forward);
+    }
+}
+
+#[test]
+fn beckmann_rho() {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for alpha in [0.05f32, 0.1, 0.3, 0.6].iter().copied() {
+        let (norm_mean, norm_stdev) = {
+            let mf = mf::MicrofacetDistrib::beckmann(alpha, alpha);
+            let mf_refl = bxdf::MicrofacetReflection::new(Color::white(), mf, bxdf::Fresnel::Nop);
+
+            let wo = Omega::normalize(0.2, 0.6, 0.5);
+            let mut norms = vec![];
+            for _ in 0..500 {
+                let (color, wi, pr) = mf_refl.sample(wo, rng.gen::<(f32, f32)>());
+                let color = color * wi.cos_theta().abs();
+                let cv = math::hcm::Vec3::new(color.r, color.g, color.b);
+                if let Some(norm) = cv.norm().try_divide(pr.density()) {
+                    norms.push(norm);
+                }
+            }
+
+            let norm_mean = norms.iter().sum::<f32>() / norms.len() as f32;
+            let norm_variance =
+                norms.iter().map(|n| (n - norm_mean).powi(2)).sum::<f32>() / norms.len() as f32;
+            (norm_mean, norm_variance)
+        };
+
+        assert!((3.0f32.sqrt()).inside((norm_mean - norm_stdev, norm_mean + norm_stdev)));
+        assert!((norm_stdev / alpha).inside((0.0, 2.0)), "{} / {}", norm_stdev, alpha);
+    }
 }

@@ -541,9 +541,9 @@ impl BxDF for MicrofacetReflection {
         }
         let wh = wh.unwrap().face_forward(Omega::normal());
         let refl = self.fresnel.eval(wi.dot(wh));
-        println!("fresnel cos_theta = {}, refl coeff = {}", wi.dot(wh), refl);
-        self.albedo * self.distrib.d(wh) * self.distrib.g(wo, wi) //* refl_coeff
-                                                                  // / (4.0 * cos_theta_o * cos_theta_i)
+        // println!("fresnel cos_theta = {}, refl coeff = {}", wi.dot(wh), refl);
+        self.albedo * self.distrib.d(wh) * self.distrib.g(wo, wi) * refl
+            / (4.0 * cos_theta_o * cos_theta_i)
     }
 
     fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
@@ -551,11 +551,7 @@ impl BxDF for MicrofacetReflection {
         let wh = self.distrib.sample_wh(wo, rnd2);
         let wi = Omega::reflect(wh, wo);
         if !Omega::same_hemisphere(wo, wi) {
-            return (
-                Color::black(),
-                Omega::normal(),
-                Prob::Density(0.0),
-            );
+            return (Color::black(), Omega::normal(), Prob::Density(0.0));
         }
         // Computes pdf of wi for microfacet reflection.
         // The pdf of wi is converted from that of wh and the following identities (that
