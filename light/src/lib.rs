@@ -191,8 +191,9 @@ impl Light for DiffuseAreaLight {
     ) -> (Color, hcm::Vec3, Prob, Ray) {
         let point_on_light = self.shape.sample_towards(target, u);
         let wi = (point_on_light.pos - target.pos).hat();
-        let radiance = self.radiance_from(target, -wi);
-        let pdf = self.shape.pdf_at(target, wi).expect("Shoul be nonzero");
+        let radiance = self.radiance_from(&point_on_light, -wi);
+        let pdf = self.shape.pdf_at(target, wi).unwrap_or(0.0);
+        //.expect("Shoul be nonzero");
         (
             radiance,
             wi,
@@ -249,7 +250,7 @@ impl ShapeSample for shape::Sphere {
             hcm::spherical_direction(sin_alpha, cos_alpha, math::new_rad(phi));
         let (wcx, wcy) = hcm::make_coord_system(wc.hat());
         let point_on_sphere =
-            hcm::Mat3::from_vectors(wcx, wcy, wc) * normal_object_space * self.radius()
+            hcm::Mat3::from_vectors(wcx, wcy, wc.hat()) * normal_object_space * self.radius()
                 + self.center();
 
         Interaction::rayless(point_on_sphere, rnd2, normal_object_space)
@@ -267,7 +268,7 @@ impl ShapeSample for shape::Sphere {
             let sin_theta_max_2 = self.radius().powi(2) / ref_to_center.norm_squared();
             let cos_theta_max = (1.0 - sin_theta_max_2).max(0.0).sqrt();
             let cos_theta = ref_to_center.dot(wi) / (ref_to_center.norm() * wi.norm());
-            let uniform_cone_pdf = || 1.0 / (2.0 * std::f32::consts::PI * (1.0 - cos_theta_max));
+            let uniform_cone_pdf = || 1.0 / (2.0 * PI * (1.0 - cos_theta_max));
             // Theta is less than theta_max, `wi` inside the cone
             (cos_theta > cos_theta_max).then(uniform_cone_pdf)
         }
