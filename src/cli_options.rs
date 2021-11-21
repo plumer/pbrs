@@ -84,8 +84,12 @@ pub fn parse_args(args: Vec<String>) -> Result<CliOptions, String> {
             "--use_single_thread" => options.use_multi_thread = false,
             "--scene_name" => options.scene_name = v,
             "--pbrt_file" => options.pbrt_file = v,
-            "--msaa" => options.msaa = v.expect("'--msaa' should be followed by a number").
-            parse::<u32>().unwrap(),
+            "--msaa" => {
+                options.msaa = v
+                    .expect("'--msaa' should be followed by a number")
+                    .parse::<u32>()
+                    .expect("invalid number following --msaa");
+            }
             "--help" => {
                 println!("usage: {}", CliOptions::message());
                 std::process::exit(0);
