@@ -188,7 +188,7 @@ fn beckmann_rho() {
             (norm_mean, norm_variance)
         };
 
-        assert!((3.0f32.sqrt()).inside((norm_mean - norm_stdev, norm_mean + norm_stdev)));
+        assert!((3.0f32.sqrt()).inside((norm_mean - 2.0 * norm_stdev, norm_mean + 2.0 * norm_stdev)));
         assert!((norm_stdev / alpha).inside((0.0, 2.0)), "{} / {}", norm_stdev, alpha);
     }
 }

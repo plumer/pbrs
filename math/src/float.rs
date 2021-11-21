@@ -93,9 +93,10 @@ impl Float for f32 {
     /// Evaluates the polynomial c0 + c1 * x + c2 * x^2 + ... + cn * x^n. The coefficients should be
     /// given in increasing order of powers.
     /// ```
+    /// use math::float::Float;
     /// let x = 0.6;
-    /// let fx = x.polynomial([4, 2, 1]);
-    /// assert!((fx - (4.0 + 2 * 0.6 + 0.6*0.6)).abs() < 1e-6);
+    /// let fx = x.polynomial([4.0, 2.0, 1.0]);
+    /// assert!((fx - (4.0 + 2.0 * 0.6 + 0.6*0.6)).abs() < 1e-6);
     /// ```
     fn polynomial<const N: usize>(self, coeffs: [Self; N]) -> Self {
         // a + b * x + c * x^2 + d * x^3
