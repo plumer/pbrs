@@ -4,6 +4,14 @@ use std::{
     ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub},
 };
 
+pub fn vec3(x: f32, y: f32, z: f32) -> Vec3 {
+    Vec3::new(x, y, z)
+}
+
+pub fn point3(x: f32, y: f32, z: f32) -> Point3 {
+    Point3::new(x, y, z)
+}
+
 /// Represents a 3D vector. Each component is a `f32` number.
 /// Components can be accessed using `v.x` `v.y` `v.z`,
 /// or indices `v[i]` where i is 0, 1, or 2.
@@ -739,7 +747,13 @@ mod test {
         // One corresponding incident direction is (0.5, sqrt(0.75), 0.0).
         let full_reflect_wi = Vec3::new(0.51, 0.75f32.sqrt(), 0.0).hat();
         let transmit_wi = Vec3::new(0.49, 0.75f32.sqrt(), 0.0).hat();
-        assert!(matches!(super::refract(normal, full_reflect_wi, 2.0), super::FullReflect(_)));
-        assert!(matches!(super::refract(normal, transmit_wi, 2.0), super::Transmit(_)));
+        assert!(matches!(
+            super::refract(normal, full_reflect_wi, 2.0),
+            super::FullReflect(_)
+        ));
+        assert!(matches!(
+            super::refract(normal, transmit_wi, 2.0),
+            super::Transmit(_)
+        ));
     }
 }
