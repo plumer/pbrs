@@ -1,8 +1,8 @@
 use std::f32::consts::{self, PI};
 
 use geometry::ray::Ray;
-use math::hcm;
 use math::prob::Prob;
+use math::{float::Float, hcm};
 use radiometry::color::Color;
 use shape::{self, Interaction, Shape};
 
@@ -70,7 +70,7 @@ impl Light for DeltaLight {
     ) -> (Color, hcm::Vec3, Prob, Ray) {
         match self.clone() {
             Self::Point {position, intensity} => {
-                let radiance = intensity / position.squared_distance_to(target.pos);
+                let radiance = intensity * position.squared_distance_to(target.pos).weak_recip();
                 let wi = (position - target.pos).hat();
                 let visibility_ray = spawn_ray_to(target, position);
                 (radiance, wi, Prob::Mass(1.0), visibility_ray)

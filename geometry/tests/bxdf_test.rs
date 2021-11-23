@@ -2,7 +2,7 @@ use std::f32::consts::FRAC_1_PI;
 
 use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega};
 use geometry::microfacet::MicrofacetDistrib;
-use math::float::linspace;
+use math::float::{Float, linspace};
 use math::hcm::Vec3;
 use math::prob::Prob;
 use radiometry::color::Color;
@@ -190,12 +190,7 @@ fn montecarlo_integrate_rho<BSDF: BxDF>(bsdf: &BSDF) -> Color {
                 let (bsdf_value, wi, pr) = bsdf.sample(wo, (u, v));
                 assert!(!wi.0.has_nan());
                 if let Prob::Density(pdf) = pr {
-                    // println!("pdf = {}", pdf);
-                    if pdf == 0.0 {
-                        Color::black()
-                    } else {
-                        bsdf_value * wi.cos_theta().abs() / pdf
-                    }
+                    bsdf_value * wi.cos_theta().abs() * pdf.weak_recip()
                 } else {
                     panic!()
                 }

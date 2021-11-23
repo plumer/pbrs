@@ -371,7 +371,10 @@ impl Specular {
     fn reflect(&self, wo: Omega) -> (Omega, Color) {
         let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
         let fr_refl = self.fresnel.eval(wi.cos_theta());
-        (wi, fr_refl * self.albedo / wi.cos_theta().abs())
+        (
+            wi,
+            fr_refl * self.albedo * wi.cos_theta().abs().weak_recip(),
+        )
     }
 
     fn refract(&self, wo: Omega, eta_front: f32, eta_back: f32) -> (Omega, Color) {
@@ -542,8 +545,11 @@ impl BxDF for MicrofacetReflection {
         let wh = wh.unwrap().face_forward(Omega::normal());
         let refl = self.fresnel.eval(wi.dot(wh));
         // println!("fresnel cos_theta = {}, refl coeff = {}", wi.dot(wh), refl);
-        self.albedo * self.distrib.d(wh) * self.distrib.g(wo, wi) * refl
-            / (4.0 * cos_theta_o * cos_theta_i)
+        self.albedo
+            * self.distrib.d(wh)
+            * self.distrib.g(wo, wi)
+            * refl
+            * (4.0 * cos_theta_o * cos_theta_i).weak_recip()
     }
 
     fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {

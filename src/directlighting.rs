@@ -128,7 +128,7 @@ fn estimate_direct_delta_light(
     };
 
     if let Some((weight, f, pr)) = by_light() {
-        f * weight / pr
+        f * weight * pr.weak_recip()
     } else {
         Color::black()
     }
@@ -172,7 +172,7 @@ fn estimate_direct_area_light(
         // checking for ray occlusion.
         if !bsdf_value.is_black() && scatter_pdf > 0.0 && !scene.tlas.occludes(&vis_test_ray) {
             let weight = square_heuristic(1.0, light_pdf, 1.0, scatter_pdf);
-            radiance_d += bsdf_value * light_radiance * weight / light_pdf;
+            radiance_d += bsdf_value * light_radiance * weight * light_pdf.weak_recip();
         }
     }
 
@@ -198,7 +198,7 @@ fn estimate_direct_area_light(
     };
 
     if let Some((weight, f, pr)) = by_bsdf() {
-        radiance_d += weight * f / pr;
+        radiance_d += weight * f * pr.weak_recip();
     }
     radiance_d
 }

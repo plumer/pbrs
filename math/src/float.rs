@@ -58,8 +58,12 @@ pub trait Float: Sized {
     /// Evaluates the polynomial c0 + c1 * x + c2 * x^2 + ... + cn * x^n. The coefficients should be
     /// given in increasing order of powers.
     fn polynomial<const N: usize>(self, coeffs: [Self; N]) -> Self;
-    
+
     fn dist_to(self, other: Self) -> Self;
+
+    /// Returns the weak reciprocal of the given floating number.
+    /// Effectively, returns 0.0 if `self == 0.0`, and `1.0/self` otherwise.
+    fn weak_recip(self) -> Self;
 }
 
 impl Float for f32 {
@@ -103,9 +107,17 @@ impl Float for f32 {
         // = a + x * (b + x * (c + d * x))
         coeffs.iter().rev().fold(0.0, |d, c| d * self + c)
     }
-    
+
     fn dist_to(self, other: Self) -> Self {
         (self - other).abs()
+    }
+
+    fn weak_recip(self) -> Self {
+        if self == 0.0 {
+            0.0
+        } else {
+            self.recip()
+        }
     }
 }
 
