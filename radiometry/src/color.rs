@@ -56,7 +56,23 @@ impl Color {
             saturate_cast_u8(self.b),
         ]
     }
+    pub fn has_nan(&self) -> bool {
+        self.r.is_nan() || self.g.is_nan() || self.b.is_nan()
+    }
 
+    pub fn average(color_vec: &Vec<Self>) -> Self {
+        match color_vec.len() {
+            0 => Self::black(),
+            num => color_vec.iter().copied().sum::<Self>() * (1.0 / num as f32),
+        }
+    }
+
+    pub fn scale_down_by(self, n: u32) -> Self {
+        match n {
+            0 => panic!(),
+            _ => self * (1.0 / n as f32),
+        }
+    }
     /// Component-wise (per RGB channel) division.
     pub fn cw_div(&self, other: &Self) -> Self {
         Color::new(self.r / other.r, self.g / other.g, self.b / other.b)
