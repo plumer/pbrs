@@ -1,10 +1,10 @@
-use shape::Interaction;
-use texture::{self, *};
 use geometry::bxdf::{self, BxDF};
 use geometry::{microfacet, ray::Ray};
 use math::hcm::{self, Vec3};
 use radiometry::color::Color;
+use shape::Interaction;
 use std::sync::Arc;
+use texture::{self, *};
 
 pub trait Material: Sync + Send {
     /// Computes the scattering of a ray on a given surface interation.
@@ -57,8 +57,9 @@ pub struct Glossy {
 impl Glossy {
     pub fn new(albedo: Color, roughness: f32) -> Self {
         let alpha = geometry::microfacet::MicrofacetDistrib::roughness_to_alpha(roughness);
-        let distrib = geometry::microfacet::MicrofacetDistrib::trowbridge_reitz(alpha, alpha);
+        let distrib = geometry::microfacet::MicrofacetDistrib::beckmann(alpha, alpha);
         let mf_refl = bxdf::MicrofacetReflection::new(albedo, distrib, bxdf::Fresnel::Nop);
+
         Self { mf_refl }
     }
 }
@@ -215,7 +216,7 @@ impl Material for Glossy {
     }
 
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        todo!()
+        vec![Box::new(self.mf_refl.clone())]
     }
 }
 impl Material for Mirror {
@@ -333,7 +334,7 @@ impl Material for Plastic {
         String::from("plastic")
     }
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        use microfacet::MicrofacetDistrib as MFDistrib; 
+        use microfacet::MicrofacetDistrib as MFDistrib;
         let lambertian = bxdf::DiffuseReflect::lambertian(self.diffuse);
         let alpha = MFDistrib::roughness_to_alpha(self.roughness);
         let trowbridge = MFDistrib::trowbridge_reitz(alpha, alpha);
@@ -351,7 +352,11 @@ fn schlick(cosine: f32, ref_index: f32) -> f32 {
 
 #[cfg(test)]
 mod test {
-    use math::hcm::{Point3, Vec3};
+    use geometry::bxdf::Omega;
+    use math::{
+        float::Float,
+        hcm::{Point3, Vec3},
+    };
     use radiometry::color::Color;
     use shape::Interaction;
 
@@ -387,20 +392,27 @@ mod test {
         let lambertian = Lambertian::solid(Color::white());
         let wo = Vec3::new(0.7, 0.5, 0.3);
         let (_ray, color) = lambertian.scatter(wo, &isect);
-        // let (ray, f, p) = lambertian.sample_bsdf(wo, &isect, (0.8, 0.5));
+        let v0 = Vec3::new(color.r, color.g, color.b);
+        let v1 = {
+            let lambertian_bxdf = lambertian
+                .bxdfs_at(&isect)
+                .pop()
+                .expect("At least one bxdf");
+            let (f, wi, p) = lambertian_bxdf.sample(Omega(wo.hat()), (0.8, 0.5));
 
-        // eprintln!(
-        //     "Scattered color = {}, BSDF value = {}, prob = {:?}",
-        //     color, f, p
-        // );
-        // let v0 = Vec3::new(color.r, color.g, color.b);
-        // let color1 = f * ray.dir.dot(isect.normal) / p.density();
-        // let v1 = Vec3::new(color1.r, color1.g, color1.b);
-        // assert!(
-        //     (v0 - v1).norm_squared().abs() < 1e-5,
-        //     "{:.5} vs {:.5}",
-        //     v0,
-        //     v1
-        // )
+            eprintln!(
+                "Scattered color = {}, BSDF value = {}, prob = {:?}",
+                color, f, p
+            );
+            let color1 = f * wi.cos_theta().abs() * p.density().weak_recip();
+            Vec3::new(color1.r, color1.g, color1.b)
+        };
+
+        assert!(
+            (v0 - v1).norm_squared().abs() < 1e-5,
+            "{:.5} vs {:.5}",
+            v0,
+            v1
+        )
     }
 }
