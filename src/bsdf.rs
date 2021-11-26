@@ -8,12 +8,12 @@ use shape::Interaction;
 ///
 /// Models the scattering of rays at a surface intersection, in the global coordinate space.
 ///
-pub struct BSDF <'a> {
+pub struct BSDF<'a> {
     frame: hcm::Mat3,
-    bxdfs: &'a[Box<dyn BxDF>],
+    bxdfs: &'a [Box<dyn BxDF>],
 }
 
-impl <'a> BSDF <'a> {
+impl<'a> BSDF<'a> {
     /// Creates a new BSDF with geometry information and material.
     pub fn new_frame(isect: &Interaction) -> Self {
         let normal = isect.normal.hat();
@@ -25,8 +25,16 @@ impl <'a> BSDF <'a> {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn frame(&self) -> hcm::Mat3 {
+        self.frame
+    }
+
     pub fn with_bxdfs(self, bxdfs: &'a Vec<Box<dyn BxDF>>) -> Self {
-        Self { bxdfs: bxdfs.as_slice(), ..self }
+        Self {
+            bxdfs: bxdfs.as_slice(),
+            ..self
+        }
     }
 
     pub fn eval(&self, wo: hcm::Vec3, wi: hcm::Vec3) -> Color {
@@ -119,3 +127,82 @@ impl <'a> BSDF <'a> {
 //
 // fourier:  FourierBSDF
 // Uber: specular + lambertian reflection + trowbridge refl
+
+#[cfg(test)]
+mod test {
+    use super::BSDF;
+    use geometry::bxdf::{self, BxDF};
+    use math::float::Float;
+    use math::hcm;
+    use math::prob::Prob;
+    use radiometry::color::Color;
+    use shape::Interaction;
+    #[test]
+
+    fn mf_refl_test() {
+        let alpha = geometry::microfacet::MicrofacetDistrib::roughness_to_alpha(0.2);
+        let albedo = Color::white();
+        let distrib = geometry::microfacet::MicrofacetDistrib::beckmann(alpha, alpha);
+        let mf_refl = bxdf::MicrofacetReflection::new(albedo, distrib, bxdf::Fresnel::Nop);
+
+        let bxdfs: Vec<Box<dyn BxDF>> = vec![Box::new(mf_refl)];
+
+        let normal = hcm::vec3(-0.6, 0.5, 0.2).hat();
+        let (dpdu, dpdv) = hcm::make_coord_system(normal);
+        let frame = hcm::Mat3::from_vectors(dpdu, dpdv, normal);
+        assert!(
+            (frame * frame.transpose() - hcm::Mat3::identity()).frobenius_norm_squared() < 1e-6
+        );
+
+        let isect = Interaction::rayless(hcm::Point3::new(3.0, 2.5, 2.0), (0.2, 0.8), normal)
+            .with_dpdu(dpdu);
+
+        let bsdf = BSDF::new_frame(&isect).with_bxdfs(&bxdfs);
+        assert!(
+            (frame - bsdf.frame()).frobenius_norm_squared() < 1e-6,
+            "frames: {:?} vs {:?}",
+            frame,
+            bsdf.frame()
+        );
+
+        let wo_local = hcm::vec3(0.6, 0.0, 0.8).hat();
+
+        let wo_world = frame * wo_local;
+        assert!(wo_world.dot(normal).dist_to(wo_local.z) < 1e-3);
+        {
+            let wo_local_actual = bsdf.world_to_local(wo_world).0;
+            assert!(
+                (wo_local - wo_local_actual).norm_squared() < 1e-6,
+                "{} vs {}",
+                wo_local,
+                wo_local_actual
+            );
+        }
+        let (uvec, _du) = math::float::linspace((0.0, 1.0), 10);
+        let vvec = uvec.clone();
+
+        let mut colors = vec![];
+        for u in uvec.iter() {
+            for v in vvec.iter() {
+                let (u, v) = (*u, *v);
+                let (bsdf_value, wi_world, pr) = bsdf.sample(wo_world, (u, v));
+                match pr {
+                    Prob::Density(pdf) => {
+                        let response =
+                            bsdf_value * wi_world.dot(isect.normal).abs() * pdf.weak_recip();
+                        println!("response = {}, pr = {}", response, pdf);
+                        if pdf > 0.0 {
+                            assert!(!response.r.is_nan());
+                            colors.push(response);
+                        }
+                    }
+                    Prob::Mass(_) => panic!("refl shouldn't give probability mass!"),
+                }
+            }
+        }
+
+        let mean_color = Color::average(&colors);
+        // TODO: maybe add some assertions on the mean color.
+        println!("mean color = {}", mean_color);
+    }
+}
