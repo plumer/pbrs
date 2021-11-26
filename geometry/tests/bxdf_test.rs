@@ -2,7 +2,7 @@ use std::f32::consts::FRAC_1_PI;
 
 use geometry::bxdf::{self, BxDF, MicrofacetReflection, Omega};
 use geometry::microfacet::MicrofacetDistrib;
-use math::float::{Float, linspace};
+use math::float::{linspace, Float};
 use math::hcm::Vec3;
 use math::prob::Prob;
 use radiometry::color::Color;
@@ -12,6 +12,7 @@ fn f32_close(a: f32, b: f32) -> bool {
 }
 
 #[test]
+#[rustfmt::skip]
 fn local_trigonometry_test() {
     let w = Omega::new(0.64, 0.48, 0.6);
     assert_eq!(w.cos_theta(), 0.6);

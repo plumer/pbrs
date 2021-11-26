@@ -1,4 +1,7 @@
-use std::{iter::Sum, ops::{Add, Div, Mul, Sub}};
+use std::{
+    iter::Sum,
+    ops::{Add, Div, Mul, Sub},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Color {
@@ -115,16 +118,17 @@ impl std::ops::Mul for Color {
     }
 }
 
-impl std::ops::Div<f32> for Color {
-    type Output = Color;
-    fn div(self, rhs: f32) -> Self::Output {
-        Color::new(self.r / rhs, self.g / rhs, self.b / rhs)
-    }
-}
-
 impl std::fmt::Display for Color {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "rgb({:.2}, {:.2}, {:.2})", self.r, self.g, self.b)
+        let precision = f.precision().unwrap_or(2);
+        write!(
+            f,
+            "rgb({:.precision$}, {:.precision$}, {:.precision$})",
+            self.r,
+            self.g,
+            self.b,
+            precision = precision
+        )
     }
 }
 
@@ -154,8 +158,8 @@ pub struct XYZ {
 }
 
 impl XYZ {
-    pub fn new(x: f32, y: f32, z:f32) -> Self {
-        Self {x, y, z}
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
     pub fn all(x: f32) -> Self {
         Self::new(x, x, x)
@@ -185,7 +189,6 @@ impl XYZ {
     pub fn to_color(&self) -> Color {
         Color::from_xyz(self.x, self.y, self.z)
     }
-    
     pub fn sqrt(self) -> Self {
         Self::new(self.x.sqrt(), self.y.sqrt(), self.z.sqrt())
     }
