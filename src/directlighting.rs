@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use geometry::ray;
-use math::prob::Prob;
+use math::{float::Float, prob::Prob};
 use radiometry::color::Color;
 use shape::Interaction;
 
@@ -11,11 +11,6 @@ use crate::bsdf::BSDF;
 use light::{DeltaLight, DiffuseAreaLight, Light};
 use material::Material;
 use scene::Scene;
-
-// struct Bsdf<'a> {
-//     geometry: &'a Interaction,
-//     mtl: &'a dyn Material,
-// }
 
 pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
     if let Some((hit, mtl)) = scene.tlas.intersect(&mut ray) {
@@ -27,8 +22,11 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
 
         // Computes eitted light if ray hits an area light source.
         // radiance += mtl.emission()
-        //
-        uniform_sample_one_light(&hit, mtl.deref(), scene)
+        if !mtl.emission().is_black() {
+            mtl.emission()
+        } else {
+            uniform_sample_one_light(&hit, mtl.deref(), scene, false)
+        }
     } else if let Some(env_light) = scene.env_light {
         env_light(ray)
     } else {
@@ -39,7 +37,7 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
 #[allow(dead_code)]
 pub fn direct_lighting_debug_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
     if let Some((hit, mtl)) = scene.tlas.intersect(&mut ray) {
-        uniform_sample_one_light(&hit, mtl.deref(), scene)
+        uniform_sample_one_light(&hit, mtl.deref(), scene, true)
     } else if let Some(env_light) = scene.env_light {
         env_light(ray)
     } else {
@@ -47,15 +45,17 @@ pub fn direct_lighting_debug_integrator(scene: &Scene, mut ray: ray::Ray, _depth
     }
 }
 
-fn uniform_sample_one_light(hit: &Interaction, mtl: &dyn Material, scene: &Scene) -> Color {
+fn uniform_sample_one_light(
+    hit: &Interaction, mtl: &dyn Material, scene: &Scene, _debug: bool,
+) -> Color {
     let num_lights =
         scene.delta_lights.len() + scene.area_lights.len() + (scene.env_light.is_some() as usize);
     if num_lights == 0 {
         return Color::black();
     }
-    let chosen_index = num_lights * rand::random::<usize>() % num_lights;
     let light_pdf = 1.0f32 / num_lights as f32;
     let mut rng = rand::thread_rng();
+    let chosen_index = rng.gen_range(0..num_lights);
     let rnd2_light = (rng.gen::<f32>(), rng.gen::<f32>());
     let rnd2_scatter = (rng.gen::<f32>(), rng.gen::<f32>());
     let one_light_incident_radiance = match chosen_index {
@@ -69,6 +69,7 @@ fn uniform_sample_one_light(hit: &Interaction, mtl: &dyn Material, scene: &Scene
         }
         _ => {
             let bxdfs = mtl.bxdfs_at(hit);
+            assert!(!bxdfs.is_empty());
             let bsdf = BSDF::new_frame(hit).with_bxdfs(&bxdfs);
             let (f, wi, pr) = bsdf.sample(hit.wo, rnd2_scatter);
             let incident_ray = hit.spawn_ray(wi);
@@ -77,7 +78,11 @@ fn uniform_sample_one_light(hit: &Interaction, mtl: &dyn Material, scene: &Scene
                 (false, Some(env_light)) => env_light(incident_ray),
                 _ => Color::black(),
             };
-            incident_radiance * f * wi.dot(hit.normal).abs() / pr.density()
+            let pr = match pr {
+                Prob::Density(d) => d,
+                Prob::Mass(m) => m,
+            };
+            incident_radiance * f * wi.dot(hit.normal).abs() * pr.weak_recip()
         }
     };
     one_light_incident_radiance * (1.0 / light_pdf)
@@ -107,6 +112,7 @@ fn estimate_direct_delta_light(
     // contribution. This part is skipped.
 
     let bxdfs = mtl.bxdfs_at(hit);
+    assert!(!bxdfs.is_empty());
     let bsdf = BSDF::new_frame(hit).with_bxdfs(&bxdfs);
 
     // Computes weight, estimated function value, and the probability.

@@ -59,7 +59,7 @@ fn main() {
         error!("Can't parse command-line options: {}", message);
     }
     let options = options.unwrap();
-
+    let msaa = options.msaa;
     let scene = if let Some(pbrs_file_path) = options.pbrt_file.as_ref() {
         load_pbrt_scene(pbrs_file_path)
     } else {
@@ -83,19 +83,42 @@ fn main() {
         }
     };
 
-    let integrator = match options.integrator {
-        cli_options::Integrator::Direct => direct_lighting_integrator,
-        cli_options::Integrator::Path => path_integrator,
-    };
-
     info!(
         "building bvh success: {}, height = {}",
         scene.tlas.geometric_sound(),
         scene.tlas.height()
     );
 
-    let msaa = options.msaa;
+    if false {
+        let (row, col) = (505, 514);
+        let mut colors = vec![];
+        for i in 0..msaa * msaa {
+            let jitter = (
+                ((i / msaa) as f32 + rand::random::<f32>()) / msaa as f32,
+                ((i % msaa) as f32 + rand::random::<f32>()) / msaa as f32,
+            );
+            let ray = scene.camera.shoot_ray(row, col, jitter).unwrap();
+            let sample_color = directlighting::direct_lighting_debug_integrator(&scene, ray, 2);
+            assert!(!sample_color.has_nan());
+            colors.push(sample_color);
+        }
+        let black_count = colors.iter().filter(|c| c.is_black()).count();
+        info!("black colors = {}/{}", black_count, msaa * msaa);
+        let nonblacks = colors
+            .into_iter()
+            .filter(|c| !c.is_black())
+            .collect::<Vec<_>>();
+        info!("remaining color average = {}", Color::average(&nonblacks));
+        info!("Pixel debug at {:?}, exiting now", (row, col));
+        // std::process::exit(1);
+    }
+
+    let integrator = match options.integrator {
+        cli_options::Integrator::Direct => direct_lighting_integrator,
+        cli_options::Integrator::Path => path_integrator,
+    };
     let (width, height) = scene.camera.resolution();
+
     // Function lambda to render one row. It's going to be used in the main rendering process.
     let render_one_row = |row| {
         if (row % 10) == 0 {
@@ -114,13 +137,10 @@ fn main() {
                 // let jitter = (rand::random::<f32>(), rand::random::<f32>());
                 let ray = scene.camera.shoot_ray(row, col, jitter).unwrap();
                 // color_sum = color_sum + dummy_integrator(&bvh, ray, 1, env_light);
-                if (row, col) == (428, 364) {
-                    directlighting::direct_lighting_debug_integrator(&scene, ray, 2);
-                }
                 color_sum = color_sum + integrator(&scene, ray, 5);
             }
 
-            let color = color_sum / (msaa.pow(2) as f32);
+            let color = color_sum.scale_down_by(msaa * msaa);
             colors_for_row.push(color);
         }
         colors_for_row
@@ -136,7 +156,7 @@ fn main() {
             .map(render_one_row)
             .flatten()
             .collect()
-    } else {
+    } else { 
         (0..height)
             .into_iter()
             .map(render_one_row)
