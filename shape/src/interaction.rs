@@ -65,7 +65,17 @@ impl Interaction {
     pub fn has_valid_frame(&self) -> bool {
         let cols = self.tbn_frame.cols;
         let det = cols[0].cross(cols[1]).dot(cols[2]);
-        (det - 1.0).abs() < 1e-4
+        if (det - 1.0).abs() < 1e-4 {
+            true
+        } else {
+            println!("frame = {} {} {}", cols[0], cols[1], cols[2]);
+            println!(
+                "frame^T frame = {:?}",
+                self.tbn_frame * self.tbn_frame.transpose()
+            );
+            println!("det = {}", det);
+            false
+        }
     }
 }
 

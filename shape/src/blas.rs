@@ -2,6 +2,7 @@ use crate::Interaction;
 use crate::Shape;
 use geometry::bvh::{self, BBox};
 use geometry::ray::Ray;
+use math::float::barycentric_lerp;
 use math::hcm::{Point3, Vec3};
 use partition::partition;
 use std::ops::Range;
@@ -161,7 +162,39 @@ impl TriangleMesh {
 
     fn intersect_triangle(&self, tri: &Triangle, r: &Ray) -> Option<Interaction> {
         let (i, k, j) = tri.indices;
-        crate::intersect_triangle(self.positions[i], self.positions[j], self.positions[k], r)
+        let (p0, p1, p2) = (self.positions[i], self.positions[j], self.positions[k]);
+        let mut hit = crate::intersect_triangle(p0, p1, p2, r);
+        if let Some(ref mut isect) = hit {
+            let (b0, b1, b2) = (1.0 - isect.uv.0 - isect.uv.1, isect.uv.0, isect.uv.1);
+            let hit_by_uv = p0 + (p1 - p0) * b1 + (p2 - p0) * b2;
+            assert!(hit_by_uv.squared_distance_to(isect.pos) < 1e-6);
+            // Interpolates the normal vector using existing uv coordinates.
+            let (n0, n1, n2) = (self.normals[i], self.normals[j], self.normals[k]);
+            let bclerp_normal = barycentric_lerp((n0, n1, n2), (b0, b1, b2));
+            if !bclerp_normal.is_zero() {
+                isect.normal = bclerp_normal.hat();
+            }
+            // Interpolates the UV coordinate using existing uv coordinates.
+            let bclerp_u =
+                barycentric_lerp((self.uvs[i].0, self.uvs[j].0, self.uvs[k].0), (b0, b1, b2));
+            let bclerp_v =
+                barycentric_lerp((self.uvs[i].1, self.uvs[j].1, self.uvs[k].1), (b0, b1, b2));
+            isect.uv = (bclerp_u, bclerp_v);
+            // Uses uv coordinates to solve the tangent. 
+            let (u0, v0) = self.uvs[i];
+            let (u1, v1) = self.uvs[j];
+            let (u2, v2) = self.uvs[k];
+            let (u1, v1) = (u1 - u0, v1 - v0);
+            let (u2, v2) = (u2 - u0, v2 - v0);
+            let dpdu = ((p2 - p0) * v2 - (p1 - p0) * v1) / (u1 * v2 - u2 * v1);
+            let dpdu = if dpdu.norm_squared().is_finite() {
+                dpdu
+            } else {
+                p1 - p0
+            };
+            *isect = isect.with_dpdu(dpdu);
+        }
+        hit
     }
     fn intersect_triangle_pred(&self, tri: &Triangle, r: &Ray) -> bool {
         let (i, k, j) = tri.indices;
@@ -265,6 +298,7 @@ impl Shape for TriangleMesh {
             let result = self.intersect_triangle(tri, r);
             if let Some(hit) = result {
                 assert!(!hit.pos.has_nan());
+                assert!(hit.has_valid_frame());
             }
             result
         })
@@ -392,8 +426,12 @@ where
             for shape in shapes[range.clone()].iter() {
                 match (shape_intersector(shape, r), hit) {
                     (None, _) => (), // Doesn't update `hit` if no new interaction
-                    (Some(isect), None) => hit = Some(isect),
+                    (Some(isect), None) => {
+                        assert!(isect.has_valid_frame());
+                        hit = Some(isect);
+                    }
                     (Some(new_isect), Some(old_isect)) => {
+                        assert!(new_isect.has_valid_frame());
                         if new_isect.ray_t < old_isect.ray_t {
                             hit = Some(old_isect);
                         }

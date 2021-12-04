@@ -250,7 +250,13 @@ impl Instance {
                     self.shape.summary(),
                     ray
                 );
-                assert!(hit.has_valid_frame(), "shape = {}", self.shape.summary());
+                assert!(
+                    hit.has_valid_frame(),
+                    "hit doesn't have valid frame. shape = {}, tangent = {}, ray = {:.3}",
+                    self.shape.summary(),
+                    hit.tangent(),
+                    ray,
+                );
                 Some((self.transform.apply(hit), &self.mtl))
             }
         }
@@ -373,8 +379,10 @@ impl Transform<Interaction> for AffineTransform {
         let new_pos = self.apply(i.pos);
         let new_wo = self.apply(i.wo);
         let new_normal = self.inverse.transpose() * i.normal;
-        Interaction::new(new_pos, i.ray_t, i.uv, new_normal, new_wo)
-            .with_dpdu(self.apply(i.tangent()))
+        let res = Interaction::new(new_pos, i.ray_t, i.uv, new_normal, new_wo)
+            .with_dpdu(self.apply(i.tangent()));
+        assert!(res.has_valid_frame());
+        res
     }
 }
 
