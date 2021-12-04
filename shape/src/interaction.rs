@@ -21,6 +21,7 @@ pub struct Interaction {
 
 impl Interaction {
     pub fn new(pos: Point3, ray_t: f32, uv: (f32, f32), normal: Vec3, wo: Vec3) -> Interaction {
+        assert!(normal.dot(wo) >= 0.0);
         Interaction {
             pos,
             ray_t,
@@ -41,6 +42,11 @@ impl Interaction {
 
     /// Builds the tangent-bitangent-normal frame with the given tangent and existing normal.
     pub fn with_dpdu(self, dpdu: Vec3) -> Interaction {
+        assert!(
+            self.normal.dot(dpdu).abs() < 1e-4,
+            "normal and tangent ({}) not perp",
+            dpdu
+        );
         let normal = self.normal.hat();
         let bitangent = (normal.cross(dpdu)).hat();
         let dpdu = bitangent.cross(normal);

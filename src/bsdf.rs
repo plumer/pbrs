@@ -18,18 +18,23 @@ impl<'a> BSDF<'a> {
     pub fn new_frame(isect: &Interaction) -> Self {
         let normal = isect.normal.hat();
         let bitangent = isect.normal.cross(isect.tangent()).hat();
-        let tangent = bitangent.cross(isect.normal);
-        Self {
+        let tangent = bitangent.cross(normal);
+        assert!(normal.dot(bitangent).abs() < 1e-4);
+        assert!(normal.dot(tangent).abs() < 1e-4);
+        assert!(tangent.dot(bitangent).abs() < 1e-4);
+        let res = Self {
             frame: hcm::Mat3::from_vectors(tangent, bitangent, normal),
             bxdfs: &[],
-        }
+        };
+        assert!(res.has_valid_frame());
+        res
     }
 
     #[allow(dead_code)]
     pub fn frame(&self) -> hcm::Mat3 {
         self.frame
     }
-
+    
     pub fn with_bxdfs(self, bxdfs: &'a Vec<Box<dyn BxDF>>) -> Self {
         Self {
             bxdfs: bxdfs.as_slice(),
@@ -113,7 +118,17 @@ impl<'a> BSDF<'a> {
     pub fn has_valid_frame(&self) -> bool {
         let cols = self.frame.cols;
         let det = cols[0].cross(cols[1]).dot(cols[2]);
-        (det - 1.0).abs() < 1e-4
+        if (det - 1.0).abs() < 1e-4 {
+            true
+        } else {
+            println!("frame = {} {} {}", cols[0], cols[1], cols[2]);
+            println!(
+                "frame^T frame = {:?}",
+                self.frame * self.frame.transpose()
+            );
+            println!("det = {}", det);
+            false
+        }
     }
 }
 

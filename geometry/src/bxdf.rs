@@ -502,7 +502,7 @@ impl BxDF for DiffuseReflect {
         }
     }
     fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
-        assert!(wo.cos_theta() >= 0.0);
+        assert!(wo.cos_theta() >= 0.0, "wo = {}, z < 0", wo.0);
         let wi = cos_sample_hemisphere(rnd2);
         (self.eval(wo, wi), wi, self.prob(wo, wi))
     }
@@ -575,6 +575,7 @@ impl BxDF for MicrofacetReflection {
         if let Some(wh) = Omega::bisector(wo, wi) {
             Prob::Density(self.distrib.pdf(wo, wh) / (4.0 * wo.dot(wh)))
         } else {
+            eprintln!("mid({}, {}) = {}", wo.0, wi.0, wo.0 + wi.0);
             Prob::Density(0.0)
         }
     }
