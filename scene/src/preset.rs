@@ -6,10 +6,10 @@ use radiometry::color::Color;
 use crate::Scene;
 use material as mtl;
 use shape::Sphere;
+use std::f32::consts::PI;
 use std::sync::Arc;
 use texture as tex;
 use tlas::instance::Instance;
-use std::f32::consts::PI;
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 800;
@@ -29,10 +29,24 @@ pub fn blue_sky(r: ray::Ray) -> Color {
 }
 
 pub fn dark_room(r: ray::Ray) -> Color {
-    let bg_color_top = Color::gray(0.0);
-    let bg_color_bottom = Color::gray(0.0);
+    let bg_color_top = Color::gray(0.1);
+    let bg_color_bottom = Color::gray(0.1);
     let y = (r.dir.hat().y + 1.0) * 0.5;
     bg_color_top * y + bg_color_bottom * (1.0 - y)
+}
+
+pub fn dusk(r: ray::Ray) -> Color {
+    let horizon = Color::rgb(245, 174, 82);
+    let dome = Color::rgb(109, 150, 204);
+    let tilt = r.dir.hat().y.acos();
+    if tilt > PI * 0.25 {
+        dome
+    } else if tilt > 0.0 {
+        let t = tilt / (PI * 0.25);
+        dome * t + horizon * (1.0 - t)
+    } else {
+        Color::gray(0.2)
+    }
 }
 
 #[allow(dead_code)]
@@ -267,18 +281,47 @@ pub fn plates() -> Scene {
     let matte = mtl::Lambertian::solid(Color::gray(0.4));
 
     let wall_instance = Instance::from_raw(wall, matte.clone());
-    let floor_instance = Instance::from_raw(floor, matte);
+    let floor_instance = Instance::from_raw(floor, matte.clone());
     instances.push(wall_instance);
     instances.push(floor_instance);
 
     // axis: y = 10, z = 0
-    let (angles, spacing) = math::float::linspace((-PI * 0.4, -PI * 0.05), 4);
-    let delta_angle = spacing * 0.65;
     let (left, right) = (-r * 0.68, r * 0.68);
+
+    let num_lights = 4;
+    let (light_positions, _spacing) = math::float::linspace((left * 0.8, right * 0.8), num_lights);
+    let light_sizes = [2.0f32, 1.2, 0.6, 0.2];
+    let light_colors = [
+        Color::new(5.0, 4.0, 4.0),
+        Color::new(5.0, 5.0, 4.0),
+        Color::new(4.0, 5.0, 4.0),
+        Color::new(4.0, 4.0, 5.0),
+    ];
+    let light_spheres = light_positions.iter().enumerate().map(|(i, x)| {
+        Sphere::from_raw((*x, r * 0.6, r * 0.1), light_sizes[i])
+        // Instance::from_raw(s, mtl::DiffuseLight::new(Color::white()))
+    });
+
+    // instances.extend(
+    //     light_spheres
+    //         .clone()
+    //         .zip(light_colors.iter())
+    //         .map(|(s, c)| Instance::from_raw(s, mtl::DiffuseLight::new(*c))),
+    // );
+    let area_lights = light_spheres
+        .zip(light_colors.iter())
+        .map(|(s, c)| light::DiffuseAreaLight::new(*c, Box::new(s)))
+        .collect::<Vec<_>>();
+    assert_eq!(area_lights.len(), num_lights as usize);
+
+    // The plates lying at different angles.
+    let (angles, spacing) = math::float::linspace((-PI * 0.4, -PI * 0.05), 4);
+    let roughness = vec![0.08, 0.02, 0.004, 0.001];
+    let delta_angle = spacing * 0.65;
     let half_width = delta_angle * r * 0.5;
-    for angle in angles.iter() {
-        // let glossy = mtl::Glossy::new(Color::gray(0.5), angle * -1.0);
-        let glossy = mtl::Lambertian::solid(Color::rgb(80, 180, 50));
+    for (angle, roughness) in angles.iter().zip(roughness.iter().rev()) {
+        let glossy = mtl::Glossy::new(Color::gray(0.9), *roughness);
+        // let glossy = mtl::Lambertian::solid(Color::rgb(80, 180, 50));
         let plate = shape::QuadXZ::from_raw((left, right), (-half_width, half_width), 4.0);
         let trans = tlas::instance::identity()
             .translate(Vec3::new(0.0, -r, 0.0))
@@ -288,14 +331,14 @@ pub fn plates() -> Scene {
     }
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
-    let camera = Camera::new((800, 800), math::Angle::pi() * 0.19).looking_at(
-        Point3::new(0.0, r * 0.9, -r * 2.0),
-        Point3::new(0.0, r * 0.2, r * 2.0),
+    let camera = Camera::new((1000, 800), math::Angle::pi() * 0.19).looking_at(
+        Point3::new(0.0, r * 0.7, -r * 2.0),
+        Point3::new(0.0, r * 0.3, r * 0.0),
         Vec3::ybase(),
     );
 
     Scene::new(*tlas::build_bvh(instances), camera)
-        .with_env_light(dark_room)
+        // .with_env_light(blue_sky)
         .with_lights(vec![], area_lights)
 }
 
