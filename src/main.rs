@@ -12,7 +12,7 @@ use crate::directlighting::direct_lighting_integrator;
 use geometry::ray;
 use light::EnvLight;
 use material as mtl;
-use math::{assert_le, hcm::Vec3};
+use math::{assert_le, hcm, hcm::Vec3};
 use radiometry::color::Color;
 use scene::{preset, Scene};
 use tlas::bvh::BvhNode;
@@ -88,6 +88,12 @@ fn main() {
         scene.tlas.geometric_sound(),
         scene.tlas.height()
     );
+    info!(
+        "num of lights: {} delta, {} area, {} env",
+        scene.delta_lights.len(),
+        scene.area_lights.len(),
+        scene.env_light.is_some()
+    );
 
     if false {
         let (row, col) = (505, 514);
@@ -111,6 +117,16 @@ fn main() {
         info!("remaining color average = {}", Color::average(&nonblacks));
         info!("Pixel debug at {:?}, exiting now", (row, col));
         // std::process::exit(1);
+    }
+
+    if false {
+        info!("debugging a specific ray");
+        let mut ray = ray::Ray::new(
+            hcm::point3(400.0, 20.0, 30.0),
+            hcm::vec3(-1.025, 0.018, -0.108),
+        );
+        scene.tlas.intersect(&mut ray);
+        std::process::exit(1);
     }
 
     let integrator = match options.integrator {
@@ -279,7 +295,7 @@ fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
         .map(|i| Box::new(i))
         .collect::<Vec<_>>();
     Scene::new(*tlas::build_bvh(tlas), cam)
-        .with_env_light(preset::blue_sky)
+        .with_env_light(|r|preset::blue_sky(r) * 0.5)
         .with_lights(pbrt_scene.delta_lights, pbrt_scene.area_lights)
 }
 

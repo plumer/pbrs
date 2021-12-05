@@ -31,7 +31,7 @@ impl Ray {
     pub fn set_extent(&mut self, t_max: f32) {
         self.t_max = t_max;
     }
-    
+
     pub fn with_extent(self, t_max: f32) -> Self {
         Ray { t_max, ..self }
     }
@@ -52,6 +52,13 @@ impl Ray {
 
 impl Display for Ray {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{} + t{}", self.origin, self.dir)
+        let precision = f.precision().unwrap_or(2);
+        write!(
+            f,
+            "{:.precision$} + t{:.precision$}",
+            self.origin,
+            self.dir,
+            precision = precision
+        )
     }
 }

@@ -557,6 +557,7 @@ impl BxDF for MicrofacetReflection {
         let wh = self.distrib.sample_wh(wo, rnd2);
         let wi = Omega::reflect(wh, wo);
         if !Omega::same_hemisphere(wo, wi) {
+            // TODO: eprintln!("not sampled same hemi, zvalues = {} | {}", wo.z(), wi.z());
             return (Color::black(), Omega::normal(), Prob::Density(0.0));
         }
         // Computes pdf of wi for microfacet reflection.
