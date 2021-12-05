@@ -254,6 +254,19 @@ impl<T> Shape for IsoBlas<T>
 where
     T: Shape,
 {
+    fn intersect(&self, r: &Ray) -> Option<Interaction> {
+        let tree = self.bvh_root.as_ref()?;
+        intersect_bvh(&self.shapes, tree, r, |s: &T, r| s.intersect(r))
+    }
+    fn occludes(&self, r: &Ray) -> bool {
+        let tree = self.bvh_root.as_ref().unwrap();
+        intersect_bvh_pred(&self.shapes, tree, r, |s, r| s.occludes(r))
+    }
+
+    fn bbox(&self) -> BBox {
+        self.bbox
+    }
+
     fn summary(&self) -> String {
         if self.shapes.is_empty() {
             String::from("EmptyBlas")
@@ -266,31 +279,9 @@ where
             format!("Blas of {} {}s", self.shapes.len(), shape_name)
         }
     }
-    fn intersect(&self, r: &Ray) -> Option<Interaction> {
-        let tree = self.bvh_root.as_ref()?;
-        intersect_bvh(&self.shapes, tree, r, |s: &T, r| s.intersect(r))
-    }
-
-    fn bbox(&self) -> BBox {
-        self.bbox
-    }
-
-    fn occludes(&self, r: &Ray) -> bool {
-        let tree = self.bvh_root.as_ref().unwrap();
-        intersect_bvh_pred(&self.shapes, tree, r, |s, r| s.occludes(r))
-    }
 }
 
 impl Shape for TriangleMesh {
-    fn summary(&self) -> String {
-        format!(
-            "TriangleMesh{{{} triangles, {} vertices, bbox = {}, bvh = {}}}",
-            self.triangles.len(),
-            self.positions.len(),
-            self.bbox(),
-            self.bvh_shape_summary()
-        )
-    }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         let tree = self.bvh_root.as_ref()?;
         // self.intersect_tree(tree, r)
@@ -317,6 +308,15 @@ impl Shape for TriangleMesh {
                 .fold(BBox::empty(), |b, t| bvh::union(b, t.bbox)),
             Some(node) => node.bbox,
         }
+    }
+    fn summary(&self) -> String {
+        format!(
+            "TriangleMesh{{{} triangles, {} vertices, bbox = {}, bvh = {}}}",
+            self.triangles.len(),
+            self.positions.len(),
+            self.bbox(),
+            self.bvh_shape_summary()
+        )
     }
 }
 

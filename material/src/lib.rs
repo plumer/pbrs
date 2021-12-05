@@ -198,12 +198,11 @@ impl Material for Metal {
         let ray_out = Ray::new(isect.pos, reflected + uniform_sphere() * self.fuzziness);
         (ray_out, self.albedo)
     }
-    fn summary(&self) -> String {
-        format!("Metal{{albedo = {}}}", self.albedo)
-    }
-
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         todo!()
+    }
+    fn summary(&self) -> String {
+        format!("Metal{{albedo = {}}}", self.albedo)
     }
 }
 
@@ -211,12 +210,11 @@ impl Material for Glossy {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn summary(&self) -> String {
-        "Glossy".to_owned()
-    }
-
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         vec![Box::new(self.mf_refl.clone())]
+    }
+    fn summary(&self) -> String {
+        "Glossy".to_owned()
     }
 }
 impl Material for Mirror {
@@ -225,12 +223,12 @@ impl Material for Mirror {
         let ray_out = Ray::new(isect.pos, reflected);
         (ray_out, self.albedo)
     }
-    fn summary(&self) -> String {
-        format!("Mirror{{albedo = {}}}", self.albedo)
-    }
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         let spec = bxdf::Specular::mirror(self.albedo);
         vec![Box::new(spec)]
+    }
+    fn summary(&self) -> String {
+        format!("Mirror{{albedo = {}}}", self.albedo)
     }
 
     // fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob) {
@@ -261,12 +259,12 @@ impl Material for Dielectric {
         }
         (Ray::new(isect.pos, wo), color)
     }
-    fn summary(&self) -> String {
-        format!("Dielectric{{ior = {}}}", self.refract_index)
-    }
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         let spec = bxdf::Specular::dielectric(self.reflect, 1.0, self.refract_index);
         vec![Box::new(spec)]
+    }
+    fn summary(&self) -> String {
+        format!("Dielectric{{ior = {}}}", self.refract_index)
     }
 
     // fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, rnd2: (f32, f32)) -> (Ray, Color, Prob) {
@@ -283,12 +281,6 @@ impl Material for DiffuseLight {
         let pos = isect.normal * 0.0001 + isect.pos;
         (Ray::new(pos, wo), Color::black())
     }
-    fn emission(&self) -> Color {
-        self.emit
-    }
-    fn summary(&self) -> String {
-        format!("DiffuseLight{{emit = {}}}", self.emit)
-    }
     // fn sample_bsdf(&self, wo: Vec3, isect: &Interaction, _rnd2: (f32, f32)) -> (Ray, Color, Prob) {
     //     let (r, color) = self.scatter(wo, isect);
     //     (r, color, Prob::Density(std::f32::consts::FRAC_1_PI))
@@ -296,18 +288,23 @@ impl Material for DiffuseLight {
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         vec![]
     }
+    fn emission(&self) -> Color {
+        self.emit
+    }
+    fn summary(&self) -> String {
+        format!("DiffuseLight{{emit = {}}}", self.emit)
+    }
 }
 
 impl Material for Uber {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn summary(&self) -> String {
-        String::from("uber")
-    }
-
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         todo!()
+    }
+    fn summary(&self) -> String {
+        String::from("uber")
     }
 }
 
@@ -315,11 +312,11 @@ impl Material for Substrate {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn summary(&self) -> String {
-        String::from("substrate")
-    }
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         todo!()
+    }
+    fn summary(&self) -> String {
+        String::from("substrate")
     }
 }
 
@@ -330,9 +327,6 @@ impl Material for Plastic {
         let ray_out = isect.spawn_ray(wo);
         (ray_out, self.diffuse)
     }
-    fn summary(&self) -> String {
-        String::from("plastic")
-    }
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
         use microfacet::MicrofacetDistrib as MFDistrib;
         let lambertian = bxdf::DiffuseReflect::lambertian(self.diffuse);
@@ -341,6 +335,9 @@ impl Material for Plastic {
         let mf_refl =
             bxdf::MicrofacetReflection::new(self.specular, trowbridge, bxdf::Fresnel::Nop);
         vec![Box::new(mf_refl), Box::new(lambertian)]
+    }
+    fn summary(&self) -> String {
+        String::from("plastic")
     }
 }
 

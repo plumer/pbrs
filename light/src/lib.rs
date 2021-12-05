@@ -256,10 +256,6 @@ impl ShapeSample for shape::Sphere {
         Interaction::rayless(point_on_sphere, rnd2, normal_object_space)
     }
 
-    fn area(&self) -> f32 {
-        self.radius().powi(2) * 4.0 * std::f32::consts::PI
-    }
-
     fn pdf_at(&self, reference: &Interaction, wi: hcm::Vec3) -> Option<f32> {
         let ref_to_center = self.center() - reference.pos;
         if ref_to_center.norm_squared() < self.radius().powi(2) {
@@ -272,6 +268,10 @@ impl ShapeSample for shape::Sphere {
             // Theta is less than theta_max, `wi` inside the cone
             (cos_theta > cos_theta_max).then(uniform_cone_pdf)
         }
+    }
+
+    fn area(&self) -> f32 {
+        self.radius().powi(2) * 4.0 * std::f32::consts::PI
     }
 }
 

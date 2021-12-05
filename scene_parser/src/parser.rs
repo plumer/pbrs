@@ -230,7 +230,7 @@ impl Parser {
                 let param = match self.peek {
                     Token::Float(_) => {
                         let number_list = self.parse_number_list();
-                        assert!(number_list.is_empty() == false);
+                        assert!(!number_list.is_empty());
                         if number_list.len() == 1 {
                             ArgValue::Number(number_list[0])
                         } else {

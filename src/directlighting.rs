@@ -74,7 +74,7 @@ fn uniform_sample_one_light(
             let (f, wi, pr) = bsdf.sample(hit.wo, rnd2_scatter);
             let incident_ray = hit.spawn_ray(wi);
 
-            let incident_radiance = match (scene.tlas.occludes(&incident_ray), scene.env_light) {
+            let incident_radiance = match (scene.tlas.occludes(&incident_ray), &scene.env_light) {
                 (false, Some(env_light)) => env_light(incident_ray),
                 _ => Color::black(),
             };

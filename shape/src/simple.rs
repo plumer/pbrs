@@ -137,32 +137,6 @@ impl Shape for Sphere {
         let half_diagonal = Vec3::new(1.0, 1.0, 1.0) * self.radius;
         BBox::new(self.center - half_diagonal, self.center + half_diagonal)
     }
-    fn occludes(&self, r: &Ray) -> bool {
-        // r = o + td
-        // sphere: (p-c)(p-c) = radius^2
-        // (td + o - c)^2 = radius^2
-        // t^2 d^2 + (o-c)^2 + 2t d * (o-c) = radius^2
-        // delta = 4(d*(o-c))^2 - 4d^2((o-c)^2 - radius^2)
-        let Ray { origin, dir, .. } = r.clone();
-
-        let dir = dir.hat();
-
-        let f = origin - self.center; // vector connecting the sphere center to ray origin.
-        let q = f.dot(dir) * dir; // r.o + q gives the point closest to sphere center.
-        let delta = self.radius.powi(2) - (f - q).norm_squared();
-        let (t_low, t_high) = if delta < 0.0 {
-            return false;
-        } else {
-            let c = f.norm_squared() - self.radius.powi(2);
-            let neg_b = -dir.dot(f);
-            let t0 = neg_b + neg_b.signum() * delta.sqrt();
-            let t1 = c / t0;
-            (t0, t1)
-        };
-        // Keeps only the roots that are within [0, r.t_max).
-        let (root1, root2) = (r.truncated_t(t_low), r.truncated_t(t_high));
-        root1.is_some() || root2.is_some()
-    }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         // r = o + td
         // sphere: (p-c)(p-c) = radius^2
@@ -229,6 +203,32 @@ impl Shape for Sphere {
         );
 
         Some(Interaction::new(pos, ray_t, uv, normal, -r.dir).with_dpdu(dpdu))
+    }
+    fn occludes(&self, r: &Ray) -> bool {
+        // r = o + td
+        // sphere: (p-c)(p-c) = radius^2
+        // (td + o - c)^2 = radius^2
+        // t^2 d^2 + (o-c)^2 + 2t d * (o-c) = radius^2
+        // delta = 4(d*(o-c))^2 - 4d^2((o-c)^2 - radius^2)
+        let Ray { origin, dir, .. } = r.clone();
+
+        let dir = dir.hat();
+
+        let f = origin - self.center; // vector connecting the sphere center to ray origin.
+        let q = f.dot(dir) * dir; // r.o + q gives the point closest to sphere center.
+        let delta = self.radius.powi(2) - (f - q).norm_squared();
+        let (t_low, t_high) = if delta < 0.0 {
+            return false;
+        } else {
+            let c = f.norm_squared() - self.radius.powi(2);
+            let neg_b = -dir.dot(f);
+            let t0 = neg_b + neg_b.signum() * delta.sqrt();
+            let t1 = c / t0;
+            (t0, t1)
+        };
+        // Keeps only the roots that are within [0, r.t_max).
+        let (root1, root2) = (r.truncated_t(t_low), r.truncated_t(t_high));
+        root1.is_some() || root2.is_some()
     }
 }
 
@@ -445,17 +445,17 @@ impl Shape for Cuboid {
 }
 
 impl Shape for IsolatedTriangle {
+    fn summary(&self) -> String {
+        format!("Triangle boxed by {}", self.bbox())
+    }
+    fn bbox(&self) -> BBox {
+        BBox::new(self.p0, self.p1).union(self.p2)
+    }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
         intersect_triangle(self.p0, self.p1, self.p2, r)
     }
     fn occludes(&self, r: &Ray) -> bool {
         intersect_triangle_pred(self.p0, self.p1, self.p2, r)
-    }
-    fn bbox(&self) -> BBox {
-        BBox::new(self.p0, self.p1).union(self.p2)
-    }
-    fn summary(&self) -> String {
-        format!("Triangle boxed by {}", self.bbox())
     }
 }
 
