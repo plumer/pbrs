@@ -337,7 +337,7 @@ impl Material for Plastic {
         use microfacet::MicrofacetDistrib as MFDistrib;
         let lambertian = bxdf::DiffuseReflect::lambertian(self.diffuse);
         let alpha = MFDistrib::roughness_to_alpha(self.roughness);
-        let trowbridge = MFDistrib::trowbridge_reitz(alpha, alpha);
+        let trowbridge = MFDistrib::beckmann(alpha, alpha);
         let mf_refl =
             bxdf::MicrofacetReflection::new(self.specular, trowbridge, bxdf::Fresnel::Nop);
         vec![Box::new(mf_refl), Box::new(lambertian)]
