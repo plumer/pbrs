@@ -8,10 +8,10 @@ edition = "2018"
 
 [dependencies]
 png = "0.16"
-rand="0.8"
+rand = "0.8"
 rayon = "1.5"
 partition = "0.1"
-glog = "0.1"
+env_logger = "0.9"
 log = "0.4"
 
 [dependencies.math]
@@ -47,7 +47,10 @@ members = [
     "shape",
     "geometry",
     "scene",
-    "radiometry"
+    "radiometry",
+    "material",
+    "tlas",
+    "light",
 ]
 
 [profile.release]

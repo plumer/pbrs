@@ -17,7 +17,6 @@ use radiometry::color::Color;
 use scene::{preset, Scene};
 use tlas::bvh::BvhNode;
 
-use glog::Flags;
 use rayon::prelude::*;
 
 fn vec3_to_color(v: Vec3) -> Color {
@@ -44,13 +43,7 @@ pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
 
 #[allow(unreachable_code)]
 fn main() {
-    glog::new()
-        .init(Flags {
-            logtostderr: true,
-            colorlogtostderr: true,
-            ..Default::default()
-        })
-        .unwrap();
+    env_logger::init();
 
     // Parses options from the command line arguments: input file or hard-coded scene name, choice
     // of integrator, etc.

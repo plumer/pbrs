@@ -15,7 +15,7 @@ texture = {path = "../texture", version = "0.1.0"}
 tlas = {path = "../tlas", version = "0.1.0"}
 scene_parser = {path = "../scene_parser", version = "0.1.0"}
 
-glog = "0.1"
+env_logger = "0.9"
 log = "0.4"
 ply-rs = "0.1.3"
 rand = "0.8"
