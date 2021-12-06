@@ -180,7 +180,7 @@ impl TriangleMesh {
             let bclerp_v =
                 barycentric_lerp((self.uvs[i].1, self.uvs[j].1, self.uvs[k].1), (b0, b1, b2));
             isect.uv = (bclerp_u, bclerp_v);
-            // Uses uv coordinates to solve the tangent. 
+            // Uses uv coordinates to solve the tangent.
             let (u0, v0) = self.uvs[i];
             let (u1, v1) = self.uvs[j];
             let (u2, v2) = self.uvs[k];
@@ -419,6 +419,9 @@ fn intersect_bvh<S, F>(
 where
     F: Fn(&S, &Ray) -> Option<Interaction> + Copy,
 {
+    if !tree.bbox.intersect(r) {
+        return None;
+    }
     match &tree.content {
         Leaf(range) => {
             let mut hit: Option<Interaction> = None;
@@ -469,14 +472,15 @@ fn intersect_bvh_pred<S, F>(
 where
     F: Fn(&S, &Ray) -> bool + Copy,
 {
-    match &tree.content {
-        Leaf(range) => shapes[range.clone()]
-            .iter()
-            .any(|shape| shape_intersect_pred(shape, r)),
+    tree.bbox.intersect(r)
+        && match &tree.content {
+            Leaf(range) => shapes[range.clone()]
+                .iter()
+                .any(|shape| shape_intersect_pred(shape, r)),
 
-        Children([left, right]) => {
-            intersect_bvh_pred(shapes, &*left, r, shape_intersect_pred)
-                || intersect_bvh_pred(shapes, &*right, r, shape_intersect_pred)
+            Children([left, right]) => {
+                intersect_bvh_pred(shapes, &*left, r, shape_intersect_pred)
+                    || intersect_bvh_pred(shapes, &*right, r, shape_intersect_pred)
+            }
         }
-    }
 }
