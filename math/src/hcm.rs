@@ -115,6 +115,10 @@ impl Vec3 {
             self * inv_sqrt
         }
     }
+    pub fn try_hat(self) -> Option<Self> {
+        let inv_length = 1.0 / self.norm();
+        (inv_length.is_finite() && inv_length != 0.0).then(|| inv_length * self)
+    }
     // Returns the index to the element with minimum magnitude.
     pub fn abs_min_dimension(self) -> usize {
         let abs = [self.x.abs(), self.y.abs(), self.z.abs()];
@@ -218,6 +222,15 @@ impl Point3 {
     }
     pub fn as_triple(self) -> (f32, f32, f32) {
         (self.x, self.y, self.z)
+    }
+    pub fn with_x(self, x: f32) -> Self {
+        Self { x, ..self }
+    }
+    pub fn with_y(self, y: f32) -> Self {
+        Self { y, ..self }
+    }
+    pub fn with_z(self, z: f32) -> Self {
+        Self { z, ..self }
     }
 
     pub fn distance_to(self, p: Self) -> f32 {

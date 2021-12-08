@@ -188,12 +188,9 @@ impl Shape for Sphere {
         // or in complex number: x + yi.
         // multiply by i (rotates 90-degrees from x to y) equals xi - y, so dpdu is (-y, x).
         // In case both x and y are zero, use (1, 0, 0).
-        let dpdu = Vec3::new(-pos.y, pos.x, 0.0);
-        let dpdu = if dpdu.is_zero() {
-            Vec3::xbase()
-        } else {
-            dpdu.hat()
-        };
+        let dpdu = Vec3::new(-normal.y, normal.x, 0.0)
+            .try_hat()
+            .unwrap_or(Vec3::xbase());
 
         assert!(
             pos.distance_to(self.center) >= self.radius,

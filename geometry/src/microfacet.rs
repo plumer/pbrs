@@ -14,7 +14,7 @@ pub enum MicrofacetDistrib {
 
 impl MicrofacetDistrib {
     pub fn roughness_to_alpha(roughness: f32) -> f32 {
-        let x = roughness.max(1e-3).ln();
+        let x = roughness.ln().max(-8.0);
         1.62142
             + 0.819955 * x
             + 0.1734 * x * x

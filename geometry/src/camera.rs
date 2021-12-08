@@ -55,6 +55,13 @@ impl Camera {
         }
     }
 
+    pub fn translate(self, v: hcm::Vec3) -> Self {
+        Self {
+            center: self.center + v,
+            ..self
+        }
+    }
+
     pub fn shoot_ray(&self, row: u32, col: u32, (dx, dy): (f32, f32)) -> Option<ray::Ray> {
         let x = col as f32 + dx.fract();
         let y = row as f32 + dy.fract();

@@ -50,7 +50,7 @@ where
 }
 
 #[allow(dead_code)]
-pub trait Float: Sized {
+pub trait Float: Sized + std::ops::Add<Self, Output = Self> {
     /// Returns the length of other leg of the triangle given the hypotenuse and a known one.
     fn cathetus(self, other: Self) -> Self;
     /// Computes `x / y` if y is nonzero; returns `None` if y is zero.
@@ -123,14 +123,26 @@ impl Float for f32 {
 
 /// Divides the given `interval` evenly into `count` pieces and returns the midpoint of each piece
 /// together with the spacing between adjacent midpoints.
-pub fn linspace(interval: (f32, f32), count: i32) -> (Vec<f32>, f32) {
+/// ```
+/// use math::float::linspace;
+/// let (nums, spacing) = linspace((0.0f32, 12.0), 4);
+/// assert_eq!(spacing, 3.0);
+/// assert_eq!(nums, vec![1.5f32, 4.5, 7.5, 10.5]);
+/// ```
+pub fn linspace<T, U>(interval: (T, T), count: i32) -> (Vec<T>, U)
+where
+    T: Copy + std::ops::Sub<T, Output = U>,
+    U: Copy + std::ops::Mul<f32, Output = U> + std::ops::Add<T, Output = T>
+{
     let (a, b) = interval;
+    let spacing = (b - a) * (1.0 / count as f32);
+    
     (
         (0..count)
             .into_iter()
-            .map(|i| (i as f32 + 0.5) / count as f32 * (b - a) + a)
+            .map(|i| spacing * (i as f32 + 0.5) as f32 + a)
             .collect::<Vec<_>>(),
-        (b - a) / count as f32,
+        spacing
     )
 }
 
@@ -206,19 +218,23 @@ impl Angle {
         }
     }
     pub fn pi() -> Self {
-        Angle{radian: std::f32::consts::PI}
+        Angle {
+            radian: std::f32::consts::PI,
+        }
     }
     pub fn half_pi() -> Self {
-        Self{radian: std::f32::consts::FRAC_PI_2}
+        Self {
+            radian: std::f32::consts::FRAC_PI_2,
+        }
     }
-    
+
     pub fn to_rad(self) -> f32 {
         self.radian
     }
     pub fn to_deg(self) -> f32 {
         self.radian.to_degrees()
     }
-    
+
     pub fn sin(self) -> f32 {
         self.radian.sin()
     }
