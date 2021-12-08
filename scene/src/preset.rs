@@ -1,11 +1,11 @@
 use geometry::camera::Camera;
 use geometry::ray;
-use math::hcm::{Point3, Vec3};
+use math::hcm::{point3, vec3, Mat3, Point3, Vec3};
 use radiometry::color::Color;
 
 use crate::Scene;
 use material as mtl;
-use shape::Sphere;
+use shape::{QuadXZ, Sphere};
 use std::f32::consts::PI;
 use std::sync::Arc;
 use texture as tex;
@@ -276,8 +276,8 @@ pub fn plates() -> Scene {
     let mut instances = vec![];
     let r = 20.0;
     // Builds the background.
-    let wall = shape::QuadXY::from_raw((-r, r), (0.0, r), r);
-    let floor = shape::QuadXZ::from_raw((-r, r), (0.0, r), 0.0);
+    let wall = shape::QuadXY::from_raw((-r, r), (0.0, r), 0.0);
+    let floor = shape::QuadXZ::from_raw((-r, r), (-r, 0.0), 0.0);
     let matte = mtl::Lambertian::solid(Color::gray(0.4));
 
     let wall_instance = Instance::from_raw(wall, matte.clone());
@@ -286,59 +286,90 @@ pub fn plates() -> Scene {
     instances.push(floor_instance);
 
     // axis: y = 10, z = 0
-    let (left, right) = (-r * 0.68, r * 0.68);
+    let lights_pos = point3(0.0, r, -0.4 * r);
+    let camera_pos = point3(0.0, 0.4 * r, -2.8 * r);
+    let (left, right) = (-r * 0.7, r * 0.7);
+    {
+        let plates_pos_yz = vec![
+            (0.6 * r, -0.2 * r),
+            (0.45 * r, -0.3 * r),
+            (0.3 * r, -0.45 * r),
+            (0.2 * r, -0.6 * r),
+        ];
+        let plate_width = 0.16 * r;
+        let plates = plates_pos_yz
+            .into_iter()
+            .map(|(py, pz)| {
+                let pl = vec3(0.0f32, lights_pos.y - py, lights_pos.z - pz);
+                let pc = vec3(0.0f32, camera_pos.y - py, camera_pos.z - pz);
+                let normal = (pl.hat() + pc.hat()).hat();
+                let tangent = vec3(0.0, normal.z, -normal.y).hat() * (plate_width * 0.5);
+                let t00 = point3(left, py, pz) + tangent;
+                let t01 = t00 - tangent * 2.0;
+                let t10 = point3(right, py, pz) + tangent;
+                let t11 = t10 - tangent * 2.0;
+                assert!(tangent.dot(normal).abs() < 1e-5);
+                shape::TriangleMesh::from_soa(
+                    vec![t00, t01, t10, t11],
+                    vec![normal, normal, normal, normal],
+                    vec![(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)],
+                    vec![(0, 1, 2), (2, 1, 3)],
+                )
+            })
+            .collect::<Vec<_>>();
+        let materials = [8e-5, 3e-4, 8e-4, 3e-3]
+            .iter()
+            .map(|rough| mtl::Glossy::new(Color::gray(0.9), *rough))
+            .collect::<Vec<_>>();
 
-    let num_lights = 4;
-    let (light_positions, _spacing) = math::float::linspace((left * 0.8, right * 0.8), num_lights);
-    let light_sizes = [2.0f32, 1.2, 0.6, 0.2];
-    let light_colors = [
-        Color::new(5.0, 4.0, 4.0),
-        Color::new(5.0, 5.0, 4.0),
-        Color::new(4.0, 5.0, 4.0),
-        Color::new(4.0, 4.0, 5.0),
-    ];
-    let light_spheres = light_positions.iter().enumerate().map(|(i, x)| {
-        Sphere::from_raw((*x, r * 0.6, r * 0.1), light_sizes[i])
-        // Instance::from_raw(s, mtl::DiffuseLight::new(Color::white()))
-    });
-
-    // instances.extend(
-    //     light_spheres
-    //         .clone()
-    //         .zip(light_colors.iter())
-    //         .map(|(s, c)| Instance::from_raw(s, mtl::DiffuseLight::new(*c))),
-    // );
-    let area_lights = light_spheres
-        .zip(light_colors.iter())
-        .map(|(s, c)| light::DiffuseAreaLight::new(*c, Box::new(s)))
-        .collect::<Vec<_>>();
-    assert_eq!(area_lights.len(), num_lights as usize);
-
-    // The plates lying at different angles.
-    let (angles, spacing) = math::float::linspace((-PI * 0.4, -PI * 0.05), 4);
-    let roughness = vec![0.08, 0.02, 0.004, 0.001];
-    let delta_angle = spacing * 0.65;
-    let half_width = delta_angle * r * 0.5;
-    for (angle, roughness) in angles.iter().zip(roughness.iter().rev()) {
-        let glossy = mtl::Glossy::new(Color::gray(0.9), *roughness);
-        // let glossy = mtl::Lambertian::solid(Color::rgb(80, 180, 50));
-        let plate = shape::QuadXZ::from_raw((left, right), (-half_width, half_width), 4.0);
-        let trans = tlas::instance::identity()
-            .translate(Vec3::new(0.0, -r, 0.0))
-            .rotate_x(math::new_rad(-angle))
-            .translate(Vec3::new(0.0, r * 0.8, 0.0));
-        instances.push(Instance::from_raw(plate, glossy).with_transform(trans));
+        instances.extend(
+            plates
+                .into_iter()
+                .zip(materials.into_iter())
+                .map(|(plate, mtl)| Instance::from_raw(plate, mtl)),
+        );
     }
+
+    let mut area_lights = vec![];
+    {
+        // Adds lights to the scenes.
+        let num_lights = 4;
+        let (light_xpos, _spacing) = math::float::linspace((left * 0.9, right * 0.9), num_lights);
+        let light_sizes = [0.1 * r, 0.06 * r, 0.03 * r, 0.01 * r];
+        let light_colors = [
+            Color::new(5.0, 4.0, 4.0),
+            Color::new(5.0, 5.0, 4.0),
+            Color::new(4.0, 5.0, 4.0),
+            Color::new(4.0, 4.0, 5.0),
+        ];
+        let light_spheres = light_xpos
+            .iter()
+            .enumerate()
+            .map(|(i, x)| Sphere::new(lights_pos.with_x(*x), light_sizes[i]));
+
+        area_lights.extend(
+            light_spheres
+                .clone()
+                .zip(light_colors.iter())
+                .map(|(s, c)| light::DiffuseAreaLight::new(*c, Box::new(s))),
+        );
+        instances.extend(
+            light_spheres
+                .zip(light_colors.iter())
+                .map(|(sphere, color)| Instance::from_raw(sphere, mtl::DiffuseLight::new(*color))),
+        );
+        assert_eq!(area_lights.len(), num_lights as usize);
+    }
+    // Wraps up the shape instances.
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
-    let camera = Camera::new((1000, 800), math::Angle::pi() * 0.19).looking_at(
-        Point3::new(0.0, r * 0.7, -r * 2.0),
-        Point3::new(0.0, r * 0.3, r * 0.0),
-        Vec3::ybase(),
-    );
+    let camera = Camera::new((1000, 800), math::Angle::pi() * 0.19)
+        .looking_at(camera_pos, camera_pos + Vec3::zbase(), Vec3::ybase())
+        // .translate(vec3(-0.4 * r, 0.0, 0.0))
+        ;
 
     Scene::new(*tlas::build_bvh(instances), camera)
-        // .with_env_light(blue_sky)
+        // .with_env_light(dusk)
         .with_lights(vec![], area_lights)
 }
 

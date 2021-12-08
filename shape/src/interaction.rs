@@ -44,8 +44,8 @@ impl Interaction {
     pub fn with_dpdu(self, dpdu: Vec3) -> Interaction {
         assert!(
             self.normal.dot(dpdu).abs() < 1e-4,
-            "normal and tangent ({}) not perp",
-            dpdu
+            "normal({}) and tangent ({}) not perp",
+            self.normal, dpdu
         );
         let normal = self.normal.hat();
         let bitangent = (normal.cross(dpdu)).hat();
