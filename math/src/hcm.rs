@@ -106,19 +106,28 @@ impl Vec3 {
         self.norm_squared() == 0.0
     }
 
-    /// Returns a normalized (unit-length) `self` vector. Panics if the vector is all-zero.
+    /// Returns a normalized (unit-length) `self` vector.
+    /// Panics if the vector length is zero, NaN or infinite.
     pub fn hat(self) -> Vec3 {
-        if self.is_zero() {
-            panic!("normalizing zero vector");
-        } else {
-            let inv_sqrt = 1.0 / self.norm();
-            self * inv_sqrt
-        }
+        let norm2 = self.norm_squared();
+        assert!(norm2 != 0.0 && norm2.is_finite());
+        let inv_sqrt = 1.0 / self.norm();
+        self * inv_sqrt
     }
     pub fn try_hat(self) -> Option<Self> {
         let inv_length = 1.0 / self.norm();
         (inv_length.is_finite() && inv_length != 0.0).then(|| inv_length * self)
     }
+
+    /// Chooses from `self` or `-self`, whichever faces a surface having given `normal`.
+    pub fn facing(self, normal: Self) -> Self {
+        if self.dot(normal).is_sign_negative() {
+            self
+        } else {
+            -self
+        }
+    }
+
     // Returns the index to the element with minimum magnitude.
     pub fn abs_min_dimension(self) -> usize {
         let abs = [self.x.abs(), self.y.abs(), self.z.abs()];
@@ -657,7 +666,17 @@ pub fn normalize(x: f32, y: f32, z: f32) -> Vec3 {
     Vec3::new(x, y, z).hat()
 }
 
-#[allow(dead_code)]
+/// Computes a pair of unit-vectors that forms a orthonormal matrix with `v`.
+/// ```
+/// use math::hcm::{Vec3, Mat3, make_coord_system};
+/// let v0 = Vec3::new(0.3, 0.4, -0.6).hat();
+/// let (v1, v2) = make_coord_system(v0);
+/// 
+/// let basis = Mat3::from_vectors(v0, v1, v2);
+/// // basis * basis^T should be identity.
+/// let diff_to_eye = basis * basis.transpose() - Mat3::identity();
+/// assert!(diff_to_eye.frobenius_norm_squared() < f32::EPSILON);
+/// ```
 pub fn make_coord_system(v: Vec3) -> (Vec3, Vec3) {
     let i0 = v.abs_min_dimension();
     let (i1, i2) = ((i0 + 1) % 3, (i0 + 2) % 3);
