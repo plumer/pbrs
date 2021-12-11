@@ -45,7 +45,6 @@ pub fn load_ply(path: &str) -> TriangleMeshRaw {
         if let Property::Float(nz) = vertex_raw["nz"] {
             vertex.normal.z = nz;
         }
-
         if vertex_raw.contains_key("u") {
             if let Property::Float(u) = vertex_raw["u"] {
                 vertex.uv.0 = u;

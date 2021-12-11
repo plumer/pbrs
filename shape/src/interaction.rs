@@ -32,6 +32,7 @@ impl Interaction {
         }
     }
 
+    /// Makes a new `Interaction` without recording incoming ray information.
     pub fn rayless(pos: Point3, uv: (f32, f32), normal: Vec3) -> Self {
         Self::new(pos, 0.0, uv, normal, Vec3::zero())
     }
