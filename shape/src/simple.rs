@@ -1,7 +1,7 @@
 use geometry::bvh::BBox;
 use math::float::{self, Interval};
 use math::hcm::{Point3, Vec3};
-use std::f32::consts::PI;
+use std::f32::consts::{FRAC_1_PI, PI};
 
 use crate::{Interaction, Shape};
 use geometry::ray::Ray;
@@ -27,6 +27,41 @@ impl Sphere {
     }
     pub fn radius(&self) -> f32 {
         self.radius
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Disk {
+    center: Point3,
+    normal: Vec3,
+    radial: Vec3,
+    // radius: f32,
+}
+
+impl Disk {
+    pub fn new(center: Point3, normal: Vec3, radial: Vec3) -> Self {
+        let normal = normal.hat();
+        assert!(radial.norm_squared().is_finite());
+        assert!(radial.dot(normal).abs() < 1e-6);
+        Self {
+            center,
+            normal,
+            radial,
+        }
+    }
+    /// Makes a new Disk with arbitrary rotation around the normal axis.
+    pub fn new_anyspin(center: Point3, normal: Vec3, radius: f32) -> Self {
+        let (radial, _) = math::hcm::make_coord_system(normal);
+        Self::new(center, normal, radial * radius)
+    }
+    pub fn center(&self) -> Point3 {
+        self.center
+    }
+    pub fn normal(&self) -> Vec3 {
+        self.normal
+    }
+    pub fn radial(&self) -> Vec3 {
+        self.radial
     }
 }
 
@@ -229,6 +264,49 @@ impl Shape for Sphere {
     }
 }
 
+impl Shape for Disk {
+    fn summary(&self) -> String {
+        format!(
+            "Disk{{ {}, normal = {}, radius = {}}}",
+            self.center, self.normal, self.radial
+        )
+    }
+    fn bbox(&self) -> BBox {
+        let (v1, v2) = math::hcm::make_coord_system(self.normal);
+        let (v1, v2) = (v1 * self.radial.norm(), v2 * self.radial.norm());
+        geometry::bvh::union(
+            BBox::new(self.center + v1 + v2, self.center + v1 - v2),
+            BBox::new(self.center - v1 - v2, self.center - v1 + v2),
+        )
+    }
+    fn intersect(&self, r: &Ray) -> Option<Interaction> {
+        // Ray:    r = o + td
+        // Plane: (p-c) dot n = 0
+        //        (o + td - c) dot n = (o-c) dot n + t d dot n = 0
+        //        (c - o) dot n = t * d dot n
+        let t = (self.center - r.origin).dot(self.normal) / r.dir.dot(self.normal);
+        let isect_point = r.position_at(t);
+        (isect_point.squared_distance_to(self.center) <= self.radial.norm_squared()).then(|| {
+            let cp = isect_point - self.center;
+            // Removes the component from cp parallel to the normal.
+            let cp = cp - cp.dot(self.normal) * self.normal;
+            assert!(cp.dot(self.normal).abs() < 1e-6);
+            let normal = self.normal * self.normal.dot(-r.dir).signum();
+            let tangent = (normal.cross(cp)).hat();
+            let u = self.radial.cross(cp).dot(normal).atan2(self.radial.dot(cp));
+            let u = (u * FRAC_1_PI + 1.0).fract();
+            let v = cp.norm() / self.radial.norm();
+            Interaction::new(self.center + cp, t, (u, v), normal, -r.dir).with_dpdu(tangent)
+        })
+    }
+
+    fn occludes(&self, r: &Ray) -> bool {
+        let t = (self.center - r.origin).dot(self.normal) / r.dir.dot(self.normal);
+        let isect_point = r.position_at(t);
+        isect_point.squared_distance_to(self.center) <= self.radial.norm_squared()
+    }
+}
+
 impl Shape for QuadXY {
     fn summary(&self) -> String {
         let (xmin, xmax) = self.x_interval.as_pair();
@@ -283,7 +361,6 @@ impl Shape for QuadXZ {
     fn bbox(&self) -> BBox {
         let (xmin, xmax) = self.x_interval.as_pair();
         let (zmin, zmax) = self.z_interval.as_pair();
-
         BBox::new(
             Point3::new(xmin, self.y * float::ONE_MINUS_EPSILON, zmin),
             Point3::new(xmax, self.y * float::ONE_PLUS_EPSILON, zmax),

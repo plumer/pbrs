@@ -275,6 +275,25 @@ impl ShapeSample for shape::Sphere {
     }
 }
 
+impl ShapeSample for shape::Disk {
+    fn sample(&self, rnd2: (f32, f32)) -> Interaction {
+        let (cos_t, sin_t) = geometry::bxdf::concentric_sample_disk(rnd2);
+        let radial2 = self.normal().cross(self.radial());
+        let cp = self.radial() * cos_t + radial2 * sin_t;
+
+        Interaction::rayless(self.center() + cp, rnd2, self.normal())
+    }
+    fn sample_towards(&self, target: &Interaction, rnd2: (f32, f32)) -> Interaction {
+        let mut res = self.sample(rnd2);
+        res.normal = res.normal.facing(target.normal);
+        res
+    }
+
+    fn area(&self) -> f32 {
+        self.radial().norm_squared() * PI
+    }
+}
+
 impl ShapeSample for shape::IsolatedTriangle {
     fn sample(&self, rnd2: (f32, f32)) -> Interaction {
         let (u, v) = rnd2;
