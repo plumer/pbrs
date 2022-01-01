@@ -245,12 +245,19 @@ impl ShapeSample for shape::Sphere {
         let sin_alpha = (1.0 - cos_alpha.powi(2)).max(0.0).sqrt();
         let normal_object_space =
             hcm::spherical_direction(sin_alpha, cos_alpha, math::new_rad(phi));
-        let (wcx, wcy) = hcm::make_coord_system(wc.hat());
-        let point_on_sphere =
-            hcm::Mat3::from_vectors(wcx, wcy, wc.hat()) * normal_object_space * self.radius()
-                + self.center();
+        let (wcx, wcy) = hcm::make_coord_system(-wc.hat());
+        let normal_world_space = hcm::Mat3::from_vectors(wcx, wcy, -wc.hat()) * normal_object_space;
+        let point_on_sphere = normal_world_space * self.radius() + self.center();
 
-        Interaction::rayless(point_on_sphere, rnd2, normal_object_space)
+        // TODO: the following assertion would fail for corner-case u-values (something very close
+        //       to 1.0) but doesn't affect the rendered result by human eye. Maybe one way to deal
+        //       with it is to quantify the rate of failure and then decide to ignore it or not. 
+        // if normal_world_space.dot(point_on_sphere - target.pos) > 0.0 {
+        //     eprintln!("point on sphere not facing towards the target: rnd2 = {:?}, normal = {}, oncoming = {}", 
+        //     rnd2, normal_world_space, point_on_sphere - target.pos);
+        // }
+        // assert!(normal_world_space.dot(point_on_sphere - target.pos) < 0.0);
+        Interaction::rayless(point_on_sphere, rnd2, normal_world_space)
     }
 
     fn pdf_at(&self, reference: &Interaction, wi: hcm::Vec3) -> Option<f32> {
