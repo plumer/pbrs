@@ -289,7 +289,7 @@ impl Transform<Point3> for RigidBodyTransform {
 }
 impl Transform<Ray> for RigidBodyTransform {
     fn apply(&self, r: Ray) -> Ray {
-        Ray::new(self.apply(r.origin), self.apply(r.dir))
+        Ray::new(self.apply(r.origin), self.apply(r.dir)).with_extent(r.t_max)
     }
 }
 impl Transform<BBox> for RigidBodyTransform {
@@ -348,7 +348,7 @@ impl Transform<Point3> for AffineTransform {
 }
 impl Transform<Ray> for AffineTransform {
     fn apply(&self, r: Ray) -> Ray {
-        Ray::new(self.apply(r.origin), self.apply(r.dir))
+        Ray::new(self.apply(r.origin), self.apply(r.dir)).with_extent(r.t_max)
     }
 }
 impl Transform<BBox> for AffineTransform {
