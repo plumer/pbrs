@@ -169,11 +169,8 @@ impl DiffuseAreaLight {
     pub fn radiance_to(&self, target: &Interaction, wi: hcm::Vec3) -> Option<(Color, f32, Ray)> {
         let light_hit = self.shape.intersect(&target.spawn_ray(wi))?;
         let light_pdf = self.pdf_li(target, wi)?;
-        Some((
-            self.emit_radiance,
-            light_pdf,
-            target.spawn_limited_ray_to(light_hit.pos),
-        ))
+        let vis_test_ray = target.spawn_limited_ray_to(light_hit.pos);
+        Some((self.emit_radiance, light_pdf, vis_test_ray))
     }
     /// Computes the probability density that the `target` intersection is illuminated by the
     /// light at angle `wi`.

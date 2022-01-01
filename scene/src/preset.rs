@@ -1,11 +1,11 @@
 use geometry::camera::Camera;
 use geometry::ray;
-use math::hcm::{point3, vec3, Mat3, Point3, Vec3};
+use math::hcm::{point3, vec3, Point3, Vec3};
 use radiometry::color::Color;
 
 use crate::Scene;
 use material as mtl;
-use shape::{QuadXZ, Sphere};
+use shape::Sphere;
 use std::f32::consts::PI;
 use std::sync::Arc;
 use texture as tex;
@@ -337,10 +337,10 @@ pub fn plates() -> Scene {
         let (light_xpos, _spacing) = math::float::linspace((left * 0.9, right * 0.9), num_lights);
         let light_sizes = [0.1 * r, 0.06 * r, 0.03 * r, 0.01 * r];
         let light_colors = [
-            Color::new(5.0, 4.0, 4.0),
-            Color::new(5.0, 5.0, 4.0),
-            Color::new(4.0, 5.0, 4.0),
-            Color::new(4.0, 4.0, 5.0),
+            Color::new(1.0, 0.8, 0.8),
+            Color::new(1.0, 1.0, 0.8),
+            Color::new(0.8, 1.0, 0.8),
+            Color::new(0.8, 0.8, 1.0),
         ];
         let light_spheres = light_xpos
             .iter()
@@ -369,7 +369,7 @@ pub fn plates() -> Scene {
         ;
 
     Scene::new(*tlas::build_bvh(instances), camera)
-        // .with_env_light(dusk)
+        // .with_env_light(|r| blue_sky(r) * 0.4)
         .with_lights(vec![], area_lights)
 }
 
