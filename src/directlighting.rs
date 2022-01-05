@@ -3,9 +3,8 @@ use std::ops::Deref;
 use geometry::ray;
 use math::{float::Float, prob::Prob};
 use radiometry::color::Color;
-use shape::Interaction;
-
 use rand::Rng;
+use shape::Interaction;
 
 use crate::bsdf::BSDF;
 use light::{DeltaLight, DiffuseAreaLight, Light};
