@@ -125,6 +125,7 @@ fn main() {
     let integrator = match options.integrator {
         cli_options::Integrator::Direct => direct_lighting_integrator,
         cli_options::Integrator::Path => path_integrator,
+        cli_options::Integrator::DebugNormal => normal_visualizer,
     };
     let (width, height) = scene.camera.resolution();
 
@@ -265,11 +266,11 @@ fn debug_pt(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvL
 }
 
 #[allow(dead_code)]
-fn dummy_integrator(scene: &Box<BvhNode>, mut ray: ray::Ray, _: i32, env_light: EnvLight) -> Color {
-    let hit_info = scene.intersect(&mut ray);
+fn normal_visualizer(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
+    let hit_info = scene.tlas.intersect(&mut ray);
 
     match hit_info {
-        None => env_light(ray),
+        None => scene.env_light.map(|e| e(ray)).unwrap_or(Color::gray(0.5)),
         Some((hit, mtl)) => {
             let (_, albedo) = mtl.scatter(-ray.dir, &hit);
             (albedo + vec3_to_color(hit.normal)) * 0.5

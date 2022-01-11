@@ -3,6 +3,7 @@ use std::collections::HashMap;
 pub enum Integrator {
     Direct,
     Path,
+    DebugNormal
 }
 
 impl Integrator {
@@ -10,6 +11,7 @@ impl Integrator {
         match s {
             "direct" => Some(Self::Direct),
             "path" => Some(Self::Path),
+            "debug_normal" => Some(Self::DebugNormal),
             _ => None,
         }
     }
@@ -18,6 +20,7 @@ impl Integrator {
         match self {
             &Self::Direct => "direct",
             &Self::Path => "path",
+            &Self::DebugNormal => "debug_normal",
         }
     }
 }
