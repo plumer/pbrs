@@ -72,13 +72,14 @@ impl SceneLoader {
         }
     }
 
-    fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> Option<Camera> {
+    fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> (Option<Camera>, AffineTransform) {
         let mut fov = None;
         let mut w = None;
         let mut h = None;
         let mut pose = None;
-        for _scene_option in scene_options.into_iter() {
-            match _scene_option {
+        let mut world_transform = AffineTransform::identity();
+        for scene_option in scene_options.into_iter() {
+            match scene_option {
                 ast::SceneWideOption::Camera(camera_impl, mut args) => {
                     if camera_impl != "perspective" {
                         error!("Non perspective camera {} unsupported", camera_impl);
@@ -95,15 +96,12 @@ impl SceneLoader {
                 }
                 ast::SceneWideOption::Transform(t) => {
                     use ast::Transform;
-                    pose = match t {
-                        Transform::LookAt(from, target, up) => Some((from, target, up)),
-                        wtf => panic!(
-                            "unsupported transform in scene-wide options (lookat only): {:?}",
-                            wtf
-                        ),
+                    match t {
+                        Transform::LookAt(from, target, up) => pose = Some((from, target, up)),
+                        _ => world_transform = world_transform * Self::parse_transform(t),
                     };
                 }
-                _ => error!("unhandled scene-wide option {:?}", _scene_option),
+                _ => error!("unhandled scene-wide option {:?}", scene_option),
             }
         }
         let mut camera: Camera;
@@ -111,22 +109,23 @@ impl SceneLoader {
             (Some(angle), Some(width), Some(height)) => {
                 camera = Camera::new((width as u32, height as u32), angle);
             }
-            _ => return None,
+            _ => return (None, world_transform),
         }
         match pose {
             Some((eye, target, up)) => camera.look_at(eye, target, up),
             _ => (),
         }
-        Some(camera)
+        (Some(camera), world_transform)
     }
 
     fn traverse_tree(&mut self, ast: ast::Scene) {
-        self.camera = Self::build_camera(ast.options);
+        let (camera, world_transform) = Self::build_camera(ast.options);
+        self.camera = camera;
         let items: Vec<ast::WorldItem> = ast.items;
         for world_item in items.into_iter() {
             self.traverse_world_item(world_item);
         }
-        for instance in self.instances.iter() {
+        for instance in self.instances.iter_mut() {
             info!(
                 "transform = {}, shape summary = {}, bbox = {}, mtl type = {}",
                 instance.transform,
@@ -134,6 +133,7 @@ impl SceneLoader {
                 instance.bbox(),
                 instance.mtl.summary()
             );
+            instance.transform = world_transform * instance.transform;
         }
     }
 
