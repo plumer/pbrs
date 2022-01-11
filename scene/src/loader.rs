@@ -3,9 +3,10 @@ use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::plyloader;
+use geometry::camera::Camera;
 use light::{self, DiffuseAreaLight};
 use light::{DeltaLight, ShapeSample};
-use geometry::camera::Camera;
 use material::{self as mtl, Material};
 use math::hcm;
 use radiometry::color::Color;
@@ -13,7 +14,6 @@ use scene_parser::{
     ast::{self, ArgValue, ParameterSet},
     lexer, parser, token,
 };
-use crate::plyloader;
 use shape::{self, IsolatedTriangle, Shape};
 use texture::{self as tex, Texture};
 use tlas::instance::AffineTransform;
@@ -139,6 +139,7 @@ impl SceneLoader {
 
     fn traverse_world_item(&mut self, item: ast::WorldItem) {
         use ast::WorldItem;
+        let dummy_area_light_mtl = Arc::new(mtl::Lambertian::solid(Color::black()));
         match item {
             WorldItem::Transform(t) => {
                 // Parses the transform from parameters and applies that onto the current transform.
@@ -148,27 +149,27 @@ impl SceneLoader {
             WorldItem::Shape(shape_impl, mut args) => {
                 args.extract_string("alpha");
 
-                if self.current_mtl.is_some() && self.current_arealight_luminance.is_some() {
-                    warn!("Both material and arealight are set, using only the light");
-                    let shapes = self.parse_samplable_shape(&shape_impl, args);
-                    shapes.into_iter().for_each(|shape| {
-                        let diffuse_light = light::DiffuseAreaLight::new(
-                            self.current_arealight_luminance.unwrap(),
-                            shape,
-                        );
-                        self.area_lights.push(diffuse_light);
-                    });
+                if let Some(luminance) = self.current_arealight_luminance {
+                    // Creates an area light and an instance for each shape.
+                    let (samplable_shapes, shapes) = self.parse_samplable_shape(&shape_impl, args);
+                    self.area_lights.extend(
+                        samplable_shapes
+                            .into_iter()
+                            .map(|shape| light::DiffuseAreaLight::new(luminance.clone(), shape)),
+                    );
+                    // The material for the object instance is either the current set material or
+                    // the dummy one.
+                    let mtl = self.current_mtl.clone().unwrap_or(dummy_area_light_mtl);
+                    self.instances.extend(
+                        shapes
+                            .into_iter()
+                            .map(|shape| tlas::instance::Instance::new(shape, mtl.clone())),
+                    );
                 } else if let Some(mtl) = &self.current_mtl {
                     let shape = self.parse_shape(&shape_impl, args);
                     let inst = tlas::instance::Instance::new(shape, mtl.clone())
                         .with_transform(self.ctm_stack.last().unwrap().clone());
                     self.instances.push(inst);
-                } else if let Some(luminance) = self.current_arealight_luminance {
-                    let shapes = self.parse_samplable_shape(&shape_impl, args);
-                    shapes.into_iter().for_each(|shape| {
-                        let diffuse_light = light::DiffuseAreaLight::new(luminance.clone(), shape);
-                        self.area_lights.push(diffuse_light);
-                    });
                 } else {
                     error!("Neither arealight luminance or material are set");
                 }
@@ -190,6 +191,8 @@ impl SceneLoader {
                 }
                 self.ctm_stack.pop();
                 self.reverse_orientation_stack.pop();
+                // TODO: set current mtl and arealight to None at the exit of an attribute block.
+                // Study more PBRT input files and make the decision.
             }
             WorldItem::TransformBlock(items) => {
                 let last_transform = self.ctm_stack.last().unwrap().clone();
@@ -321,12 +324,18 @@ impl SceneLoader {
         }
     }
 
+    /// Creates a list of samplable shapes from the arguments.
+    ///
+    /// TODO: Currently, trait upcasting coersion is not stable, making it prohibitively difficult
+    /// to convert `dyn ShapeSample` to `dyn Sample`. Once this feature is stable, consider
+    /// deploying it to reduce memory footprint. https://github.com/rust-lang/rust/issues/65991
     fn parse_samplable_shape(
         &self, shape_impl: &String, args: ast::ParameterSet,
-    ) -> Vec<Box<dyn ShapeSample>> {
+    ) -> (Vec<Box<dyn ShapeSample>>, Vec<Arc<dyn Shape>>) {
         if shape_impl == "sphere" {
             let radius = args.lookup_f32("float radius").unwrap_or(1.0);
-            vec![Box::new(shape::Sphere::new(hcm::Point3::origin(), radius))]
+            let sphere = shape::Sphere::new(hcm::Point3::origin(), radius);
+            (vec![Box::new(sphere.clone())], vec![Arc::new(sphere)])
         } else if shape_impl == "plymesh" {
             let ply_file_name = args
                 .lookup_string("string filename")
@@ -335,7 +344,7 @@ impl SceneLoader {
             ply_file_path.push(ply_file_name);
 
             let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
-            let mut triangles: Vec<Box<dyn ShapeSample>> = Vec::new();
+            let mut triangles = Vec::new();
             mesh.indices.chunks_exact(3).for_each(|ijk| {
                 if let [i, j, k] = ijk {
                     let t = IsolatedTriangle::new(
@@ -343,12 +352,21 @@ impl SceneLoader {
                         mesh.vertices[*j as usize].pos,
                         mesh.vertices[*k as usize].pos,
                     );
-                    triangles.push(Box::new(t));
+                    triangles.push(t);
                 } else {
                     panic!("indices should be multiple of 3")
                 }
             });
-            triangles
+            (
+                triangles
+                    .iter()
+                    .map(|t| Box::new(t.clone()) as Box<dyn ShapeSample>)
+                    .collect(),
+                triangles
+                    .into_iter()
+                    .map(|t| Arc::new(t) as Arc<dyn Shape>)
+                    .collect(),
+            )
         } else {
             unimplemented!("samplable shape: {}", shape_impl)
         }
@@ -697,8 +715,8 @@ impl SceneLoader {
     }
     #[allow(dead_code)]
     fn parse_rbtransform(t: ast::Transform) -> tlas::instance::RigidBodyTransform {
-        use tlas::instance::RigidBodyTransform as RBTrans;
         use ast::Transform;
+        use tlas::instance::RigidBodyTransform as RBTrans;
         match t {
             Transform::Identity => RBTrans::identity(),
             Transform::Translate(v) => RBTrans::translater(v),
