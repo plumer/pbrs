@@ -85,7 +85,7 @@ fn main() {
         "num of lights: {} delta, {} area, {} env",
         scene.delta_lights.len(),
         scene.area_lights.len(),
-        scene.env_light.is_some()
+        scene.has_env_light()
     );
 
     if false {
@@ -217,7 +217,7 @@ fn path_integrator(scene: &Scene, mut ray: ray::Ray, depth: i32) -> Color {
     let hit_info = scene.tlas.intersect(&mut ray);
 
     match hit_info {
-        None => scene.env_light.map(|l| l(ray)).unwrap_or(Color::black()),
+        None => scene.eval_env_light(ray),
         Some((hit, mtl)) => {
             if !mtl.emission().is_black() {
                 // Stops recursive path tracing if the material is emissive, and
@@ -270,7 +270,7 @@ fn normal_visualizer(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
     let hit_info = scene.tlas.intersect(&mut ray);
 
     match hit_info {
-        None => scene.env_light.map(|e| e(ray)).unwrap_or(Color::gray(0.5)),
+        None => scene.eval_env_light(ray),
         Some((hit, mtl)) => {
             let (_, albedo) = mtl.scatter(-ray.dir, &hit);
             (albedo + vec3_to_color(hit.normal)) * 0.5

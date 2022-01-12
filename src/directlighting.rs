@@ -26,10 +26,8 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
         } else {
             uniform_sample_one_light(&hit, mtl.deref(), scene, false)
         }
-    } else if let Some(env_light) = scene.env_light {
-        env_light(ray)
     } else {
-        Color::black()
+        scene.eval_env_light(ray)
     }
 }
 
@@ -37,10 +35,8 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
 pub fn direct_lighting_debug_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
     if let Some((hit, mtl)) = scene.tlas.intersect(&mut ray) {
         uniform_sample_one_light(&hit, mtl.deref(), scene, true)
-    } else if let Some(env_light) = scene.env_light {
-        env_light(ray)
     } else {
-        Color::black()
+        scene.eval_env_light(ray)
     }
 }
 
@@ -48,7 +44,7 @@ fn uniform_sample_one_light(
     hit: &Interaction, mtl: &dyn Material, scene: &Scene, _debug: bool,
 ) -> Color {
     let num_lights =
-        scene.delta_lights.len() + scene.area_lights.len() + (scene.env_light.is_some() as usize);
+        scene.delta_lights.len() + scene.area_lights.len() + (scene.has_env_light() as usize);
     if num_lights == 0 {
         return Color::black();
     }
@@ -73,8 +69,8 @@ fn uniform_sample_one_light(
             let (f, wi, pr) = bsdf.sample(hit.wo, rnd2_scatter);
             let incident_ray = hit.spawn_ray(wi);
 
-            let incident_radiance = match (scene.tlas.occludes(&incident_ray), &scene.env_light) {
-                (false, Some(env_light)) => env_light(incident_ray),
+            let incident_radiance = match scene.tlas.occludes(&incident_ray) {
+                false => scene.eval_env_light(incident_ray),
                 _ => Color::black(),
             };
             let pr = match pr {
