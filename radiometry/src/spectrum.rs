@@ -1,4 +1,4 @@
-use crate::color::Color;
+use crate::color::{Color, XYZ};
 
 pub fn blackbody(kelvin: f32, lambdas_nm: &Vec<f32>) -> Vec<f32> {
     if kelvin < 0.0 {
@@ -52,6 +52,21 @@ pub fn temperature_to_color(kelvin: f32) -> Color {
     let scale = CIE_Y.iter().sum::<f32>().recip();
     let [x, y, z] = xyz;
     Color::from_xyz(x * scale, y * scale, z * scale)
+}
+
+pub fn sampled_spectrum_to_xyz(lambdas_and_values: &mut [(f32, f32)]) -> XYZ {
+    lambdas_and_values.sort_by(|(l1, _), (l2, _)| l1.partial_cmp(l2).unwrap());
+
+    let spline = math::spline::CubicSpline::from_samples(lambdas_and_values);
+    let radiances = CIE_LAMBDA
+        .iter()
+        .map(|l| spline.evaluate(*l as f32))
+        .collect::<Vec<_>>();
+    XYZ::new(
+        radiances.iter().zip(CIE_X.iter()).map(|(s, x)| s * x).sum(),
+        radiances.iter().zip(CIE_Y.iter()).map(|(s, y)| s * y).sum(),
+        radiances.iter().zip(CIE_Z.iter()).map(|(s, z)| s * z).sum(),
+    ) * CIE_Y.iter().sum::<f32>().recip()
 }
 
 const NUM_CIE_SAMPLES: usize = 471;
