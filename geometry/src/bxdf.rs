@@ -4,7 +4,7 @@ use crate::microfacet::{self as mf};
 use math::float::Float;
 use math::hcm::Vec3;
 use math::prob::Prob;
-use radiometry::color::{Color, XYZ};
+use radiometry::color::Color;
 
 /// A wrapper of `Vec3` representing unit-length vectors.
 ///
@@ -247,7 +247,7 @@ pub enum Fresnel {
     Nop,
     /// Fresnel reflectivity ratio computation for dielectric materials (e.g., glass).
     Dielectric { eta_front: f32, eta_back: f32 },
-    Conductor {eta_i: XYZ, eta_t: XYZ, k: XYZ}
+    Conductor {eta_i: Color, eta_t: Color, k: Color}
 }
 
 impl Fresnel {
@@ -255,6 +255,14 @@ impl Fresnel {
         Self::Dielectric {
             eta_front,
             eta_back,
+        }
+    }
+
+    pub fn conductor(eta_real: Color, eta_imag: Color) -> Self {
+        Self::Conductor {
+            eta_i: Color::white(),
+            eta_t: eta_real,
+            k: eta_imag,
         }
     }
 
@@ -320,25 +328,27 @@ impl Fresnel {
 
             return 0.5 * (Rp + Rs); */
             Self::Conductor { eta_i, eta_t, k } => {
-                let eta = *eta_t / *eta_i;
+                let eta = eta_t.cw_div(*eta_i);
                 let eta2 = eta * eta;
-                let etak = *k / *eta_i;
+                let etak = k.cw_div(*eta_i);
                 let etak2 = etak * etak;
                 let cos2_theta_i = cos_theta_i.clamp(-1.0, 1.0).powi(2);
                 let sin2_theta_i = 1.0 - cos2_theta_i;
 
-                let t0 = eta2 - etak2 - XYZ::all(sin2_theta_i);
-                let a2_plus_b2 = (t0 * t0 + 4.0 * eta2 * etak2).sqrt();
-                let t1 = a2_plus_b2 + XYZ::all(cos2_theta_i);
-                let a = ((a2_plus_b2 + t0) * 0.5).sqrt();
+                let t0 = eta2 - etak2 - Color::gray(sin2_theta_i);
+                let a2_plus_b2 = (t0 * t0 + 4.0 * eta2 * etak2).cw_sqrt();
+                let t1 = a2_plus_b2 + Color::gray(cos2_theta_i);
+                let a = ((a2_plus_b2 + t0) * 0.5).cw_sqrt();
                 let t2 = 2.0 * a * cos_theta_i;
-                let ratio_s = (t1 - t2) / (t1 + t2);
+                let ratio_s = (t1 - t2).cw_div(t1 + t2);
 
-                let t3 = cos2_theta_i * a2_plus_b2 + XYZ::all(sin2_theta_i.powi(2));
+                assert!(ratio_s.is_finite());
+
+                let t3 = cos2_theta_i * a2_plus_b2 + Color::gray(sin2_theta_i.powi(2));
                 let t4 = t2 * sin2_theta_i;
-                let ratio_p = ratio_s * (t3 - t4) / (t3 + t4);
-
-                ((ratio_s + ratio_p) * 0.5).to_color()
+                let ratio_p = ratio_s * (t3 - t4).cw_div(t3 + t4);
+                assert!(ratio_p.is_finite());
+                ((ratio_s + ratio_p) * 0.5).cw_max(0.0)
             }
         }
     }

@@ -382,3 +382,40 @@ where
 
     sum / tries as f32
 }
+
+#[test]
+fn metal_test() {
+    use std::io::BufRead;
+    let color_from_spd_file = |path: &'static str| {
+        let spd_file = File::open(path).unwrap();
+        let mut lambdas_and_values = Vec::new();
+        for line in std::io::BufReader::new(spd_file).lines() {
+            if let Ok(content) = line {
+                let numbers = content
+                    .split(' ')
+                    .map(|s| s.parse::<f32>().unwrap())
+                    .collect::<Vec<_>>();
+                assert!(numbers.len() >= 2);
+                if numbers.len() > 2 {
+                    eprintln!("more than 2 numbers in the line: {:?}", numbers);
+                }
+                lambdas_and_values.push((numbers[0], numbers[1]));
+            }
+        }
+        radiometry::spectrum::sampled_spectrum_to_color(&mut lambdas_and_values)
+    };
+
+    let silver_eta_real = color_from_spd_file("assets/metals/Ag.eta.spd");
+    let silver_eta_imag = color_from_spd_file("assets/metals/Ag.k.spd");
+    println!("Silver eta: {} + {}i", silver_eta_real, silver_eta_imag);
+
+    let silver_fresnel = geometry::bxdf::Fresnel::conductor(silver_eta_real, silver_eta_imag);
+
+    for cos_theta in [0.9, 0.8, 0.7, 0.6, 0.5].iter() {
+        println!(
+            "silver at cos_theta = {}, refl = {:.5}",
+            cos_theta,
+            silver_fresnel.eval(*cos_theta)
+        );
+    }
+}

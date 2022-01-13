@@ -62,6 +62,10 @@ impl Color {
     pub fn has_nan(&self) -> bool {
         self.r.is_nan() || self.g.is_nan() || self.b.is_nan()
     }
+    /// Returns true iff all RGB components are finite and free of NaNs.
+    pub fn is_finite(&self) -> bool {
+        self.r.is_finite() && self.g.is_finite() && self.b.is_finite()
+    }
 
     pub fn average(color_vec: &Vec<Self>) -> Self {
         match color_vec.len() {
@@ -77,8 +81,24 @@ impl Color {
         }
     }
     /// Component-wise (per RGB channel) division.
-    pub fn cw_div(&self, other: &Self) -> Self {
+    pub fn cw_div(&self, other: Self) -> Self {
         Color::new(self.r / other.r, self.g / other.g, self.b / other.b)
+    }
+    /// Component-wise sqrt (per RGB channel).
+    pub fn cw_sqrt(&self) -> Self {
+        Color::new(self.r.sqrt(), self.g.sqrt(), self.b.sqrt())
+    }
+    /// Component-wise max.
+    pub fn cw_max(&self, x: f32) -> Self {
+        Color::new(self.r.max(x), self.g.max(x), self.b.max(x))
+    }
+    /// Component-wise (per RGB channel) subtraction, with negative result clamped to 0.
+    pub fn capped_subtract(&self, other: &Self) -> Self {
+        Color::new(
+            (self.r - other.r).max(0.0),
+            (self.g - other.g).max(0.0),
+            (self.b - other.b).max(0.0),
+        )
     }
 }
 
@@ -94,6 +114,13 @@ impl std::ops::AddAssign for Color {
         self.r += rhs.r;
         self.g += rhs.g;
         self.b += rhs.b;
+    }
+}
+
+impl std::ops::Sub for Color {
+    type Output = Color;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Color::new(self.r - rhs.r, self.g - rhs.g, self.b - rhs.b)
     }
 }
 
