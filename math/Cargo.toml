@@ -4,3 +4,5 @@ version = "0.1.0"
 description = "Library module for pbrs"
 edition = "2018"
 
+[dependencies]
+itertools = "0.10.3"

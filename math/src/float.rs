@@ -189,6 +189,7 @@ pub trait Inside
 where
     Self: std::cmp::PartialOrd + Sized + Copy,
 {
+    /// Determines if number is in the given closed interval.
     fn inside(self, interval: (Self, Self)) -> bool {
         let (left, right) = interval;
         left <= self && self <= right

@@ -15,6 +15,10 @@ pub mod hcm;
 /// Provides `Prob` struct representing a probability mass or probability density.
 pub mod prob;
 
+/// Provides `CubicSpline` for creating a spline from sampled values.
+pub mod spline;
+pub use spline::CubicSpline;
+
 pub use float::Angle;
 pub fn new_rad(rad: f32) -> float::Angle {
     float::Angle::new_rad(rad)
