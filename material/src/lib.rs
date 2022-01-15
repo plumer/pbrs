@@ -1,4 +1,5 @@
-use geometry::bxdf::{self, BxDF};
+use geometry::bxdf::{self, BxDF, Fresnel};
+use geometry::microfacet::MicrofacetDistrib;
 use geometry::{microfacet, ray::Ray};
 use math::hcm::{self, Vec3};
 use radiometry::color::Color;
@@ -41,12 +42,24 @@ impl Lambertian {
     }
 }
 pub struct Metal {
-    pub albedo: Color,
+    // pub albedo: Color,
+    eta_real: Color,
+    eta_imag: Color,
     pub fuzziness: f32,
 }
 impl Metal {
-    pub fn new(albedo: Color, fuzziness: f32) -> Self {
-        Self { albedo, fuzziness }
+    pub fn new(_albedo: Color, _fuzziness: f32) -> Self {
+        panic!("Can't build from albedo. use from_ior instead")
+        // Self { albedo, fuzziness }
+    }
+    /// Builds a metal material from index of refraction and fuzziness.
+    /// Index of refraction is a per-channel complex number, expressed as η + ki.
+    pub fn from_ior(eta: Color, eta_k: Color, fuzziness: f32) -> Self {
+        Self {
+            eta_real: eta,
+            eta_imag: eta_k,
+            fuzziness,
+        }
     }
 }
 
@@ -196,13 +209,22 @@ impl Material for Metal {
     fn scatter(&self, wi: Vec3, isect: &Interaction) -> (Ray, Color) {
         let reflected = hcm::reflect(isect.normal, wi);
         let ray_out = Ray::new(isect.pos, reflected + uniform_sphere() * self.fuzziness);
-        (ray_out, self.albedo)
+        (
+            ray_out,
+            Fresnel::conductor(self.eta_real, self.eta_imag).eval(isect.normal.dot(wi).abs()),
+        )
     }
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        todo!()
+        let albedo = Color::white();
+        let alpha = MicrofacetDistrib::roughness_to_alpha(self.fuzziness);
+        let distrib = MicrofacetDistrib::beckmann(alpha, alpha);
+        let fresnel = Fresnel::conductor(self.eta_real, self.eta_imag);
+        vec![Box::new(bxdf::MicrofacetReflection::new(
+            albedo, distrib, fresnel,
+        ))]
     }
     fn summary(&self) -> String {
-        format!("Metal{{albedo = {}}}", self.albedo)
+        format!("Metal{{ior = {} + {}i}}", self.eta_real, self.eta_imag)
     }
 }
 
