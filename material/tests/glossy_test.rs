@@ -17,8 +17,8 @@ fn glossy_test() {
     
     let wo = bxdf::Omega::normalize(0.0, 0.0, 0.8);
     
-    let (uvec, du) = math::float::linspace((0.0, 1.0), 20);
-    let (vvec, dv) = math::float::linspace((0.0, 1.0), 20);
+    let (uvec, _du) = math::float::linspace((0.0, 1.0), 20);
+    let (vvec, _dv) = math::float::linspace((0.0, 1.0), 20);
     
     for u in uvec.iter().copied() {
         for v in vvec.iter().copied() {

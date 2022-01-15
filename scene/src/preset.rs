@@ -455,3 +455,54 @@ pub fn everything() -> Scene {
         .with_env_light(dark_room)
         .with_lights(vec![], area_lights)
 }
+
+pub fn env_mapped() -> Scene {
+    let sphere = Sphere::new(Point3::origin(), 2.0);
+    let sphere_mtl = mtl::Mirror::new(Color::white());
+    let mut instances = vec![Box::new(Instance::from_raw(sphere, sphere_mtl))];
+    // TODO: add more spheres with different materials
+    for (i, roughness) in [0.001f32, 0.003, 0.01, 0.03].iter().enumerate() {
+        let (real, imag) = gold_fresnel();
+        let metal_mtl = mtl::Metal::from_ior(real, imag, *roughness);
+        // let glossy_mtl = mtl::Glossy::new(Color::white(), *roughness);
+        let sphere = Sphere::new(point3(i as f32 * 6.0 - 9.0, 6.0, 0.0), 2.0);
+        instances.push(Box::new(Instance::from_raw(sphere, metal_mtl)));
+    }
+    let camera = Camera::new((1280, 800), math::new_deg(60.0)).looking_at(
+        point3(0.0, 0.0, -24.0),
+        Point3::origin(),
+        Vec3::ybase(),
+    );
+
+    let earth_map = tex::Image::from_file("assets/venice_dawn_1_2k.png").unwrap();
+
+    Scene::new(*tlas::build_bvh(instances), camera).with_env_map(earth_map)
+}
+
+pub fn silver_fresnel() -> (Color, Color) {
+    (
+        Color::new(0.155184, 0.116681, 0.138360),
+        Color::new(4.828131, 3.122411, 2.147082),
+    )
+}
+
+pub fn aluminium_fresnel() -> (Color, Color) {
+    (
+        Color::new(1.656937, 0.880173, 0.521201),
+        Color::new(9.224230, 6.269670, 4.836996),
+    )
+}
+
+pub fn gold_fresnel() -> (Color, Color) {
+    (
+        Color::new(0.143176, 0.373096, 1.443834),
+        Color::new(3.982675, 2.387439, 1.602465),
+    )
+}
+
+pub fn copper_fresnel() -> (Color, Color) {
+    (
+        Color::new(0.195470, 0.925682, 1.102186),
+        Color::new(3.910869, 2.451263, 2.142653),
+    )
+}
