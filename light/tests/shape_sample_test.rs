@@ -2,7 +2,7 @@ use std::f32::consts::PI;
 
 use light::ShapeSample;
 use math::float::Float;
-use math::hcm::{Point3, Vec3};
+use math::hcm::{point3, vec3, Point3, Vec3};
 use shape::{Interaction, Sphere};
 
 #[test]
@@ -16,6 +16,52 @@ fn test_sphere_sample_pdf_integrate() {
         "Int(pdf) = {}",
         pdf_integral
     );
+}
+
+#[test]
+fn observe_sphere_sample_towards() {
+    use shape::Shape;
+    let s = Sphere::new(Point3::origin(), 1.5);
+    let target = Interaction::rayless(point3(0.0, 3.0, 0.0), (0.0, 0.0), vec3(0.6, -0.8, 0.0));
+    if true {
+        let s = Sphere::new(point3(9.44999981, 20.0, -8.0), 0.2);
+        let target = Interaction::new(
+            point3(-18.3287563, 19.3762169, 0.0),
+            56.0,
+            (0.0417810902, 0.968810856),
+            -math::hcm::Vec3::zbase(),
+            vec3(0.327299207, -0.203146726, -1.0),
+        )
+        .with_dpdu(vec3(0.0, -1.0, 0.0));
+
+        let rnd2 = (0.9898101, 0.724872649);
+        s.sample_towards(&target, rnd2);
+    }
+    let (uvec, _) = math::float::linspace((0.0f32, 1.0), 10);
+    let vvec = uvec.clone();
+    for u in uvec.iter() {
+        for v in vvec.iter() {
+            let point_on_sphere = s.sample_towards(&target, (*u, *v));
+
+            let radial = point_on_sphere.pos - s.center();
+            assert!(radial.norm_squared().dist_to(s.radius().powi(2)) < 1e-3);
+            assert!(
+                point_on_sphere.normal.cross(radial).norm_squared() < 1e-3,
+                "radial = {}, normal = {}",
+                radial,
+                point_on_sphere.normal
+            );
+
+            let r = target.spawn_ray(point_on_sphere.pos - target.pos);
+            let hit = s.intersect(&r).unwrap();
+            assert!(
+                hit.pos.squared_distance_to(point_on_sphere.pos) < 1e-1,
+                "actual {} vs expected {}",
+                hit.pos,
+                point_on_sphere.pos
+            );
+        }
+    }
 }
 
 /// Monte-Carlo integrates `pdf_at()` of a sphere. Should evaluate to 1.0.
