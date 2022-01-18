@@ -526,7 +526,7 @@ impl Shape for IsolatedTriangle {
         BBox::new(self.p0, self.p1).union(self.p2)
     }
     fn intersect(&self, r: &Ray) -> Option<Interaction> {
-        intersect_triangle(self.p0, self.p1, self.p2, r)
+        intersect_triangle(self.p0, self.p1, self.p2, r).map(|i| i.with_dpdu(self.p1 - self.p0))
     }
     fn occludes(&self, r: &Ray) -> bool {
         intersect_triangle_pred(self.p0, self.p1, self.p2, r)

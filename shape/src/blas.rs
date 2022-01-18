@@ -191,7 +191,8 @@ impl TriangleMesh {
             } else {
                 p1 - p0
             };
-
+            let dpdu = (dpdu - dpdu.projected_onto(bclerp_normal)).hat();
+            assert!(dpdu.dot(bclerp_normal).abs() < 1e-4);
             Some(
                 Interaction::new(isect.pos, isect.ray_t, bclerp_uv, bclerp_normal, isect.wo)
                     .with_dpdu(dpdu),
@@ -487,4 +488,31 @@ where
                     || intersect_bvh_pred(shapes, &*right, r, shape_intersect_pred)
             }
         }
+}
+
+#[test]
+fn tricky_triangle() {
+    use math::hcm::{point3, vec3};
+    let points = vec![
+        point3(10.3457699, 27.3706398, -21.2291069),
+        point3(10.3457699, 13.3905125, -21.1700611),
+        point3(7.22226286, 13.3905125, -21.1700611),
+    ];
+    let normals = vec![
+        Vec3 {
+            x: 0.0,
+            y: 0.00419999985,
+            z: 1.0,
+        };
+        3
+    ];
+    let uvs = vec![(0.0, 0.0); 3];
+
+    let mesh = TriangleMesh::from_soa(points, normals, uvs, vec![(0, 1, 2)]);
+    let ray = geometry::ray::Ray::new(
+        point3(0.0, 23.0, 30.0),
+        vec3(0.219424784, -0.0887561888, -1.08688462),
+    );
+
+    mesh.intersect(&ray);
 }

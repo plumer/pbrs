@@ -127,6 +127,22 @@ impl Vec3 {
             -self
         }
     }
+    
+    /// Projects `self` onto `other`. Both vectors can be arbitrary finite length.
+    /// ```
+    /// let a = math::hcm::vec3(1.0, 2.5, 0.0);
+    /// let b = math::hcm::vec3(0.6, 0.0, 0.0);
+    /// let c = b - b.projected_onto(a);
+    /// assert!(c.dot(a).abs() < f32::EPSILON, "c = {}, a = {}", c, a);
+    ///
+    /// let a = math::hcm::vec3(0.19, -0.00, 0.98);
+    /// let b = math::hcm::vec3(-9762.44, -17.83, 1851.39);
+    /// let c = b - b.projected_onto(a);
+    /// assert!(c.dot(a).abs() < f32::EPSILON, "c = {}, a = {}", c, a);
+    /// ```
+    pub fn projected_onto(self, other: Self) -> Self {
+        self.dot(other) * other / other.norm_squared()
+    }
 
     // Returns the index to the element with minimum magnitude.
     pub fn abs_min_dimension(self) -> usize {
