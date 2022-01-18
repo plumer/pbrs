@@ -40,6 +40,11 @@ impl Color {
     pub fn white() -> Color {
         Color::new(1.0, 1.0, 1.0)
     }
+    pub const ONE: Color = Self {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+    };
     pub fn gray(level: f32) -> Color {
         Color::new(level, level, level)
     }

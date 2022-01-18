@@ -1,6 +1,6 @@
 use std::f32::consts::FRAC_1_PI;
 
-use crate::microfacet::{self as mf};
+use crate::microfacet::{self as mf, MicrofacetDistrib};
 use math::float::Float;
 use math::hcm::Vec3;
 use math::prob::Prob;
@@ -378,6 +378,14 @@ impl Specular {
         }
     }
 
+    pub fn transmit(albedo: Color, eta_outer: f32, eta_inner: f32) -> Self {
+        Self {
+            fresnel: Fresnel::dielectric(eta_outer, eta_inner),
+            albedo,
+            intrusion: IntrusionType::Transmission,
+        }
+    }
+
     fn reflect(&self, wo: Omega) -> (Omega, Color) {
         let wi = Omega::new(-wo.x(), -wo.y(), wo.z());
         let fr_refl = self.fresnel.eval(wi.cos_theta());
@@ -587,6 +595,84 @@ impl BxDF for MicrofacetReflection {
             Prob::Density(self.distrib.pdf(wo, wh) / (4.0 * wo.dot(wh)))
         } else {
             eprintln!("mid({}, {}) = {}", wo.0, wi.0, wo.0 + wi.0);
+            Prob::Density(0.0)
+        }
+    }
+}
+
+/// A BRDF modeling a diffuse underlying surface with a glossy specular surface above it.
+/// The effect of reflection from the diffuse surface is modulated by the amount of energy left
+/// after Fresnel effects have been considered. Diffuse layer mainly contributes to the BRDF when
+/// the viewing angle is closer to the normal, and at grazing angles, specular component takes more
+/// contribution.
+///
+/// The specular component is modeled with a microfacet distribution.
+pub struct FresnelBlend {
+    diffuse: Color,
+    specular: Color,
+    distrib: MicrofacetDistrib,
+}
+
+impl FresnelBlend {
+    /// The microfacet `distrib` models the specular component.
+    pub fn new(diffuse: Color, specular: Color, distrib: MicrofacetDistrib) -> Self {
+        FresnelBlend {
+            diffuse,
+            specular,
+            distrib,
+        }
+    }
+    pub fn schlick_fresnel(&self, cos_theta: f32) -> Color {
+        self.specular + (1.0 - cos_theta).powi(5) * (Color::ONE - self.specular)
+    }
+}
+
+impl BxDF for FresnelBlend {
+    fn eval(&self, wo: Omega, wi: Omega) -> Color {
+        match Omega::bisector(wo, wi) {
+            None => Color::black(),
+            Some(wh) => {
+                let diffuse = (28.0 / 23.0 * FRAC_1_PI)
+                    * self.diffuse
+                    * (Color::ONE - self.specular)
+                    * (1.0 - (1.0 - 0.5 * wi.cos_theta().abs()).powi(5))
+                    * (1.0 - (1.0 - 0.5 * wo.cos_theta().abs()).powi(5));
+                let specular = self.distrib.d(wh)
+                    / (4.0
+                        * wi.dot(wh).abs()
+                        * f32::max(wi.cos_theta().abs(), wo.cos_theta().abs()))
+                    * self.schlick_fresnel(wi.dot(wh));
+                diffuse + specular
+            }
+        }
+    }
+
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, Prob) {
+        let (u, v) = rnd2;
+        let wi = if u < 0.5 {
+            // Samples from the diffuse model.
+            let u_remapped = (u * 2.0).min(1.0 - f32::EPSILON);
+            let wi = cos_sample_hemisphere((u_remapped, v));
+            assert!(Omega::same_hemisphere(wo, wi));
+            wi
+        } else {
+            let u_remapped = (u * 2.0).fract();
+            let wh = self.distrib.sample_wh(wo, (u_remapped, v));
+            let wi = Omega::reflect(wh, wo);
+            if Omega::same_hemisphere(wo, wi) {
+                return (Color::black(), Omega::normal(), Prob::Mass(0.0));
+            }
+            wi
+        };
+        (self.eval(wo, wi), wi, self.prob(wo, wi))
+    }
+
+    fn prob(&self, wo: Omega, wi: Omega) -> Prob {
+        if Omega::same_hemisphere(wo, wi) {
+            Prob::Density(0.0)
+        } else if let Some(wh) = Omega::bisector(wo, wi) {
+            Prob::Density(0.5 * (wi.cos_theta().abs() + self.distrib.d(wh) / (4.0 * wo.dot(wh))))
+        } else {
             Prob::Density(0.0)
         }
     }
