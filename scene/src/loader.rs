@@ -72,6 +72,12 @@ impl SceneLoader {
         }
     }
 
+    fn resolve_relative_path(&self, relative_path: &str) -> String {
+        let mut absolute_path_buf = self.root_dir.clone();
+        absolute_path_buf.push(relative_path);
+        absolute_path_buf.to_str().unwrap().to_string()
+    }
+
     fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> (Option<Camera>, AffineTransform) {
         let mut fov = None;
         let mut w = None;
@@ -484,9 +490,29 @@ impl SceneLoader {
                 Some(ArgValue::String(bool_str)) => bool_str.parse::<bool>().unwrap(),
                 Some(wtf) => panic!("remaproughness value isn't bool: {:?}", wtf),
             };
-            let _eta = 0.1;
-            let _k = 0.2;
-            Arc::new(mtl::Metal::new(Color::white(), roughness))
+            let eta = match parameters.extract_substr("eta") {
+                None => crate::preset::copper_fresnel().0,
+                Some((key, ArgValue::Numbers(nums))) => {
+                    let spectrum_type = key.split(' ').next().unwrap();
+                    Self::parse_constant_color(spectrum_type, nums)
+                }
+                Some((_, ArgValue::String(spd_file_path))) => {
+                    color_from_spd_file(&self.resolve_relative_path(&spd_file_path))
+                }
+                Some((_, wtf)) => unimplemented!("metal, eta = {:?}", wtf),
+            };
+            let k = match parameters.extract_substr("k") {
+                None => crate::preset::copper_fresnel().0,
+                Some((key, ArgValue::Numbers(nums))) => {
+                    let spectrum_type = key.split(' ').next().unwrap();
+                    Self::parse_constant_color(spectrum_type, nums)
+                }
+                Some((_, ArgValue::String(spd_file_path))) => {
+                    color_from_spd_file(&self.resolve_relative_path(&spd_file_path))
+                }
+                Some((_, wtf)) => unimplemented!("metal, k = {:?}", wtf),
+            };
+            Arc::new(mtl::Metal::from_ior(eta, k, roughness))
         } else if mtl_impl == "plastic" {
             let kd = match parameters.extract_substr("Kd") {
                 None => Color::gray(0.25),
@@ -728,4 +754,27 @@ impl SceneLoader {
             Transform::LookAt(..) => panic!("unsupported lookat in modeling step"),
         }
     }
+}
+
+pub fn color_from_spd_file(path: &str) -> Color {
+    use std::io::BufRead;
+    let spd_file = File::open(path).unwrap();
+    let mut lambdas_and_values = Vec::new();
+    for line in std::io::BufReader::new(spd_file).lines() {
+        if let Ok(content) = line {
+            if content.trim().starts_with('#') {
+                continue;
+            }
+            let numbers = content
+                .split(' ')
+                .map(|s| s.parse::<f32>().unwrap())
+                .collect::<Vec<_>>();
+            assert!(numbers.len() >= 2);
+            if numbers.len() > 2 {
+                eprintln!("more than 2 numbers in the line: {:?}", numbers);
+            }
+            lambdas_and_values.push((numbers[0], numbers[1]));
+        }
+    }
+    radiometry::spectrum::sampled_spectrum_to_color(&mut lambdas_and_values)
 }

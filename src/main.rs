@@ -385,37 +385,46 @@ where
 
 #[test]
 fn metal_test() {
-    use std::io::BufRead;
-    let color_from_spd_file = |path: &'static str| {
-        let spd_file = File::open(path).unwrap();
-        let mut lambdas_and_values = Vec::new();
-        for line in std::io::BufReader::new(spd_file).lines() {
-            if let Ok(content) = line {
-                let numbers = content
-                    .split(' ')
-                    .map(|s| s.parse::<f32>().unwrap())
-                    .collect::<Vec<_>>();
-                assert!(numbers.len() >= 2);
-                if numbers.len() > 2 {
-                    eprintln!("more than 2 numbers in the line: {:?}", numbers);
-                }
-                lambdas_and_values.push((numbers[0], numbers[1]));
-            }
-        }
-        radiometry::spectrum::sampled_spectrum_to_color(&mut lambdas_and_values)
-    };
+    let observe_metal = |name: &str, real_spd_path: &str, imag_spd_path: &str| {
+        let eta_real = scene::loader::color_from_spd_file(real_spd_path);
+        let eta_imag = scene::loader::color_from_spd_file(imag_spd_path);
+        println!("{} eta: {:.6} + {:.6}i", name, eta_real, eta_imag);
 
-    let silver_eta_real = color_from_spd_file("assets/metals/Ag.eta.spd");
-    let silver_eta_imag = color_from_spd_file("assets/metals/Ag.k.spd");
-    println!("Silver eta: {} + {}i", silver_eta_real, silver_eta_imag);
-
-    let silver_fresnel = geometry::bxdf::Fresnel::conductor(silver_eta_real, silver_eta_imag);
+        let metal_fresnel = geometry::bxdf::Fresnel::conductor(eta_real, eta_imag);
 
     for cos_theta in [0.9, 0.8, 0.7, 0.6, 0.5].iter() {
         println!(
-            "silver at cos_theta = {}, refl = {:.5}",
+                "{} at cos_theta = {}, refl = {:.5}",
+                name,
             cos_theta,
-            silver_fresnel.eval(*cos_theta)
+                metal_fresnel.eval(*cos_theta)
         );
     }
+    };
+    observe_metal(
+        "Silver",
+        "assets/metals/Ag.eta.spd",
+        "assets/metals/Ag.k.spd",
+    );
+    observe_metal(
+        "Aluminium",
+        "assets/metals/Al.eta.spd",
+        "assets/metals/Al.k.spd",
+    );
+    observe_metal("Gold", "assets/metals/Au.eta.spd", "assets/metals/Au.k.spd");
+    observe_metal(
+        "Chromium",
+        "assets/metals/Cr.eta.spd",
+        "assets/metals/Cr.k.spd",
+    );
+    observe_metal(
+        "Copper",
+        "assets/metals/Cu.eta.spd",
+        "assets/metals/Cu.k.spd",
+    );
+    observe_metal(
+        "Mercury",
+        "assets/metals/Hg.eta.spd",
+        "assets/metals/Hg.k.spd",
+    );
 }
