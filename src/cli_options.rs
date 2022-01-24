@@ -3,7 +3,6 @@ use std::collections::HashMap;
 pub enum Integrator {
     Direct,
     Path,
-    DebugNormal
 }
 
 impl Integrator {
@@ -11,7 +10,6 @@ impl Integrator {
         match s {
             "direct" => Some(Self::Direct),
             "path" => Some(Self::Path),
-            "debug_normal" => Some(Self::DebugNormal),
             _ => None,
         }
     }
@@ -20,7 +18,6 @@ impl Integrator {
         match self {
             &Self::Direct => "direct",
             &Self::Path => "path",
-            &Self::DebugNormal => "debug_normal",
         }
     }
 }
@@ -31,6 +28,8 @@ pub struct CliOptions {
     pub pbrt_file: Option<String>,
     pub integrator: Integrator,
     pub msaa: u32,
+    pub visualize_materials: bool,
+    pub visualize_normals: bool,
 }
 
 impl Default for CliOptions {
@@ -41,6 +40,8 @@ impl Default for CliOptions {
             pbrt_file: None,
             integrator: Integrator::Path,
             msaa: 2,
+            visualize_normals: false,
+            visualize_materials: false,
         }
     }
 }
@@ -52,6 +53,8 @@ impl CliOptions {
         --scene_name <scene_name>
         --pbrt_file <file.pbrt>
         --integrator <direct|path>
+        --visualize_materials
+        --visualize_normals
         --msaa <N>
         "#
     }
@@ -103,6 +106,8 @@ pub fn parse_args(args: Vec<String>) -> Result<CliOptions, String> {
                     .flatten()
                     .expect("unsupported")
             }
+            "--visualize_normals" => options.visualize_normals = true,
+            "--visualize_materials" => options.visualize_materials = true,
             _ => return Err(format!("Unrecognized key {}", k)),
         }
     }

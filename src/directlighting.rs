@@ -213,3 +213,60 @@ fn power_heuristic<const BETA: i32>(nf: f32, f_pdf: f32, ng: f32, g_pdf: f32) ->
     let g = ng * g_pdf;
     f.powi(BETA) / (f.powi(BETA) + g.powi(BETA))
 }
+
+pub fn material_visualizer(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
+    let pal: [Color; 10] = [
+        Color::rgb(232, 207, 59),
+        Color::rgb(124, 188, 126),
+        Color::rgb(30, 68, 176),
+        Color::rgb(15, 142, 205),
+        Color::rgb(44, 180, 172),
+        Color::rgb(216, 39, 252),
+        Color::rgb(143, 112, 252),
+        Color::gray(0.3),
+        Color::gray(0.9),
+        Color::black(),
+    ];
+    if let Some((_, mtl)) = scene.tlas.intersect(&mut ray) {
+        let index = match mtl.summary() {
+            x if x.contains("Lambertian") => 8,
+            x if x.contains("Metal") => 7,
+            x if x.contains("Fourier") => 6,
+            x if x.contains("Mirror") => 5,
+            x if x.contains("Dielectric") => 4,
+            x if x.contains("DiffuseLight") => 3,
+            x if x.contains("uber") => 2,
+            x if x.contains("substrate") => 1,
+            x if x.contains("plastic") => 0,
+            _ => 9,
+        };
+        pal[index as usize]
+    } else {
+        let (x, y, _) = math::hcm::Point3::from(ray.dir).as_triple();
+
+        let parity = (x * 50.0).floor() as i32 + (y * 50.0).floor() as i32;
+        if parity % 2 == 0 {
+            Color::gray(0.9)
+        } else {
+            Color::gray(0.7)
+        }
+    }
+}
+
+pub fn normal_visualizer(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
+    fn vec3_to_color(v: math::hcm::Vec3) -> Color {
+        Color::new(v.x, v.y, v.z)
+    }
+
+    let hit_info = scene.tlas.intersect(&mut ray);
+
+    match hit_info {
+        None => scene.eval_env_light(ray),
+        Some((hit, mtl)) => {
+            let (_, albedo) = mtl.scatter(-ray.dir, &hit);
+            (albedo + vec3_to_color(hit.normal)) * 0.5
+            // albedo
+            // (Color::from(hit.normal) + Color::white()) * 0.5
+        }
+    }
+}

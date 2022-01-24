@@ -13,6 +13,7 @@ rayon = "1.5"
 partition = "0.1"
 env_logger = "0.9"
 log = "0.4"
+itertools = "0.10.3"
 
 [dependencies.math]
 path = "math"

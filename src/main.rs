@@ -3,12 +3,13 @@ mod cli_options;
 mod directlighting;
 
 use io::Write;
+use itertools::Itertools;
 use log::*;
 use std::fs::File;
 use std::io::{self, BufWriter};
 use std::time::Instant;
 
-use crate::directlighting::direct_lighting_integrator;
+use crate::directlighting::*;
 use geometry::ray;
 use light::EnvLight;
 use material as mtl;
@@ -18,10 +19,6 @@ use scene::{preset, Scene};
 use tlas::bvh::BvhNode;
 
 use rayon::prelude::*;
-
-fn vec3_to_color(v: Vec3) -> Color {
-    Color::new(v.x, v.y, v.z)
-}
 
 fn rand_f32() -> f32 {
     rand::random::<f32>()
@@ -75,6 +72,15 @@ fn main() {
             }
         }
     };
+    let scene_name = match (options.scene_name, options.pbrt_file) {
+        (Some(name), None) => name,
+        (None, Some(path)) => std::path::Path::new(&path)
+            .file_stem()
+            .map(|s| s.to_owned().into_string())
+            .unwrap()
+            .unwrap(),
+        _ => "output".to_owned(),
+    };
 
     info!(
         "building bvh success: {}, height = {}",
@@ -125,9 +131,31 @@ fn main() {
     let integrator = match options.integrator {
         cli_options::Integrator::Direct => direct_lighting_integrator,
         cli_options::Integrator::Path => path_integrator,
-        cli_options::Integrator::DebugNormal => normal_visualizer,
     };
     let (width, height) = scene.camera.resolution();
+
+    // Produces visualizations if specified.
+    let visualize = |visualizer: fn(&Scene, ray::Ray, i32) -> Color, what: &str| {
+        let visualized_image = ((0..height).cartesian_product(0..width))
+            .map(|(row, col)| {
+                let ray = scene.camera.shoot_ray(row, col, (0.0, 0.0)).unwrap();
+                visualizer(&scene, ray, 0).gamma_encode().to_u8()
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+        write_image(
+            &format!("{}-{}-vis.png", scene_name, what),
+            &visualized_image,
+            (width, height),
+        );
+    };
+
+    if options.visualize_normals {
+        visualize(normal_visualizer, "normal");
+    }
+    if options.visualize_materials {
+        visualize(material_visualizer, "mtl");
+    }
 
     // Function lambda to render one row. It's going to be used in the main rendering process.
     let render_one_row = |row| {
@@ -185,16 +213,6 @@ fn main() {
     println!("whole render time = {:?}", whole_render_time);
 
     // Builds the file name using scene name and SPP, and writes the resulting image to a file.
-    let scene_name = match (options.scene_name, options.pbrt_file) {
-        (Some(name), None) => name,
-        (None, Some(path)) => std::path::Path::new(&path)
-            .file_stem()
-            .map(|s| s.to_owned().into_string())
-            .unwrap()
-            .unwrap(),
-        _ => "output".to_owned(),
-    };
-
     let output_file_name = format!(
         "{}-{}-{}spp.png",
         scene_name,
@@ -261,21 +279,6 @@ fn debug_pt(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvL
                 );
                 attenuation * incident_radiance
             }
-        }
-    }
-}
-
-#[allow(dead_code)]
-fn normal_visualizer(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
-    let hit_info = scene.tlas.intersect(&mut ray);
-
-    match hit_info {
-        None => scene.eval_env_light(ray),
-        Some((hit, mtl)) => {
-            let (_, albedo) = mtl.scatter(-ray.dir, &hit);
-            (albedo + vec3_to_color(hit.normal)) * 0.5
-            // albedo
-            // (Color::from(hit.normal) + Color::white()) * 0.5
         }
     }
 }
