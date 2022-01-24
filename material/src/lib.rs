@@ -18,7 +18,7 @@ pub trait Material: Sync + Send {
     /// Computes the scattering of a ray on a given surface interaction.
     /// Returns the scattered ray and modulated radiance (BSDF value).
     /// A 2D random variable is needed for most surfaces.
-    fn bxdfs_at(&self, isect: &Interaction) -> Vec<Box<dyn BxDF>>;
+    fn bxdfs_at<'a>(&'a self, isect: &Interaction) -> Vec<Box<dyn BxDF + 'a>>;
 
     fn emission(&self) -> Color {
         Color::black()

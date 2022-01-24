@@ -10,7 +10,7 @@ use shape::Interaction;
 ///
 pub struct BSDF<'a> {
     frame: hcm::Mat3,
-    bxdfs: &'a [Box<dyn BxDF>],
+    bxdfs: &'a [Box<dyn BxDF + 'a>],
 }
 
 impl<'a> BSDF<'a> {
@@ -34,12 +34,10 @@ impl<'a> BSDF<'a> {
     pub fn frame(&self) -> hcm::Mat3 {
         self.frame
     }
-    
-    pub fn with_bxdfs(self, bxdfs: &'a Vec<Box<dyn BxDF>>) -> Self {
-        Self {
-            bxdfs: bxdfs.as_slice(),
-            ..self
-        }
+
+    /// Adds a set of BxDFs to the frame. The BSDF object shouldn't outlive the `bxdfs`.
+    pub fn with_bxdfs(self, bxdfs: &'a Vec<Box<dyn BxDF + 'a>>) -> Self {
+        Self { bxdfs, ..self }
     }
 
     pub fn eval(&self, wo: hcm::Vec3, wi: hcm::Vec3) -> Color {
@@ -122,10 +120,7 @@ impl<'a> BSDF<'a> {
             true
         } else {
             println!("frame = {} {} {}", cols[0], cols[1], cols[2]);
-            println!(
-                "frame^T frame = {:?}",
-                self.frame * self.frame.transpose()
-            );
+            println!("frame^T frame = {:?}", self.frame * self.frame.transpose());
             println!("det = {}", det);
             false
         }
