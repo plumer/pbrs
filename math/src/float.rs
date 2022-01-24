@@ -132,7 +132,7 @@ impl Float for f32 {
 pub fn linspace<T, U>(interval: (T, T), count: i32) -> (Vec<T>, U)
 where
     T: Copy + std::ops::Sub<T, Output = U>,
-    U: Copy + std::ops::Mul<f32, Output = U> + std::ops::Add<T, Output = T>
+    U: Copy + std::ops::Mul<f32, Output = U> + std::ops::Add<T, Output = T>,
 {
     let (a, b) = interval;
     let spacing = (b - a) * (1.0 / count as f32);
@@ -142,7 +142,7 @@ where
             .into_iter()
             .map(|i| spacing * (i as f32 + 0.5) as f32 + a)
             .collect::<Vec<_>>(),
-        spacing
+        spacing,
     )
 }
 

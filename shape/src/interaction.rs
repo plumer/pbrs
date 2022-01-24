@@ -21,7 +21,7 @@ pub struct Interaction {
 
 impl Interaction {
     pub fn new(pos: Point3, ray_t: f32, uv: (f32, f32), normal: Vec3, wo: Vec3) -> Interaction {
-        assert!(normal.dot(wo) >= 0.0);
+        assert!(normal.dot(wo) >= 0.0, "dot(normal, wo) = {}", normal.dot(wo));
         Interaction {
             pos,
             ray_t,

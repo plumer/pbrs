@@ -246,9 +246,8 @@ impl Instance {
             Some(hit) => {
                 assert!(
                     !hit.pos.has_nan(),
-                    "shape {} intersect ray {} has nan",
+                    "shape {} intersect ray {ray} has nan",
                     self.shape.summary(),
-                    ray
                 );
                 assert!(
                     hit.has_valid_frame(),
@@ -263,7 +262,7 @@ impl Instance {
     }
     pub fn occludes(&self, ray: &Ray) -> bool {
         let inv_ray = self.transform.inverse().apply(*ray);
-        assert!(inv_ray.dir.norm_squared() > 1e-3, "ray = {:?}", ray);
+        assert!(inv_ray.dir.norm_squared() > 1e-6, "ray = {:?}", ray);
         self.shape.occludes(&inv_ray)
     }
 }
