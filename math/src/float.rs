@@ -175,6 +175,15 @@ impl Interval {
     pub fn lerp(&self, t: f32) -> f32 {
         lerp(self.min, self.max, t)
     }
+    pub fn midpoint(&self) -> f32 {
+        (self.min + self.max) * 0.5
+    }
+    pub fn min(&self) -> f32 {
+        self.min
+    }
+    pub fn max(&self) -> f32 {
+        self.max
+    }
 }
 
 pub fn min_max(a: f32, b: f32) -> (f32, f32) {
@@ -194,9 +203,15 @@ where
         let (left, right) = interval;
         left <= self && self <= right
     }
+    /// Determines if number is in the given open interval.
+    fn inside_open(self, interval: (Self, Self)) -> bool {
+        let (left, right) = interval;
+        left < self && self < right
+    }
 }
 
 impl Inside for f32 {}
+impl Inside for f64 {}
 
 #[derive(Debug, Clone, Copy)]
 /// Type-safe representation for an angle. Radian values are stored internally.
@@ -262,6 +277,34 @@ impl std::fmt::Display for Angle {
         write!(f, "{:.2}deg", self.to_deg())
     }
 }
+
+pub trait Fallback: Copy {
+    /// Returns the backup option `v` if `cond(self)` is true, otherwise returns `self`.
+    fn fallback_if<F>(self, cond: F, v: Self) -> Self
+    where
+        F: FnOnce(Self) -> bool,
+    {
+        if cond(self) {
+            v
+        } else {
+            self
+        }
+    }
+    /// Returns `self` if `cond(self)` holds, otherwise returns the backup option.
+    fn filter_or<F>(self, cond: F, backup: Self) -> Self
+    where
+        F: FnOnce(Self) -> bool,
+    {
+        if cond(self) {
+            self
+        } else {
+            backup
+        }
+    }
+}
+
+impl Fallback for f32 {}
+impl Fallback for f64 {}
 
 #[macro_export]
 macro_rules! assert_le {

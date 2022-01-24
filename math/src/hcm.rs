@@ -69,6 +69,9 @@ impl Vec3 {
     pub fn new(x: f32, y: f32, z: f32) -> Vec3 {
         Vec3 { x, y, z }
     }
+    pub fn as_triple(self) -> (f32, f32, f32) {
+        (self.x, self.y, self.z)
+    }
     pub fn xbase() -> Vec3 {
         Self::new(1.0, 0.0, 0.0)
     }

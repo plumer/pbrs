@@ -67,6 +67,14 @@ impl Color {
     pub fn has_nan(&self) -> bool {
         self.r.is_nan() || self.g.is_nan() || self.b.is_nan()
     }
+    /// Clamps each of the RGB channel to be within `[0, 1]`.
+    pub fn clamp(self) -> Self {
+        Color::new(
+            self.r.clamp(0.0, 1.0),
+            self.g.clamp(0.0, 1.0),
+            self.b.clamp(0.0, 1.0),
+        )
+    }
     /// Returns true iff all RGB components are finite and free of NaNs.
     pub fn is_finite(&self) -> bool {
         self.r.is_finite() && self.g.is_finite() && self.b.is_finite()

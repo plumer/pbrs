@@ -92,6 +92,17 @@ impl Omega {
         }
     }
 
+    /// Returns difference between phi angles of `self` and `other`.
+    pub fn cos_dphi(self, other: Self) -> f32 {
+        let (x0, y0, _) = self.0.as_triple();
+        let (x1, y1, _) = other.0.as_triple();
+        // Computes angle between (x0, y0) and (x1, y1)
+        //    v0 dot v1
+        // ---------------
+        // ||v0|| * ||v1||
+        (x0 * x1 + y0 * y1) / ((x0 * x0 + y0 * y0) * (x1 * x1 + y1 * y1)).sqrt()
+    }
+
     /// Returns true if 2 vectors are on the same side of the surface.
     /// The normal of the surface is implicitly (0, 0, 1).
     pub fn same_hemisphere(w0: Omega, w1: Omega) -> bool {
@@ -163,6 +174,14 @@ impl Omega {
             }
         }
         (vectors, (d_theta, d_phi))
+    }
+}
+
+impl std::ops::Neg for Omega {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
     }
 }
 
