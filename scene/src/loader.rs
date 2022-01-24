@@ -640,16 +640,11 @@ impl SceneLoader {
                 Some((_, wtf)) => panic!("invalid remapreoughness: {:?}", wtf),
             };
             let rough = if v_roughness == u_roughness {
-                mtl::Roughness::Iso(v_roughness)
+                u_roughness
             } else {
-                mtl::Roughness::UV((u_roughness, v_roughness))
+                unimplemented!() // mtl::Roughness::UV((u_roughness, v_roughness))
             };
-            Arc::new(mtl::Substrate {
-                kd,
-                ks,
-                rough,
-                remap_roughness,
-            })
+            Arc::new(mtl::Substrate::new(kd, ks, rough, remap_roughness))
         } else if mtl_impl == "fourier" {
             error!("unimplemented fourier");
             Arc::new(mtl::Lambertian::solid(Color::white()))

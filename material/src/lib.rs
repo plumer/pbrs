@@ -120,24 +120,6 @@ pub enum Roughness {
     UV((f32, f32)),
 }
 
-pub struct Uber {
-    pub kd: Arc<dyn Texture>,
-    pub ks: Arc<dyn Texture>,
-    pub kr: Option<Arc<dyn Texture>>,
-    pub kt: Option<Arc<dyn Texture>>,
-    pub rough: Roughness,
-    pub eta: f32,
-    pub opacity: f32,
-    pub remap_roughness: bool,
-}
-
-pub struct Substrate {
-    pub kd: Arc<dyn Texture>,
-    pub ks: Arc<dyn Texture>,
-    pub rough: Roughness,
-    pub remap_roughness: bool,
-}
-
 pub struct DiffuseLight {
     emit: Color,
 }
@@ -318,15 +300,90 @@ impl Material for DiffuseLight {
     }
 }
 
+pub struct Uber {
+    pub kd: Arc<dyn Texture>,
+    pub ks: Arc<dyn Texture>,
+    pub kr: Option<Arc<dyn Texture>>,
+    pub kt: Option<Arc<dyn Texture>>,
+    pub rough: Roughness,
+    pub eta: f32,
+    pub opacity: f32,
+    pub remap_roughness: bool,
+}
+
 impl Material for Uber {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        todo!()
+    fn bxdfs_at(&self, isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+        let mut bxdfs: Vec<Box<dyn BxDF>> = vec![];
+        let transmission = Color::gray((1.0 - self.opacity).clamp(0.0, 1.0));
+        if transmission.is_black() {
+        } else {
+            let spec_transmit = bxdf::Specular::transmit(transmission, 1.0, self.eta);
+            bxdfs.push(Box::new(spec_transmit));
+        }
+
+        let kd = self.kd.value(isect.uv, isect.pos);
+        if !kd.is_black() {
+            let diffuse = bxdf::DiffuseReflect::lambertian(kd);
+            bxdfs.push(Box::new(diffuse));
+        }
+        let ks = self.ks.value(isect.uv, isect.pos);
+        if !ks.is_black() {
+            let fresnel = Fresnel::dielectric(1.0, self.eta);
+            let (ru, rv) = match self.rough {
+                Roughness::Iso(u) => (u, u),
+                Roughness::UV(uv) => uv,
+            };
+            let (au, av) = match self.remap_roughness {
+                true => (
+                    MicrofacetDistrib::roughness_to_alpha(ru),
+                    MicrofacetDistrib::roughness_to_alpha(rv),
+                ),
+                false => (ru, rv),
+            };
+            let distrib = MicrofacetDistrib::beckmann(au, av);
+            let spec = bxdf::MicrofacetReflection::new(ks, distrib, fresnel);
+            bxdfs.push(Box::new(spec));
+        }
+
+        if let Some(kr_tex) = &self.kr {
+            let kr = kr_tex.value(isect.uv, isect.pos);
+            if !kr.is_black() {
+                let refl = bxdf::Specular::dielectric(kr, 1.0, self.eta);
+                bxdfs.push(Box::new(refl));
+            }
+        }
+        if let Some(kt_tex) = &self.kt {
+            let kt = kt_tex.value(isect.uv, isect.pos);
+            if !kt.is_black() {
+                let trans = bxdf::Specular::transmit(kt, 1.0, self.eta);
+                bxdfs.push(Box::new(trans));
+            }
+        }
+        bxdfs
     }
     fn summary(&self) -> String {
         String::from("uber")
+    }
+}
+
+pub struct Substrate {
+    pub kd: Arc<dyn Texture>,
+    pub ks: Arc<dyn Texture>,
+    pub alpha: f32,
+}
+
+impl Substrate {
+    pub fn new(
+        kd: Arc<dyn Texture>, ks: Arc<dyn Texture>, roughness: f32, remap_roughness: bool,
+    ) -> Self {
+        let alpha = match remap_roughness {
+            true => MicrofacetDistrib::roughness_to_alpha(roughness),
+            false => roughness,
+        };
+        Self { kd, ks, alpha }
     }
 }
 
@@ -334,8 +391,34 @@ impl Material for Substrate {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        todo!()
+    fn bxdfs_at(&self, isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+        /*
+        if (bumpMap) Bump(bumpMap, si);
+        si->bsdf = ARENA_ALLOC(arena, BSDF)(*si);
+        Spectrum d = Kd->Evaluate(*si).Clamp();
+        Spectrum s = Ks->Evaluate(*si).Clamp();
+        Float roughu = nu->Evaluate(*si);
+        Float roughv = nv->Evaluate(*si);
+
+        if (!d.IsBlack() || !s.IsBlack()) {
+            if (remapRoughness) {
+                roughu = TrowbridgeReitzDistribution::RoughnessToAlpha(roughu);
+                roughv = TrowbridgeReitzDistribution::RoughnessToAlpha(roughv);
+            }
+            MicrofacetDistribution *distrib =
+                ARENA_ALLOC(arena, TrowbridgeReitzDistribution)(roughu, roughv);
+            si->bsdf->Add(ARENA_ALLOC(arena, FresnelBlend)(d, s, distrib));
+        } */
+        let diffuse = self.kd.value(isect.uv, isect.pos);
+        let specular = self.ks.value(isect.uv, isect.pos);
+        if diffuse.is_black() && specular.is_black() {
+            vec![]
+        } else {
+            let distrib = MicrofacetDistrib::beckmann(self.alpha, self.alpha);
+            vec![Box::new(bxdf::FresnelBlend::new(
+                diffuse, specular, distrib,
+            ))]
+        }
     }
     fn summary(&self) -> String {
         String::from("substrate")
