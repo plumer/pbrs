@@ -1,6 +1,7 @@
 use core::panic;
 use log::{error, info, warn};
 use std::collections::HashMap;
+use std::fs::File;
 use std::sync::Arc;
 
 use crate::plyloader;
@@ -646,8 +647,11 @@ impl SceneLoader {
             };
             Arc::new(mtl::Substrate::new(kd, ks, rough, remap_roughness))
         } else if mtl_impl == "fourier" {
-            error!("unimplemented fourier");
-            Arc::new(mtl::Lambertian::solid(Color::white()))
+            let bsdf_file = parameters
+                .lookup_string("string bsdffile")
+                .expect("string bsdffile");
+            let bsdf_path = self.resolve_relative_path(&bsdf_file);
+            Arc::new(mtl::Fourier::from_file(&bsdf_path))
         } else {
             panic!("not recognized material: {}", mtl_impl)
         }
