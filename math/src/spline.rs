@@ -141,6 +141,82 @@ fn tridiagonal(a: &[f32], b: &[f32], c: &[f32], rhs: &[f32]) -> Vec<f32> {
     xs
 }
 
+/// Computes a interval of length 1 such that predicate(start) holds but predicate(end) doesn't.
+/// The computed range always falls in the range `[0, size)`, or end <= size.
+///
+/// It is assumed such that `predicate()` evaluates to `true` for all x <= start and `false` for
+/// all x >= end. If predicate is true for all or false for all, the computed interval is clamped
+/// to `[0, size)`.
+pub fn find_interval<Predicate>(size: usize, predicate: Predicate) -> Range<usize>
+where
+    Predicate: Fn(usize) -> bool,
+{
+    let mut first = 0;
+    let mut len = size;
+    while len > 0 {
+        let half = len >> 1;
+        let middle = first + half;
+        if predicate(middle) {
+            first = middle + 1;
+            len -= half + 1;
+        } else {
+            len = half;
+        }
+    }
+    let left = (first.max(1) - 1).min(size - 2);
+    if left > 0 {
+        assert!(predicate(left));
+    }
+    if left < size - 2 {
+        assert!(!predicate(left + 1));
+    }
+    left..left + 1
+}
+pub fn catmull_rom_weights(nodes: &[f32], x: f32) -> Option<(isize, [f32; 4])> {
+    if x < nodes[0] || x > *nodes.last()? {
+        return None;
+    }
+    // let index = nodes.partition_point(|&v| v < x);
+    let range = find_interval(nodes.len(), |i| nodes[i] <= x);
+    // let (x0, x1) = (nodes[index - 1], nodes[index]);
+    // let (il, i0, i1, ir) = (index as isize - 2, index - 1, index, index + 1);
+    let (i0, i1) = (range.start, range.end);
+    let (il, ir) = (range.start as isize - 1, range.end + 1);
+    let (x0, x1) = (nodes[i0], nodes[i1]);
+    assert!(x.inside((x0, x1)), "{} should be inside [{x0}, {x1}]", x);
+
+    let t = (x - x0) / (x1 - x0);
+    let (t2, t3) = (t * t, t * t * t);
+    let mut weights = [
+        0.0,
+        2.0 * t3 - 3.0 * t2 + 1.0,
+        -2.0 * t3 + 3.0 * t2, // w2 - w0; w0 to be determined.
+        0.0,
+    ];
+    // Computes first node weight.
+    if il >= 0 {
+        let w0 = (t3 - 2.0 * t2 + t) * (x1 - x0) / (x1 - nodes[il as usize]);
+        weights[0] = -w0;
+        weights[2] += w0;
+    } else {
+        let w0 = t3 - 2.0 * t2 + t;
+        weights[0] = 0.0;
+        weights[1] -= w0;
+        weights[2] += w0;
+    }
+
+    if ir < nodes.len() {
+        let w3 = (t3 - t2) * (x1 - x0) / (nodes[ir] - x0);
+        weights[1] -= w3;
+        weights[3] = w3;
+    } else {
+        let w3 = t3 - t2;
+        weights[1] -= w3;
+        weights[2] += w3;
+        weights[3] = 0.0;
+    }
+    Some((il, weights))
+}
 mod test {
     #[test]
     fn tridiagonal_test() {
@@ -189,5 +265,79 @@ mod test {
         assert_le!(spline.evaluate(0.5).dist_to(0.8695), 3e-5);
         assert_le!(spline.evaluate(0.7).dist_to(0.7334), 3e-5);
         assert_le!(spline.evaluate(0.9).dist_to(0.5187), 3e-5);
+    }
+
+    #[test]
+    fn test_find_interval() {
+        use crate::{assert_ge, assert_lt, assert_le, assert_gt};
+        let array = [16, 21, 32, 43, 55, 62, 73, 82];
+        for pivot in (0..10).map(|x| x * 10 + 5) {
+            let std::ops::Range { start, end } =
+                super::find_interval(array.len(), |x| array[x] < pivot);
+            if pivot < array[0] {
+                assert_eq!(start, 0);
+            } else if pivot > *array.last().unwrap() {
+                assert_eq!(end, array.len() - 1);
+            } else {
+                assert_lt!(array[start], pivot);
+                assert_ge!(array[end], pivot);
+                assert_eq!(start + 1, end);
+            }
+
+            let std::ops::Range { start, end } =
+                super::find_interval(array.len(), |x| array[x] <= pivot);
+            if pivot < array[0] {
+                assert_eq!(start, 0);
+            } else if pivot > *array.last().unwrap() {
+                assert_eq!(end, array.len() - 1);
+            } else {
+                assert_le!(array[start], pivot);
+                assert_gt!(array[end], pivot);
+                assert_eq!(start + 1, end);
+            }
+        }
+    }
+
+    #[test]
+    fn catmull_test() {
+        use crate::float::Float;
+        #[rustfmt::skip]
+        let values = [
+            -1.0, -0.9992586, -0.99751526, -0.9947773, -0.9910477, -0.98633015,
+            -0.98062944, -0.97395116, -0.9663021, -0.95768976, -0.94812274, -0.9376106,
+            -0.9261639, -0.913794, -0.9005131, -0.88633466, -0.8712726, -0.85534215,
+            -0.838559, -0.82093996, -0.80250263, -0.7832653, -0.7632472, -0.7424683,
+            -0.7209493, -0.69871163, -0.67577744, -0.65216964, -0.62791175, -0.60302794,
+            -0.577543, -0.5514824, -0.52487206, -0.49773848, -0.47010878, -0.44201043,
+            -0.4134715, -0.3845204, -0.35518602, -0.32549757, -0.29548463, -0.2651772,
+            -0.23460539, -0.20379974, -0.17279093, -0.14160988, -0.110287674, -0.07885553,
+            -0.04734478, -0.01578684, 0.0, 0.0, 0.01578684, 0.04734478,
+            0.07885553, 0.110287674, 0.14160988, 0.17279093, 0.20379974, 0.23460539,
+            0.2651772, 0.29548463, 0.32549757, 0.35518602, 0.3845204, 0.4134715,
+            0.44201043, 0.47010878, 0.49773848, 0.52487206, 0.5514824, 0.577543,
+            0.60302794, 0.62791175, 0.65216964, 0.67577744, 0.69871163, 0.7209493,
+            0.7424683, 0.7632472, 0.7832653, 0.80250263, 0.82093996, 0.838559,
+            0.85534215, 0.8712726, 0.88633466, 0.9005131, 0.913794, 0.9261639,
+            0.9376106, 0.94812274, 0.95768976, 0.9663021, 0.97395116, 0.98062944,
+            0.98633015, 0.9910477, 0.9947773, 0.99751526, 0.9992586, 1.0,
+        ];
+
+        let mut inputs = crate::float::linspace((-1.1f32, 1.1), 30).0;
+        inputs.push((values[0] + values[1]) / 2.0);
+        for &x in inputs.iter() {
+            if let Some((il, weights)) = super::catmull_rom_weights(&values, x) {
+                let weight_sum = weights.iter().sum::<f32>();
+                assert!(
+                    weight_sum.dist_to(1.0) < 1e-6,
+                    "weights = {:?}, summing to {weight_sum}",
+                    weights,
+                );
+                let (i0, i1) = ((il + 1) as usize, (il + 2) as usize);
+                assert!(x >= values[i0]);
+                assert!(x < values[i1]);
+            } else {
+                println!("x = {}", x);
+            }
+        }
     }
 }
