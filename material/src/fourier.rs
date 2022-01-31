@@ -217,17 +217,12 @@ fn fourier_sum(a: &[f32], cos_phi: f32) -> f32 {
     // Initialize cosine iterates. This function uses Chebyshev's method to
     // compute cos((k+1)x) from cos((k-1)x) and cos(kx), in order to reduce f32::cos() invocations.
     // cos((k+1)x) = 2 cos(x) cos(kx) - cos((k-1)x)
-    let mut cos_k_sub_1_phi = cos_phi as f64;
-    let mut cos_k_phi = 1.0f64; // cos(0 * phi) = 1.
     a.iter()
-        .map(|&a_k| {
-            let value = a_k as f64 * cos_k_phi;
-
-            let cos_k_plus_1_phi = 2.0 * cos_phi as f64 * cos_k_phi - cos_k_sub_1_phi;
-            cos_k_sub_1_phi = cos_k_phi;
-            cos_k_phi = cos_k_plus_1_phi;
-
-            value
+        .scan((cos_phi as f64, 1.0f64), |state, a_k| {
+            let (cos_k_phi_prev, cos_k_phi) = *state;
+            let cos_k_phi_next = 2.0 * cos_phi as f64 * cos_k_phi - cos_k_phi_prev;
+            *state = (cos_k_phi, cos_k_phi_next);
+            Some(*a_k as f64 * cos_k_phi)
         })
         .sum::<f64>() as f32
 }
