@@ -66,59 +66,67 @@ pub trait Float: Sized + std::ops::Add<Self, Output = Self> {
     fn weak_recip(self) -> Self;
 }
 
+macro_rules! impl_float_for {
+    ($float: ty) => {
+        /// Computes the other side of the right-angle side given the hypotenuse.
+        /// Returns 0.0 if the hypotenuse (self) is shorter than the right-angle side.
+        /// ```
+        /// use math::float::Float;
+        #[doc = concat!("assert_eq!(1.0", stringify!($float), ".cathetus(0.6), 0.8);")]
+        #[doc = concat!("assert_eq!(1.0", stringify!($float), ".cathetus(-0.6), 0.8);")]
+        /// ```
+        fn cathetus(self, other: Self) -> Self {
+            (self.powi(2) - other.powi(2)).max(0.0).sqrt()
+        }
+
+        /// Computes `x / y` if y is nonzero; returns `None` if y is zero.
+        /// ```
+        /// use math::float::Float;
+        #[doc = concat!("assert_eq!(0.75", stringify!($float), ".try_divide(0.0), None);")]
+        #[doc = concat!("assert_eq!(0.75", stringify!($float), ".try_divide(2.5), Some(0.3));")]
+        #[doc = concat!("assert_eq!(0.0", stringify!($float), ".try_divide(0.0), None);")]
+        #[doc = concat!("assert_eq!(0.0", stringify!($float), ".try_divide(2.5), Some(0.0));")]
+        /// ```
+        fn try_divide(self, divisor: Self) -> Option<Self> {
+            if divisor == 0.0 {
+                None
+            } else {
+                Some(self / divisor)
+            }
+        }
+
+        /// Evaluates the polynomial c0 + c1 * x + c2 * x^2 + ... + cn * x^n. The coefficients should be
+        /// given in increasing order of powers.
+        /// ```
+        /// use math::float::Float;
+        #[doc = concat!("let x = 0.6", stringify!($float), ";")]
+        /// let fx = x.polynomial([4.0, 2.0, 1.0]);
+        /// assert!((fx - (4.0 + 2.0 * 0.6 + 0.6*0.6)).abs() < 1e-6);
+        /// ```
+        fn polynomial<const N: usize>(self, coeffs: [Self; N]) -> Self {
+            // a + b * x + c * x^2 + d * x^3
+            // = a + x * (b + x * (c + d * x))
+            coeffs.iter().rev().fold(0.0, |d, c| d * self + c)
+        }
+
+        fn dist_to(self, other: Self) -> Self {
+            (self - other).abs()
+        }
+
+        fn weak_recip(self) -> Self {
+            if self == 0.0 {
+                0.0
+            } else {
+                self.recip()
+            }
+        }
+    };
+}
+impl Float for f64 {
+    impl_float_for! {f64}
+}
 impl Float for f32 {
-    /// Computes the other side of the right-angle side given the hypotenuse.
-    /// Returns 0.0 if the hypotenuse (self) is shorter than the right-angle side.
-    /// ```
-    /// use math::float::Float;
-    /// assert_eq!(1.0f32.cathetus(0.6), 0.8);
-    /// assert_eq!(1.0f32.cathetus(-0.6), 0.8);
-    /// ```
-    fn cathetus(self, other: f32) -> f32 {
-        (self.powi(2) - other.powi(2)).max(0.0).sqrt()
-    }
-
-    /// Computes `x / y` if y is nonzero; returns `None` if y is zero.
-    /// ```
-    /// use math::float::Float;
-    /// assert_eq!(1.0f32.try_divide(0.0), None);
-    /// assert_eq!(1.0f32.try_divide(2.5), Some(0.4));
-    /// assert_eq!(0.0f32.try_divide(0.0), None);
-    /// assert_eq!(0.0f32.try_divide(2.5), Some(0.0));
-    /// ```
-    fn try_divide(self, divisor: Self) -> Option<Self> {
-        if divisor == 0.0 {
-            None
-        } else {
-            Some(self / divisor)
-        }
-    }
-
-    /// Evaluates the polynomial c0 + c1 * x + c2 * x^2 + ... + cn * x^n. The coefficients should be
-    /// given in increasing order of powers.
-    /// ```
-    /// use math::float::Float;
-    /// let x = 0.6;
-    /// let fx = x.polynomial([4.0, 2.0, 1.0]);
-    /// assert!((fx - (4.0 + 2.0 * 0.6 + 0.6*0.6)).abs() < 1e-6);
-    /// ```
-    fn polynomial<const N: usize>(self, coeffs: [Self; N]) -> Self {
-        // a + b * x + c * x^2 + d * x^3
-        // = a + x * (b + x * (c + d * x))
-        coeffs.iter().rev().fold(0.0, |d, c| d * self + c)
-    }
-
-    fn dist_to(self, other: Self) -> Self {
-        (self - other).abs()
-    }
-
-    fn weak_recip(self) -> Self {
-        if self == 0.0 {
-            0.0
-        } else {
-            self.recip()
-        }
-    }
+    impl_float_for! {f32}
 }
 
 /// Divides the given `interval` evenly into `count` pieces and returns the midpoint of each piece
@@ -136,11 +144,11 @@ where
 {
     let (a, b) = interval;
     let spacing = (b - a) * (1.0 / count as f32);
-    
+
     (
         (0..count)
             .into_iter()
-            .map(|i| spacing * (i as f32 + 0.5) as f32 + a)
+            .map(|i| spacing * (i as f32 + 0.5) + a)
             .collect::<Vec<_>>(),
         spacing,
     )

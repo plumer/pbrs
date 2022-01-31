@@ -269,7 +269,7 @@ mod test {
 
     #[test]
     fn test_find_interval() {
-        use crate::{assert_ge, assert_lt, assert_le, assert_gt};
+        use crate::{assert_ge, assert_gt, assert_le, assert_lt};
         let array = [16, 21, 32, 43, 55, 62, 73, 82];
         for pivot in (0..10).map(|x| x * 10 + 5) {
             let std::ops::Range { start, end } =
