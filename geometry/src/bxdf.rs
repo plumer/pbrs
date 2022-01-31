@@ -25,7 +25,7 @@ use radiometry::color::Color;
 ///  - `same_hemisphere()`, checking if two `Omega`s are on the same side of the normal.
 ///  - `x()`, `y()`, `z()` accessors; `dot()`, `refract()`, `reflect()` (wrapper)
 ///  - `bisector()`, computes `(w0 + w1).hat()` or `None` in the degenerate case (w0 + w1 == 0).
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Omega(pub Vec3);
 pub enum RefractResult {
     FullReflect(Omega),

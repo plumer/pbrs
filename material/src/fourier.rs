@@ -140,14 +140,20 @@ impl FourierTable {
         }
     }
 
-    pub fn get_weights_and_offset(&self, cos_theta: f32) -> Option<(usize, [f32; 4])> {
+    /// Returns the first index to the knots and weights to interpolate data points using
+    /// Catmull-Rom formula.
+    ///
+    /// The first index may be -1; the last index (first index + 3) may be out of bounds
+    /// (equal to `self.mu.len()`).
+    pub fn get_weights_and_offset(&self, cos_theta: f32) -> Option<(isize, [f32; 4])> {
         math::spline::catmull_rom_weights(&self.mu, cos_theta)
     }
 
     pub fn get_ak(&self, offset_i: usize, offset_o: usize) -> (&[f32], usize) {
         let index = offset_o * self.mu.len() + offset_i;
         let m = self.m_lookup[index] as usize;
-        (&self.a[index..index + m * self.n_channels], m)
+        let start = self.a_offset[index] as usize;
+        (&self.a[start..start + m * self.n_channels], m)
     }
 
     pub fn from_file(path: &str) -> Result<FourierTable, std::io::Error> {
@@ -202,35 +208,208 @@ impl FourierTable {
     }
 }
 
-
-#[test]
-fn read_header_test() {
-    let buffer = [
-        0x53, 0x43, 0x41, 0x54, 0x46, 0x55, 0x4e, 0x01, // identifier and version
-        0x01, 0x00, 0x00, 0x00, // flags
-        0x54, 0x03, 0x00, 0x00, // n_mu
-        0xd6, 0xb4, 0x73, 0x01, // n_coeffs
-        0x3f, 0x06, 0x00, 0x00, // m_max
-        0x03, 0x00, 0x00, 0x00, // num_channels
-        0x01, 0x00, 0x00, 0x00, // n_bases
-        0x00, 0x00, 0x00, 0x00, // metadata bytes
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // num parameters and parameters
-        0x00, 0x00, 0x80, 0x3f, // eta
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // alpha * 2
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // unused
-    ];
-
-    let header = read_header(&buffer).unwrap();
-    let n_mu = header.n_mu;
-    assert_eq!(n_mu, 0x0354);
+pub struct FourierBSDF<'a> {
+    pub table: &'a FourierTable,
 }
 
-#[test]
-fn read_fourier_bsdf_test() {
-    let path = "../assets/paint.bsdf";
-    let table = FourierTable::from_file(path).unwrap();
-    println!("mu = {:?}", table.mu);
-    // println!("a_offset = {:?}", table.a_offset);
-    // println!("m_lookup = {:?}", table.m_lookup);
+/// Computes the sum = sum_{0..n} a_k * cos(k * phi).
+fn fourier_sum(a: &[f32], cos_phi: f32) -> f32 {
+    // Initialize cosine iterates. This function uses Chebyshev's method to
+    // compute cos((k+1)x) from cos((k-1)x) and cos(kx), in order to reduce f32::cos() invocations.
+    // cos((k+1)x) = 2 cos(x) cos(kx) - cos((k-1)x)
+    let mut cos_k_sub_1_phi = cos_phi as f64;
+    let mut cos_k_phi = 1.0f64; // cos(0 * phi) = 1.
+    a.iter()
+        .map(|&a_k| {
+            let value = a_k as f64 * cos_k_phi;
+
+            let cos_k_plus_1_phi = 2.0 * cos_phi as f64 * cos_k_phi - cos_k_sub_1_phi;
+            cos_k_sub_1_phi = cos_k_phi;
+            cos_k_phi = cos_k_plus_1_phi;
+
+            value
+        })
+        .sum::<f64>() as f32
 }
 
+
+impl<'a> BxDF for FourierBSDF<'a> {
+    fn eval(&self, wo: Omega, wi: Omega) -> Color {
+        // Finds the zenith angle cosines and azimuth difference angle.
+        let mu_i = -wi.cos_theta();
+        let mu_o = wo.cos_theta();
+        let cos_phi = wo.cos_dphi(-wi);
+        assert!(cos_phi.inside((-1.0, 1.0)));
+
+        let wt_offset_i = self.table.get_weights_and_offset(mu_i);
+        let wt_offset_o = self.table.get_weights_and_offset(mu_o);
+
+        if wt_offset_i.is_none() || wt_offset_o.is_none() {
+            return Color::black();
+        }
+        // Determines offsets and weights for mu_i and mu_o.
+        let (offset_i, weights_i) = wt_offset_i.unwrap();
+        let (offset_o, weights_o) = wt_offset_o.unwrap();
+        assert!(offset_i == -1 || (0..self.table.mu.len()).contains(&(offset_i as usize)));
+        assert!(offset_o == -1 || (0..self.table.mu.len()).contains(&(offset_o as usize)));
+        assert!(weights_i.iter().sum::<f32>().dist_to(1.0) < 1e-3);
+        assert!(weights_o.iter().sum::<f32>().dist_to(1.0) < 1e-3);
+
+        // Allocates storage to accumulate a_k coefficients.
+        let mut a_k = vec![0.0; self.table.m_max * self.table.n_channels];
+
+        // Accumulate weighted sums of nearby a_k coefficients.
+        let mut m_max = 0;
+        for (b, a) in (0..4).cartesian_product(0..4) {
+            let weight = weights_i[a] * weights_o[b];
+            if weight != 0.0 {
+                let (ap, m) = self
+                    .table
+                    .get_ak(offset_i as usize + a, offset_o as usize + b);
+                m_max = m_max.max(m);
+                for c in 0..self.table.n_channels {
+                    for k in 0..m {
+                        a_k[c * self.table.m_max + k] += weight * ap[c * m + k];
+                    }
+                }
+            }
+        }
+
+        // Evaluates Fourier expansion for angle phi.
+        let (y_slice, rb_slice) = a_k.split_at(self.table.m_max);
+        let y = fourier_sum(&y_slice[0..m_max], cos_phi).max(0.0);
+        let scale = 1.0f32.try_divide(mu_i.abs()).unwrap_or(0.0);
+        if self.table.n_channels == 1 {
+            Color::gray(y * scale)
+        } else {
+            let (r_slice, b_slice) = rb_slice.split_at(self.table.m_max);
+            let r = fourier_sum(&r_slice[0..m_max], cos_phi);
+            let b = fourier_sum(&b_slice[0..m_max], cos_phi);
+            let g = 1.39829 * y - 0.100913 * b - 0.297375 * r;
+            (Color::new(r, g, b) * scale).clamp()
+        }
+    }
+
+    fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, math::prob::Prob) {
+        todo!();
+    }
+
+    fn prob(&self, wo: Omega, wi: Omega) -> math::prob::Prob {
+        let mu_i = (-wi).cos_theta();
+        let mu_o = wo.cos_theta();
+        let cos_phi = wo.cos_dphi(-wi);
+
+        let wt_offset_i = self.table.get_weights_and_offset(mu_i);
+        let wt_offset_o = self.table.get_weights_and_offset(mu_o);
+        if wt_offset_i.is_none() || wt_offset_o.is_none() {
+            return Prob::Density(0.0);
+        }
+        // Determines offsets and weights for mu_i and mu_o.
+        let (offset_i, weights_i) = wt_offset_i.unwrap();
+        let (offset_o, weights_o) = wt_offset_o.unwrap();
+
+        let mut ak = vec![0.0; self.table.m_max];
+        let mut m_max = 0;
+        for (i, o) in (0..4).cartesian_product(0..4) {
+            let weight = weights_i[i] * weights_o[o];
+            if weight == 0.0 {
+                continue;
+            }
+            let (coeffs, order) = self
+                .table
+                .get_ak(offset_i as usize + i, offset_o as usize + o);
+            m_max = m_max.max(coeffs.len());
+            (0..order).for_each(|k| ak[k] += coeffs[k] * weight);
+        }
+
+        let rho = (0..4)
+            .map(|o| {
+                if weights_o[o] == 0.0 {
+                    0.0
+                } else {
+                    let index =
+                        (offset_o as usize + o) * self.table.mu.len() + self.table.mu.len() - 1;
+                    weights_o[o] * self.table.cdf[index] * 2.0 * PI as f32
+                }
+            })
+            .sum::<f32>();
+        let y = fourier_sum(&ak[0..m_max], cos_phi).max(0.0);
+
+        Prob::Density(y.try_divide(rho).unwrap_or(0.0))
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use math::{float::Float, hcm::vec3};
+    use rand::Rng;
+    #[test]
+    fn fourier_sum_test() {
+        let a = rand::random::<[f32; 15]>();
+        for _ in 0..680 {
+            let cos_phi = (rand::random::<f32>() * 2.0 - 1.0).clamp(-1.0, 1.0);
+            let phi = cos_phi.acos();
+            assert!(phi.is_finite());
+            let expected = (0..a.len())
+                .map(|k| a[k] * (phi * k as f32).cos())
+                .sum::<f32>();
+            let actual = fourier_sum(&a, cos_phi);
+
+            assert!(actual.dist_to(expected) < 1e-5, "{}, {}", actual, expected);
+        }
+    }
+
+    #[test]
+    fn read_header_test() {
+        let buffer = [
+            0x53, 0x43, 0x41, 0x54, 0x46, 0x55, 0x4e, 0x01, // identifier and version
+            0x01, 0x00, 0x00, 0x00, // flags
+            0x54, 0x03, 0x00, 0x00, // n_mu
+            0xd6, 0xb4, 0x73, 0x01, // n_coeffs
+            0x3f, 0x06, 0x00, 0x00, // m_max
+            0x03, 0x00, 0x00, 0x00, // num_channels
+            0x01, 0x00, 0x00, 0x00, // n_bases
+            0x00, 0x00, 0x00, 0x00, // metadata bytes
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // num parameters and parameters
+            0x00, 0x00, 0x80, 0x3f, // eta
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // alpha * 2
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // unused
+        ];
+
+        let header = read_header(&buffer).unwrap();
+        let n_mu = header.n_mu;
+        assert_eq!(n_mu, 0x0354);
+    }
+
+    #[test]
+    fn read_fourier_bsdf_test() {
+        let path = "../assets/paint.bsdf";
+        let table = FourierTable::from_file(path).unwrap();
+        println!("mu = {:?}", table.mu);
+        // println!("a_offset = {:?}", table.a_offset);
+        // println!("m_lookup = {:?}", table.m_lookup);
+    }
+
+                         
+    #[test]
+    fn fourier_bsdf_simple_test() {
+        let path = "../assets/paint.bsdf";
+        let f_mtl = FourierTable::from_file(path).unwrap();
+        let fourier_bsdf = FourierBSDF { table: &f_mtl };
+
+        let wo = Omega(vec3(-0.255834639, -0.200433612, 0.945713997));
+        let wi = Omega(vec3(0.194454342, -0.194454342, 0.961444259));
+        let f = fourier_bsdf.eval(wo, wi);
+        let pdf = fourier_bsdf.prob(wo, wi);
+        
+        let actual_f = vec3(f.r, f.g, f.b);
+        let expected_f = vec3(0.1474448, 0.1474451, 0.1474448);
+        
+        assert!((actual_f-expected_f).norm() < f32::EPSILON);
+        let expected_pdf = Prob::Density(0.3609094);
+        assert!(expected_pdf.density().dist_to(pdf.density()) < f32::EPSILON);
+    }
+}

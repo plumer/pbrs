@@ -6,7 +6,7 @@ pub struct Interval {
     pub max: f32,
 }
 
-/// 1 + \eps for f32. Multiply it to a `f32` number to get a larger one than is small as possible.
+/// 1 + \eps for f32. Multiply it to a `f32` number to get a larger one that is small as possible.
 pub const ONE_PLUS_EPSILON: f32 = 1.0 + f32::EPSILON;
 pub const ONE_MINUS_EPSILON: f32 = 1.0 - f32::EPSILON;
 
