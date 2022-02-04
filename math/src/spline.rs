@@ -1,4 +1,7 @@
-use crate::float::Inside;
+use std::ops::Range;
+
+use crate::float::{Fallback, Float, Inside, Interval};
+use crate::prob::Prob;
 use itertools::Itertools;
 
 /// Cubic spline modeling 1D function.
@@ -66,7 +69,7 @@ impl CubicSpline {
 /// ``` ignore
 ///                    3                       3   
 /// M_i   (x_{i+1} - x)    M_{i+1}    (x - x_i)    
-/// --- * -------------- + ------- * ----------- + 
+/// --- * -------------- + ------- * ----------- +
 ///  6    x_{i+1} - x_i       6      x_{i+1}-x_i   
 ///
 ///               2                                        2
@@ -172,8 +175,24 @@ where
     }
     left..left + 1
 }
+
+/// Computes weights for Catmull-Rom-interpolating function values on the given nodes.
+///
+/// Given (x, y) value pairs `x1, x2, ... xn` and `y1, y2, ... yn`, and x-values being sorted, there
+/// exists a piece-wise cubic function that interpolates all y-values for any given x-value in
+/// `(x1, xn)`:
+///
+/// `f(x) = w_{-1}y_{-1} + w0y0 + w1y1 + w2y2`
+///
+/// where weights (w-values) can be computed from this function.
+///
+/// - `nodes`: a slice of *sorted* x-values.
+/// - Returns weights `w_{-1} .. w_2` together with the index to the -1-th element in the array.
+/// `x` value is guaranteed to be in `nodes[i+0]` and `nodes[i+1]`. `i-1` and `i+2` may be out of
+/// bounds, and in those case, `w_{-1}` and `w_2` will be zero, correspondingly.
 pub fn catmull_rom_weights(nodes: &[f32], x: f32) -> Option<(isize, [f32; 4])> {
-    if x < nodes[0] || x > *nodes.last()? {
+    assert!(nodes.len() >= 3);
+    if x < nodes[0] || x > *nodes.last().unwrap() {
         return None;
     }
     // let index = nodes.partition_point(|&v| v < x);
@@ -217,6 +236,79 @@ pub fn catmull_rom_weights(nodes: &[f32], x: f32) -> Option<(isize, [f32; 4])> {
     }
     Some((il, weights))
 }
+
+pub fn sample_catmull_rom_2d(
+    nodes_v: &[f32], nodes_h: &[f32], values: &[f32], cdf: &[f32], alpha: f32, u: f32,
+) -> Option<(f32, f32, Prob)> {
+    assert_eq!(nodes_v.len() * nodes_h.len(), cdf.len());
+    assert_eq!(nodes_v.len() * nodes_h.len(), values.len());
+    let (offset, weights) = catmull_rom_weights(nodes_v, alpha)?;
+
+    // Defines a closure to interpolate table entries.
+    let interpolate = |array2d: &[f32], col: usize| {
+        (0..4isize)
+            .map(|i| match weights[i as usize] == 0.0 {
+                false => array2d[(offset + i) as usize * nodes_h.len() + col] * weights[i as usize],
+                true => 0.0,
+            })
+            .sum::<f32>()
+    };
+
+    let maximum = interpolate(cdf, nodes_h.len() - 1);
+    let u = u * maximum;
+
+    let index = find_interval(nodes_h.len(), |i| interpolate(cdf, i) <= u).start;
+    let f0 = interpolate(values, index);
+    let f1 = interpolate(values, index + 1);
+    let x0 = nodes_h[index];
+    let x1 = nodes_h[index + 1];
+    let width = x1 - x0;
+    // Re-scale _u_ using the interpolated cdf.
+    let u = (u - interpolate(cdf, index)) / width;
+
+    let d0 = match index > 0 {
+        true => width * (f1 - interpolate(values, index - 1)) / (x1 - nodes_h[index - 1]),
+        false => f1 - f0,
+    };
+    let d1 = match index + 2 < nodes_h.len() {
+        true => width * (interpolate(values, index + 2) - f0) / (nodes_h[index + 2] - x0),
+        false => f1 - f0,
+    };
+
+    // Inverts definite integral over spline segment and returns solution.
+    let mut t = match f0 - f1 {
+        zero if zero == 0.0 => u / f0,
+        diff => (f0 - (f0 * f0 + 2.0 * u * -diff).max(0.0).sqrt()) / diff,
+    };
+    let mut interval = Interval::new(0.0, 1.0);
+    let f = loop {
+        t = t.filter_or(|t| interval.contains(t), interval.midpoint());
+        let integral_hat = t.polynomial([
+            0.0,
+            f0,
+            0.5 * d0,
+            1.0 / 3.0 * (-2.0 * d0 - d1) + f1 - f0,
+            0.25 * (d0 + d1) + 0.5 * (f0 - f1),
+        ]);
+        let fhat = t.polynomial([
+            f0,
+            d0,
+            -2.0 * d0 - d1 + 3.0 * (f1 - f0),
+            d0 + d1 + 2.0 * (f0 - f1),
+        ]);
+
+        if (integral_hat - u).abs() < 1e-6 || interval.length() < 1e-6 {
+            break fhat;
+        }
+        interval = match integral_hat - u < 0.0 {
+            true => Interval::new(t, interval.max()),
+            false => Interval::new(interval.min(), t),
+        };
+        t -= (integral_hat - u) / fhat;
+    };
+    Some((f, x0 + width * t, Prob::Density(f / maximum)))
+}
+
 mod test {
     #[test]
     fn tridiagonal_test() {

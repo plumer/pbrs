@@ -1,3 +1,6 @@
+pub mod fourier;
+pub use fourier::Fourier;
+
 use geometry::bxdf::{self, BxDF, Fresnel};
 use geometry::microfacet::MicrofacetDistrib;
 use geometry::{microfacet, ray::Ray};

@@ -1,3 +1,11 @@
+use geometry::bxdf::{BxDF, Omega};
+use itertools::Itertools;
+use math::{
+    float::{Fallback, Float, Inside},
+    prob::Prob,
+};
+use radiometry::color::Color;
+
 use std::{
     f64::consts::{FRAC_1_PI, PI},
     io::Read,
@@ -227,13 +235,73 @@ fn fourier_sum(a: &[f32], cos_phi: f32) -> f32 {
         .sum::<f64>() as f32
 }
 
+/// Samples from a distribution whose pdf matches the following function with given `a_k` coeffs:
+///
+/// `f(x) = sum{k in 0..m} a_k*cos(k*x)`
+///
+/// Parameter `recip` is a slice where `recip[i] = 1.0 / i`. 1.0/i values will be useful since the
+/// CDF integrated from `f(x)` uses them.
+/// Returns f-value at the sampled x-value, the x-value, and the PDF of the sample.
+fn sample_fourier(ak: &[f32], recip: &[f32], u: f32) -> (f32, f32, Prob) {
+    let flip = u >= 0.5;
+    let u = match u >= 0.5 {
+        true => 1.0 - 2.0 * (u - 0.5),
+        false => u * 2.0,
+    };
+    let mut left = 0.0;
+    let mut right = PI;
+    let mut phi = 0.5f64 * PI;
+    let sampled_f = loop {
+        // Evaluates f(phi) and its integral F(phi).
+        let (sin_phi, cos_phi) = phi.sin_cos(); // Init as sin(PI/2), cos(PI/2).
+
+        let (f_integral, f) = (1..ak.len())
+            .scan((cos_phi, 1.0, -sin_phi, 0.0), |state, k| {
+                let (prev_cos_phi, curr_cos_phi, prev_sin_phi, curr_sin_phi) = *state;
+                let next_sin_phi = 2.0 * cos_phi * curr_sin_phi - prev_sin_phi;
+                let next_cos_phi = 2.0 * cos_phi * curr_cos_phi - prev_cos_phi;
+                *state = (curr_cos_phi, next_cos_phi, curr_sin_phi, next_sin_phi);
+
+                Some((
+                    (ak[k] * recip[k]) as f64 * next_sin_phi,
+                    ak[k] as f64 * next_cos_phi,
+                ))
+            })
+            .fold(
+                (ak[0] as f64 * phi, ak[0] as f64),
+                |(intf_sum, f_sum), (intf_term, f_term)| (intf_sum + intf_term, f_sum + f_term),
+            );
+        // Solves the equation F(phi) - u * F(pi) = 0. In this case, F(phi) = ak[0] since
+        // sin(k * pi) = 0 for all k, and ak[0] is free of the sine term.
+        let f_integral = f_integral - (u * ak[0]) as f64 * PI;
+        // Updates bisection bounds using updated phi.
+        if f_integral > 0.0 {
+            right = phi;
+        } else {
+            left = phi;
+        }
+
+        if f_integral.abs() < 1e-6 || right - left < 1e-6 {
+            break f;
+        }
+        phi -= f_integral / f;
+        if !phi.inside_open((left, right)) {
+            phi = 0.5 * (left + right);
+        }
+    };
+    if flip {
+        phi = 2.0 * PI - phi;
+    }
+    let pdf = (sampled_f * FRAC_1_PI * 0.5) as f32 / ak[0];
+    (sampled_f as f32, phi as f32, Prob::Density(pdf))
+}
 
 impl<'a> BxDF for FourierBSDF<'a> {
     fn eval(&self, wo: Omega, wi: Omega) -> Color {
         // Finds the zenith angle cosines and azimuth difference angle.
         let mu_i = -wi.cos_theta();
         let mu_o = wo.cos_theta();
-        let cos_phi = wo.cos_dphi(-wi);
+        let cos_phi = wo.cos_dphi(-wi).clamp(-1.0, 1.0);
         assert!(cos_phi.inside((-1.0, 1.0)));
 
         let wt_offset_i = self.table.get_weights_and_offset(mu_i);
@@ -286,7 +354,83 @@ impl<'a> BxDF for FourierBSDF<'a> {
     }
 
     fn sample(&self, wo: Omega, rnd2: (f32, f32)) -> (Color, Omega, math::prob::Prob) {
-        todo!();
+        // Samples zenith angle component.
+        let (u, v) = rnd2;
+        let mu_o = wo.cos_theta();
+        let (_f_mu, mu_i, pr) = math::spline::sample_catmull_rom_2d(
+            &self.table.mu,
+            &self.table.mu,
+            &self.table.a0,
+            &self.table.cdf,
+            mu_o,
+            v,
+        )
+        .unwrap();
+        let pdf_mu = pr.density();
+
+        // Computes Fourier coefficients a_k for (mu_i, mu_o) pair.
+        let wt_offset_i = self.table.get_weights_and_offset(mu_i);
+        let wt_offset_o = self.table.get_weights_and_offset(mu_o);
+        if wt_offset_i.is_none() || wt_offset_o.is_none() {
+            return (Color::black(), Omega::normal(), Prob::Density(0.0));
+        }
+        // Determines offsets and weights for mu_i and mu_o.
+        let (offset_i, weights_i) = wt_offset_i.unwrap();
+        let (offset_o, weights_o) = wt_offset_o.unwrap();
+        // Allocates storage to accumulate a_k coefficients.
+        let mut a_k = vec![0.0; self.table.m_max * self.table.n_channels];
+
+        // Accumulate weighted sums of nearby a_k coefficients.
+        let mut m_max = 0;
+        for (o, i) in (0..4).cartesian_product(0..4) {
+            let weight = weights_i[i] * weights_o[o];
+            if weight != 0.0 {
+                let offset_i = (offset_i + i as isize) as usize;
+                let offset_o = (offset_o + o as isize) as usize;
+                let (ap, m) = self.table.get_ak(offset_i, offset_o);
+                // assert_gt!(m, 0);
+                m_max = m_max.max(m);
+                for (c, k) in (0..self.table.n_channels).cartesian_product(0..m) {
+                    a_k[c * self.table.m_max + k] += weight * ap[c * m + k];
+                }
+            }
+        }
+
+        // Importance samples the luminance Fourier expansion.
+        let (y, phi, pdf_phi) = match m_max {
+            0 => (0.0, u * 2.0 * PI as f32, Prob::Density(FRAC_1_PI as f32)),
+            _ => sample_fourier(&a_k[..m_max], &self.table.recip, u),
+        };
+        let pdf = (pdf_phi.density() * pdf_mu).max(0.0);
+
+        // Computes the scattered direction for Fourier BSDF.
+        let sin2_theta_i = (1.0 - mu_i * mu_i).max(0.0);
+        let norm = f32::sqrt(sin2_theta_i / wo.sin2_theta()).fallback_if(f32::is_infinite, 0.0);
+        let (sin_phi, cos_phi) = phi.sin_cos();
+        let wi = -Omega::normalize(
+            norm * (cos_phi * wo.x() - sin_phi * wo.y()),
+            norm * (sin_phi * wo.x() + cos_phi * wo.y()),
+            mu_i,
+        );
+
+        // Evaluates remaining fourier exapnsions for angle phi.
+        let scale = 1.0f32.try_divide(mu_i.abs()).unwrap_or(0.0);
+        if mu_i * mu_o > 0.0
+        /* && mode == TransportMode::Radiance */
+        {
+            todo!()
+        }
+
+        let refl = if self.table.n_channels == 1 {
+            Color::gray(y * scale)
+        } else {
+            let (r_start, g_start) = (self.table.m_max, self.table.m_max * 2);
+            let r = fourier_sum(&a_k[r_start..r_start + m_max], cos_phi);
+            let b = fourier_sum(&a_k[g_start..g_start + m_max], cos_phi);
+            let g = 1.39829 * y - 0.100913 * b - 0.297375 * r;
+            Color::new(r * scale, g * scale, b * scale)
+        };
+        (refl, wi, Prob::Density(pdf))
     }
 
     fn prob(&self, wo: Omega, wi: Omega) -> math::prob::Prob {
@@ -304,7 +448,7 @@ impl<'a> BxDF for FourierBSDF<'a> {
         let (offset_o, weights_o) = wt_offset_o.unwrap();
 
         let mut ak = vec![0.0; self.table.m_max];
-        let mut m_max = 0;
+        let mut order_max = 0;
         for (i, o) in (0..4).cartesian_product(0..4) {
             let weight = weights_i[i] * weights_o[o];
             if weight == 0.0 {
@@ -313,7 +457,7 @@ impl<'a> BxDF for FourierBSDF<'a> {
             let (coeffs, order) = self
                 .table
                 .get_ak(offset_i as usize + i, offset_o as usize + o);
-            m_max = m_max.max(coeffs.len());
+            order_max = order_max.max(order);
             (0..order).for_each(|k| ak[k] += coeffs[k] * weight);
         }
 
@@ -328,17 +472,45 @@ impl<'a> BxDF for FourierBSDF<'a> {
                 }
             })
             .sum::<f32>();
-        let y = fourier_sum(&ak[0..m_max], cos_phi).max(0.0);
+        let y = fourier_sum(&ak[0..order_max], cos_phi).max(0.0);
 
         Prob::Density(y.try_divide(rho).unwrap_or(0.0))
     }
 }
 
+pub struct Fourier {
+    table: FourierTable,
+}
+
+impl Fourier {
+    pub fn from_file(path: &str) -> Self {
+        let table = FourierTable::from_file(path).unwrap();
+        Self { table }
+    }
+}
+
+impl<'a> crate::Material for Fourier {
+    fn scatter(
+        &self, _wi: math::hcm::Vec3, _isect: &shape::Interaction,
+    ) -> (geometry::ray::Ray, Color) {
+        todo!()
+    }
+
+    fn bxdfs_at(&self, _isect: &shape::Interaction) -> Vec<Box<dyn BxDF + '_>> {
+        let fourier_bsdf = FourierBSDF { table: &self.table };
+        vec![Box::new(fourier_bsdf)]
+    }
+
+    fn summary(&self) -> String {
+        "Fourier".to_owned()
+    }
+}
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
+    use geometry::bxdf::*;
     use math::{float::Float, hcm::vec3};
     use rand::Rng;
     #[test]
@@ -388,23 +560,80 @@ mod tests {
         // println!("m_lookup = {:?}", table.m_lookup);
     }
 
-                         
+    #[test]
+    fn fourier_bsdf_use_test() {
+        let path = "../assets/paint.bsdf";
+        let f_mtl = FourierTable::from_file(path).unwrap();
+
+        let fourier_bsdf = FourierBSDF { table: &f_mtl };
+
+        let (wos, (_dtheta, _dphi)) = Omega::tesselate_hemi(30);
+        let mut pr_sum = 0.0;
+        let mut rho = Color::black();
+        for wo in wos {
+            let (refl, wi, _pr) = fourier_bsdf.sample(wo, (0.5, 0.5));
+            assert!(!refl.has_nan());
+            assert!(!wi.0.has_nan());
+            assert!(_pr.is_density());
+            pr_sum += _pr.density();
+            rho += refl * wi.cos_theta().abs() * _pr.density().weak_recip();
+        }
+        assert!(!rho.has_nan());
+        println!("{}", pr_sum / ((30 * 30 * 4) as f32) * PI as f32);
+
+        let wo = Omega::normal();
+        let us = math::float::linspace((0.0, 1.0), 10).0;
+
+        rho = Color::black();
+        for (&u, &v) in us.iter().cartesian_product(us.iter()) {
+            let (refl, wi, pr) = fourier_bsdf.sample(wo, (u, v));
+            rho += refl * wi.cos_theta().abs() * pr.density().weak_recip();
+        }
+        rho = rho.scale_down_by(us.len().pow(2) as u32);
+        println!("MC integrate for normal reflectance = {}", rho);
+
+        // Samples over the hemisphere, used as wo, and MC-integrate the Li using random samples.
+        let us = math::float::linspace((0.0, 1.0), 10).0;
+        let mut rng = rand::thread_rng();
+        for (&u, &v) in us.iter().cartesian_product(us.iter()) {
+            let wo = cos_sample_hemisphere((u, v));
+            let refl = (0..100)
+                .map(|_| {
+                    let wi_uv = rng.gen::<(f32, f32)>();
+                    let (f, wi, pr) = fourier_bsdf.sample(wo, wi_uv);
+
+                    f * wi.cos_theta().abs() * pr.density().weak_recip()
+                })
+                .sum::<Color>()
+                .scale_down_by(100);
+            assert!(!refl.has_nan());
+        }
+    }
+
     #[test]
     fn fourier_bsdf_simple_test() {
         let path = "../assets/paint.bsdf";
         let f_mtl = FourierTable::from_file(path).unwrap();
+
         let fourier_bsdf = FourierBSDF { table: &f_mtl };
 
         let wo = Omega(vec3(-0.255834639, -0.200433612, 0.945713997));
         let wi = Omega(vec3(0.194454342, -0.194454342, 0.961444259));
         let f = fourier_bsdf.eval(wo, wi);
         let pdf = fourier_bsdf.prob(wo, wi);
-        
+
         let actual_f = vec3(f.r, f.g, f.b);
         let expected_f = vec3(0.1474448, 0.1474451, 0.1474448);
-        
-        assert!((actual_f-expected_f).norm() < f32::EPSILON);
-        let expected_pdf = Prob::Density(0.3609094);
-        assert!(expected_pdf.density().dist_to(pdf.density()) < f32::EPSILON);
+
+        assert!((actual_f - expected_f).norm() < f32::EPSILON);
+        assert!(pdf.density().dist_to(0.3609094) < f32::EPSILON);
+
+        let (f, wi, pr) = fourier_bsdf.sample(wo, (0.38, 0.78));
+        let actual_f = vec3(f.r, f.g, f.b);
+        let expected_f = vec3(0.110911831, 0.110912055, 0.110911831);
+        assert!((actual_f - expected_f).norm() < f32::EPSILON);
+        assert!(pr.density().dist_to(0.14557238) < f32::EPSILON);
+        let expected_wi = vec3(-0.851179481, 0.0985863954, 0.51553309);
+        assert!((expected_wi - wi.0).norm() < f32::EPSILON * 3.0);
     }
 }
