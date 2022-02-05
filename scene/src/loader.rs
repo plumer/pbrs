@@ -33,6 +33,7 @@ pub struct SceneLoader {
     pub camera: Option<Camera>,
     pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
+    pub env_map: Option<texture::Image>,
 }
 
 #[allow(dead_code)]
@@ -70,6 +71,7 @@ impl SceneLoader {
             camera: None,
             delta_lights: vec![],
             area_lights: vec![],
+            env_map: None,
         }
     }
 
@@ -232,9 +234,19 @@ impl SceneLoader {
             WorldItem::MaterialInstance(name) => {
                 self.current_mtl = self.named_materials.get(&name).cloned();
             }
-            WorldItem::Light(light_impl, args) => {
-                let delta_light = Self::parse_light(light_impl, args);
-                self.delta_lights.push(delta_light);
+            WorldItem::Light(light_impl, mut args) => {
+                if light_impl == "infinite" {
+                    println!("args = {:?}", args);
+                    let map_name= args.extract_string("string mapname").expect("mapname");
+                    let map_path = self.resolve_relative_path(&map_name);
+                    self.env_map = tex::Image::from_file(&map_path).ok();
+                    if self.env_map.is_none() {
+                        eprintln!("can't read map from {}", map_path);
+                    }
+                } else {   
+                    let delta_light = Self::parse_light(light_impl, args);
+                    self.delta_lights.push(delta_light);
+                }
             }
             WorldItem::AreaLight(light_impl, mut args) => {
                 if light_impl == "diffuse" {

@@ -2,7 +2,7 @@ pub mod loader;
 pub mod plyloader;
 pub mod preset;
 
-use std::f32::consts::{PI, FRAC_1_PI};
+use std::f32::consts::{FRAC_1_PI, PI};
 
 use geometry::{camera::Camera, ray::Ray};
 use light::{DeltaLight, DiffuseAreaLight};
@@ -38,6 +38,25 @@ impl Scene {
             camera,
         }
     }
+
+    pub fn from_loader(loader: loader::SceneLoader) -> Self {
+        let camera = loader.camera.expect("camera not built in the loader");
+        let boxed_instances = loader
+            .instances
+            .into_iter()
+            .map(|i| Box::new(i))
+            .collect::<Vec<_>>();
+        let tlas = *tlas::build_bvh(boxed_instances);
+        Self {
+            tlas,
+            env_light: None,
+            env_map: loader.env_map,
+            delta_lights: loader.delta_lights,
+            area_lights: loader.area_lights,
+            camera,
+        }
+    }
+
     pub fn with_env_light(self, env_light: light::EnvLight) -> Self {
         assert!(self.env_map.is_none());
         Self {
@@ -52,11 +71,11 @@ impl Scene {
             ..self
         }
     }
-    
+
     pub fn has_env_light(&self) -> bool {
         self.env_light.is_some() || self.env_map.is_some()
     }
-    
+
     /// Evaluates environment light on the given ray, or black if no environment lights are set.
     pub fn eval_env_light(&self, ray: Ray) -> Color {
         if let Some(env_light) = &self.env_light {
