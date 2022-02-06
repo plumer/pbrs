@@ -51,7 +51,7 @@ fn main() {
     let options = options.unwrap();
     let msaa = options.msaa;
     let scene = if let Some(pbrs_file_path) = options.pbrt_file.as_ref() {
-        load_pbrt_scene(pbrs_file_path)
+        Scene::from_loader(scene::loader::build_scene(pbrs_file_path))
     } else {
         match options.scene_name.as_ref().map(|n| n.as_str()) {
             Some("125_spheres") => preset::mixed_spheres(),
@@ -283,19 +283,6 @@ fn debug_pt(scene: &Box<BvhNode>, mut ray: ray::Ray, depth: i32, env_light: EnvL
     }
 }
 
-fn load_pbrt_scene(pbrt_file_path: &str) -> Scene {
-    let pbrt_scene = scene::loader::build_scene(pbrt_file_path);
-    let cam = pbrt_scene.camera.expect("camera not built in the scene");
-    let tlas = pbrt_scene
-        .instances
-        .into_iter()
-        .map(|i| Box::new(i))
-        .collect::<Vec<_>>();
-    Scene::new(*tlas::build_bvh(tlas), cam)
-        .with_env_light(|r|preset::blue_sky(r) * 0.5)
-        .with_lights(pbrt_scene.delta_lights, pbrt_scene.area_lights)
-}
-
 // Monte-carlo playground
 // -------------------------------------------------------------------------------------------------
 
@@ -395,14 +382,14 @@ fn metal_test() {
 
         let metal_fresnel = geometry::bxdf::Fresnel::conductor(eta_real, eta_imag);
 
-    for cos_theta in [0.9, 0.8, 0.7, 0.6, 0.5].iter() {
-        println!(
+        for cos_theta in [0.9, 0.8, 0.7, 0.6, 0.5].iter() {
+            println!(
                 "{} at cos_theta = {}, refl = {:.5}",
                 name,
-            cos_theta,
+                cos_theta,
                 metal_fresnel.eval(*cos_theta)
-        );
-    }
+            );
+        }
     };
     observe_metal(
         "Silver",

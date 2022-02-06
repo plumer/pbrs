@@ -9,6 +9,11 @@ use log::{error, info, warn};
 use ply_rs::ply::*;
 
 pub fn load_ply(path: &str) -> TriangleMeshRaw {
+    return load_ply_self_housed(path).unwrap();
+}
+
+#[allow(dead_code)]
+pub fn load_ply_external_lib(path: &str) -> TriangleMeshRaw {
     let mut f = std::fs::File::open(path).unwrap();
     let vertex_name_set = ["x", "y", "z", "nx", "ny", "nz", "u", "v"]
         .iter()
@@ -77,7 +82,7 @@ pub fn load_ply(path: &str) -> TriangleMeshRaw {
     let points_are_close = |p0: hcm::Point3, p1: hcm::Point3| { (p0 - p1).norm_squared() < 1e-6};
     let vecs_are_close = |v0: hcm::Vec3, v1: hcm::Vec3| { (v0 - v1).norm_squared() < 1e-6};
 
-    match _load_ply(path) {
+    match load_ply_self_housed(path) {
         Ok(x) => {
             info!("_load_ply ok");
             assert_eq!(x.indices, triangle_indices, "indices are the same ?");
@@ -158,7 +163,7 @@ macro_rules! wrong_data_error {
     }
 }
 
-fn _load_ply(path: &str) -> std::io::Result<TriangleMeshRaw> {
+fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
     let file = std::fs::File::open(path).unwrap();
     let mut reader = std::io::BufReader::new(file);
 
@@ -364,7 +369,7 @@ fn _load_ply(path: &str) -> std::io::Result<TriangleMeshRaw> {
 }
 
 fn compute_normals(positions: &Vec<hcm::Point3>, indices: &Vec<i32>) -> Vec<hcm::Vec3> {
-    let num_triangles = indices.len();
+    let num_triangles = indices.len() / 3;
     assert_eq!(num_triangles * 3, indices.len());
     let mut normals = Vec::new();
     normals.resize(positions.len(), hcm::Vec3::zero());
