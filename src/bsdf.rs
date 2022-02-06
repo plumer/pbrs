@@ -1,4 +1,4 @@
-use geometry::bxdf::{BxDF, Omega};
+use geometry::bxdf::{BxDF, BXDF, Omega};
 use math::prob::Prob;
 use math::{assert_lt, hcm};
 use radiometry::color::Color;
@@ -10,7 +10,7 @@ use shape::Interaction;
 ///
 pub struct BSDF<'a> {
     frame: hcm::Mat3,
-    bxdfs: &'a [Box<dyn BxDF + 'a>],
+    bxdfs: &'a [BXDF<'a>],
 }
 
 impl<'a> BSDF<'a> {
@@ -36,7 +36,7 @@ impl<'a> BSDF<'a> {
     }
 
     /// Adds a set of BxDFs to the frame. The BSDF object shouldn't outlive the `bxdfs`.
-    pub fn with_bxdfs(self, bxdfs: &'a Vec<Box<dyn BxDF + 'a>>) -> Self {
+    pub fn with_bxdfs(self, bxdfs: &'a Vec<BXDF<'a>>) -> Self {
         Self { bxdfs, ..self }
     }
 
@@ -141,7 +141,7 @@ impl<'a> BSDF<'a> {
 #[cfg(test)]
 mod test {
     use super::BSDF;
-    use geometry::bxdf::{self, BxDF};
+    use geometry::bxdf::{self, BXDF};
     use math::float::Float;
     use math::hcm;
     use math::prob::Prob;
@@ -155,7 +155,7 @@ mod test {
         let distrib = geometry::microfacet::MicrofacetDistrib::beckmann(alpha, alpha);
         let mf_refl = bxdf::MicrofacetReflection::new(albedo, distrib, bxdf::Fresnel::Nop);
 
-        let bxdfs: Vec<Box<dyn BxDF>> = vec![Box::new(mf_refl)];
+        let bxdfs: Vec<BXDF> = vec![mf_refl.into()];
 
         let normal = hcm::vec3(-0.6, 0.5, 0.2).hat();
         let (dpdu, dpdv) = hcm::make_coord_system(normal);

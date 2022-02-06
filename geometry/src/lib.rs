@@ -4,3 +4,4 @@ pub mod camera;
 pub mod ray;
 pub mod bxdf;
 pub mod microfacet;
+pub mod fourier;

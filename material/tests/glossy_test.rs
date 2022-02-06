@@ -1,4 +1,4 @@
-use geometry::bxdf;
+use geometry::bxdf::{self, BxDF};
 use material::Material;
 use math::hcm::{Point3, Vec3};
 use radiometry::color::Color;

@@ -1,7 +1,5 @@
-pub mod fourier;
-pub use fourier::Fourier;
-
-use geometry::bxdf::{self, BxDF, Fresnel};
+use geometry::bxdf::{self, Fresnel, BXDF};
+use geometry::fourier::{FourierBSDF, FourierTable};
 use geometry::microfacet::MicrofacetDistrib;
 use geometry::{microfacet, ray::Ray};
 use math::hcm::{self, Vec3};
@@ -21,7 +19,7 @@ pub trait Material: Sync + Send {
     /// Computes the scattering of a ray on a given surface interaction.
     /// Returns the scattered ray and modulated radiance (BSDF value).
     /// A 2D random variable is needed for most surfaces.
-    fn bxdfs_at<'a>(&'a self, isect: &Interaction) -> Vec<Box<dyn BxDF + 'a>>;
+    fn bxdfs_at<'a>(&'a self, isect: &Interaction) -> Vec<BXDF<'a>>;
 
     fn emission(&self) -> Color {
         Color::black()
@@ -179,10 +177,10 @@ impl Material for Lambertian {
         (ray_out, self.albedo.value(isect.uv, isect.pos))
     }
 
-    fn bxdfs_at(&self, isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+    fn bxdfs_at(&self, isect: &Interaction) -> Vec<BXDF> {
         let point_albedo = self.albedo.value(isect.uv, isect.pos);
         let lambertian = bxdf::DiffuseReflect::lambertian(point_albedo);
-        vec![Box::new(lambertian)]
+        vec![lambertian.into()]
     }
 
     fn summary(&self) -> String {
@@ -199,14 +197,12 @@ impl Material for Metal {
             Fresnel::conductor(self.eta_real, self.eta_imag).eval(isect.normal.dot(wi).abs()),
         )
     }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
         let albedo = Color::white();
         let alpha = MicrofacetDistrib::roughness_to_alpha(self.fuzziness);
         let distrib = MicrofacetDistrib::beckmann(alpha, alpha);
         let fresnel = Fresnel::conductor(self.eta_real, self.eta_imag);
-        vec![Box::new(bxdf::MicrofacetReflection::new(
-            albedo, distrib, fresnel,
-        ))]
+        vec![bxdf::MicrofacetReflection::new(albedo, distrib, fresnel).into()]
     }
     fn summary(&self) -> String {
         format!("Metal{{ior = {} + {}i}}", self.eta_real, self.eta_imag)
@@ -217,8 +213,8 @@ impl Material for Glossy {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        vec![Box::new(self.mf_refl.clone())]
+    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
+        vec![self.mf_refl.clone().into()]
     }
     fn summary(&self) -> String {
         "Glossy".to_owned()
@@ -230,9 +226,9 @@ impl Material for Mirror {
         let ray_out = Ray::new(isect.pos, reflected);
         (ray_out, self.albedo)
     }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
         let spec = bxdf::Specular::mirror(self.albedo);
-        vec![Box::new(spec)]
+        vec![spec.into()]
     }
     fn summary(&self) -> String {
         format!("Mirror{{albedo = {}}}", self.albedo)
@@ -266,9 +262,9 @@ impl Material for Dielectric {
         }
         (Ray::new(isect.pos, wo), color)
     }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
         let spec = bxdf::Specular::dielectric(self.reflect, 1.0, self.refract_index);
-        vec![Box::new(spec)]
+        vec![spec.into()]
     }
     fn summary(&self) -> String {
         format!("Dielectric{{ior = {}}}", self.refract_index)
@@ -292,7 +288,7 @@ impl Material for DiffuseLight {
     //     let (r, color) = self.scatter(wo, isect);
     //     (r, color, Prob::Density(std::f32::consts::FRAC_1_PI))
     // }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
         vec![]
     }
     fn emission(&self) -> Color {
@@ -318,19 +314,19 @@ impl Material for Uber {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn bxdfs_at(&self, isect: &Interaction) -> Vec<Box<dyn BxDF>> {
-        let mut bxdfs: Vec<Box<dyn BxDF>> = vec![];
+    fn bxdfs_at(&self, isect: &Interaction) -> Vec<BXDF> {
+        let mut bxdfs: Vec<BXDF> = vec![];
         let transmission = Color::gray((1.0 - self.opacity).clamp(0.0, 1.0));
         if transmission.is_black() {
         } else {
             let spec_transmit = bxdf::Specular::transmit(transmission, 1.0, self.eta);
-            bxdfs.push(Box::new(spec_transmit));
+            bxdfs.push(spec_transmit.into());
         }
 
         let kd = self.kd.value(isect.uv, isect.pos);
         if !kd.is_black() {
             let diffuse = bxdf::DiffuseReflect::lambertian(kd);
-            bxdfs.push(Box::new(diffuse));
+            bxdfs.push(diffuse.into());
         }
         let ks = self.ks.value(isect.uv, isect.pos);
         if !ks.is_black() {
@@ -348,21 +344,21 @@ impl Material for Uber {
             };
             let distrib = MicrofacetDistrib::beckmann(au, av);
             let spec = bxdf::MicrofacetReflection::new(ks, distrib, fresnel);
-            bxdfs.push(Box::new(spec));
+            bxdfs.push(spec.into());
         }
 
         if let Some(kr_tex) = &self.kr {
             let kr = kr_tex.value(isect.uv, isect.pos);
             if !kr.is_black() {
                 let refl = bxdf::Specular::dielectric(kr, 1.0, self.eta);
-                bxdfs.push(Box::new(refl));
+                bxdfs.push(refl.into());
             }
         }
         if let Some(kt_tex) = &self.kt {
             let kt = kt_tex.value(isect.uv, isect.pos);
             if !kt.is_black() {
                 let trans = bxdf::Specular::transmit(kt, 1.0, self.eta);
-                bxdfs.push(Box::new(trans));
+                bxdfs.push(trans.into());
             }
         }
         bxdfs
@@ -394,7 +390,7 @@ impl Material for Substrate {
     fn scatter(&self, _wi: Vec3, _isect: &Interaction) -> (Ray, Color) {
         todo!()
     }
-    fn bxdfs_at(&self, isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+    fn bxdfs_at(&self, isect: &Interaction) -> Vec<BXDF> {
         /*
         if (bumpMap) Bump(bumpMap, si);
         si->bsdf = ARENA_ALLOC(arena, BSDF)(*si);
@@ -418,9 +414,7 @@ impl Material for Substrate {
             vec![]
         } else {
             let distrib = MicrofacetDistrib::beckmann(self.alpha, self.alpha);
-            vec![Box::new(bxdf::FresnelBlend::new(
-                diffuse, specular, distrib,
-            ))]
+            vec![bxdf::FresnelBlend::new(diffuse, specular, distrib).into()]
         }
     }
     fn summary(&self) -> String {
@@ -435,17 +429,45 @@ impl Material for Plastic {
         let ray_out = isect.spawn_ray(wo);
         (ray_out, self.diffuse)
     }
-    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<Box<dyn BxDF>> {
+    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
         use microfacet::MicrofacetDistrib as MFDistrib;
         let lambertian = bxdf::DiffuseReflect::lambertian(self.diffuse);
         let alpha = MFDistrib::roughness_to_alpha(self.roughness);
         let trowbridge = MFDistrib::beckmann(alpha, alpha);
         let mf_refl =
             bxdf::MicrofacetReflection::new(self.specular, trowbridge, bxdf::Fresnel::Nop);
-        vec![Box::new(mf_refl), Box::new(lambertian)]
+        vec![mf_refl.into(), lambertian.into()]
     }
     fn summary(&self) -> String {
         String::from("plastic")
+    }
+}
+
+pub struct Fourier {
+    table: FourierTable,
+}
+
+impl Fourier {
+    pub fn from_file(path: &str) -> Self {
+        let table = FourierTable::from_file(path).unwrap();
+        Self { table }
+    }
+}
+
+impl<'a> crate::Material for Fourier {
+    fn scatter(
+        &self, _wi: math::hcm::Vec3, _isect: &shape::Interaction,
+    ) -> (geometry::ray::Ray, Color) {
+        todo!()
+    }
+
+    fn bxdfs_at(&self, _isect: &shape::Interaction) -> Vec<BXDF> {
+        let fourier_bsdf = FourierBSDF { table: &self.table };
+        vec![fourier_bsdf.into()]
+    }
+
+    fn summary(&self) -> String {
+        "Fourier".to_owned()
     }
 }
 
@@ -457,7 +479,7 @@ fn schlick(cosine: f32, ref_index: f32) -> f32 {
 
 #[cfg(test)]
 mod test {
-    use geometry::bxdf::Omega;
+    use geometry::bxdf::{Omega, BxDF};
     use math::{
         float::Float,
         hcm::{Point3, Vec3},

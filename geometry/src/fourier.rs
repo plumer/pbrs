@@ -1,4 +1,4 @@
-use geometry::bxdf::{BxDF, Omega};
+use crate::bxdf::{BxDF, Omega};
 use itertools::Itertools;
 use math::{
     float::{Fallback, Float, Inside},
@@ -478,39 +478,12 @@ impl<'a> BxDF for FourierBSDF<'a> {
     }
 }
 
-pub struct Fourier {
-    table: FourierTable,
-}
-
-impl Fourier {
-    pub fn from_file(path: &str) -> Self {
-        let table = FourierTable::from_file(path).unwrap();
-        Self { table }
-    }
-}
-
-impl<'a> crate::Material for Fourier {
-    fn scatter(
-        &self, _wi: math::hcm::Vec3, _isect: &shape::Interaction,
-    ) -> (geometry::ray::Ray, Color) {
-        todo!()
-    }
-
-    fn bxdfs_at(&self, _isect: &shape::Interaction) -> Vec<Box<dyn BxDF + '_>> {
-        let fourier_bsdf = FourierBSDF { table: &self.table };
-        vec![Box::new(fourier_bsdf)]
-    }
-
-    fn summary(&self) -> String {
-        "Fourier".to_owned()
-    }
-}
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use geometry::bxdf::*;
+    use crate::bxdf::*;
     use math::{float::Float, hcm::vec3};
     use rand::Rng;
     #[test]

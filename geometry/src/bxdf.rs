@@ -235,10 +235,11 @@ pub fn cos_hemisphere_pdf(w: Omega) -> f32 {
 ///
 /// Useful implementations:
 /// - `MatteReflection`, `MicrofacetReflection`
+#[enum_dispatch::enum_dispatch]
 pub trait BxDF {
     /// Evaluates the BSDF function at given in-out angles. Note that specular BSDFs always return
     /// 0. Use [`sample()`] in those cases instead.
-    fn eval(&self, wo: Omega, wi: Omega) -> Color;
+    fn eval(&self, wo: Omega, wi: Omega) -> Color;  
 
     /// Produces a possible incident direction given the outgoing direction, returning the
     /// probability density of the resulting direction and consumes a 2D random variable
@@ -257,6 +258,25 @@ pub trait BxDF {
         let wi = cos_sample_hemisphere(rnd2);
         (self.eval(wo, wi), wi, self.prob(wo, wi))
     }
+}
+
+#[enum_dispatch::enum_dispatch(BxDF)]
+pub enum BXDF<'a> {
+    Specular(Specular),
+    DiffuseReflect(DiffuseReflect),
+    MicrofacetReflect(MicrofacetReflection),
+    FresnelBlend(FresnelBlend),
+    Fourier(crate::fourier::FourierBSDF<'a>),
+}
+
+#[allow(dead_code)]
+fn dummy<'a>() -> Vec<BXDF<'a>> {
+    let l = DiffuseReflect::lambertian(Color::white());
+    let b : BXDF = BXDF::DiffuseReflect(l.clone());
+    let b2 = BXDF::from(l);
+    b.prob(Omega::normal(), Omega::normal());
+    b2.eval(Omega::normal(), Omega::normal());
+    vec![b, b2]
 }
 
 // ----------------------------
