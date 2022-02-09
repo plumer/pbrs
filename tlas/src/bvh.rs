@@ -2,9 +2,9 @@ use std::fmt::{Debug, Formatter, Result};
 use std::sync::Arc;
 
 use crate::instance::Instance;
-use material::Material;
 use geometry::bvh::{self, BBox};
 use geometry::ray::Ray;
+use material::Material;
 use shape::Interaction;
 
 #[derive(Debug)]

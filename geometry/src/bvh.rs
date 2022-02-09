@@ -1,10 +1,7 @@
 use std::fmt::{Debug, Display, Formatter, Result};
 
 use crate::ray::Ray;
-use math::{
-    float::min_max,
-    hcm::{Point3, Vec3},
-};
+use math::hcm::{Point3, Vec3};
 
 /// 3D bounding-box type. Boundary check is half-open (`[min, max)`) on all axes.
 /// - Build one from 2 `Point3`s;
@@ -12,24 +9,26 @@ use math::{
 /// - Check if it `contains()` a point or `encloses()` another box, or `intersects()` with a `Ray`.
 #[derive(Debug, Clone, Copy)]
 pub struct BBox {
-    min: Point3,
-    max: Point3,
+    min: glam::Vec3A,
+    max: glam::Vec3A,
 }
 
 impl BBox {
     pub fn empty() -> BBox {
         BBox {
-            min: Point3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
-            max: Point3::new(-f32::INFINITY, -f32::INFINITY, -f32::INFINITY),
+            min: glam::Vec3A::splat(f32::INFINITY),
+            max: glam::Vec3A::splat(-f32::INFINITY),
         }
     }
+    pub fn has_nan(&self) -> bool {
+        self.min.is_nan() || self.max.is_nan()
+    }
     pub fn new(p0: Point3, p1: Point3) -> BBox {
-        let (xmin, xmax) = min_max(p0.x, p1.x);
-        let (ymin, ymax) = min_max(p0.y, p1.y);
-        let (zmin, zmax) = min_max(p0.z, p1.z);
+        let p0 = glam::Vec3A::new(p0.x, p0.y, p0.z);
+        let p1 = glam::Vec3A::new(p1.x, p1.y, p1.z);
         BBox {
-            min: Point3::new(xmin, ymin, zmin),
-            max: Point3::new(xmax, ymax, zmax),
+            min: p0.min(p1),
+            max: p0.max(p1),
         }
     }
 
@@ -43,11 +42,13 @@ impl BBox {
     }
 
     pub fn midpoint(self) -> Point3 {
-        (self.max - self.min) * 0.5 + self.min
+        let p = (self.max - self.min) * 0.5 + self.min;
+        Point3::new(p.x, p.y, p.z)
     }
 
     pub fn diag(&self) -> Vec3 {
-        self.max - self.min
+        let d = self.max - self.min;
+        Vec3::new(d.x, d.y, d.z)
     }
 
     #[allow(dead_code)]
@@ -67,7 +68,7 @@ impl BBox {
         res
     }
     pub fn min(&self) -> Point3 {
-        self.min
+        Point3::new(self.min.x, self.min.y, self.min.z)
     }
 
     /// Computes the surface area of the bounding box.
@@ -81,20 +82,18 @@ impl BBox {
     }
 
     pub fn intersect(&self, r: &Ray) -> bool {
-        let (mut t_min, mut t_max) = (0.0f32, r.t_max);
-        for axis in 0..3 {
-            let inv_dir = 1.0 / r.dir[axis];
-            let t0 = (self.min[axis] - r.origin[axis]) * inv_dir;
-            let t1 = (self.max[axis] - r.origin[axis]) * inv_dir;
-            let (t0, t1) = min_max(t0, t1);
-            // Shrinks [t_min, t_max] by intersecting it with [t0, t1].
-            t_min = t_min.max(t0);
-            t_max = t_max.min(t1);
-            if t_max < t_min {
-                return false;
-            }
-        }
-        return true;
+        let (dirx, diry, dirz) = r.dir.as_triple();
+        let (ox, oy, oz) = r.origin.as_triple();
+
+        use glam::Vec3A;
+        let dir = Vec3A::new(dirx, diry, dirz);
+        let o = Vec3A::new(ox, oy, oz);
+
+        let t0 = (self.min - o) / dir;
+        let t1 = (self.max - o) / dir;
+        let t_low = t0.min(t1).max_element();
+        let t_high = t0.max(t1).min_element();
+        return t_low < t_high;
     }
 
     pub fn encloses(&self, other: Self) -> bool {
@@ -129,5 +128,8 @@ impl Display for BBox {
 }
 
 pub fn union(b0: BBox, b1: BBox) -> BBox {
-    b0.union(b1.min).union(b1.max)
+    BBox {
+        min: b0.min.min(b1.min),
+        max: b0.max.max(b1.max),
+    }
 }
