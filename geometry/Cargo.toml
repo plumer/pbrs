@@ -10,3 +10,4 @@ radiometry = { path = "../radiometry", version = "0.1.0"}
 rand = "0.8"
 enum_dispatch = "0.3.7"
 itertools = "0.10"
+glam = "0.20"

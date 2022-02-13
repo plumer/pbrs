@@ -341,7 +341,7 @@ impl Transform<Point3> for AffineTransform {
     fn apply(&self, p: Point3) -> Point3 {
         let v4 = Vec4::from(p);
         let v4 = self.forward * v4;
-        assert_eq!(v4[3], 1.0, "v4 = {}, forward = {}", v4, self);
+        assert_eq!(v4[3], 1.0, "v4 = {v4}, forward = {self}",);
         Point3::new(v4[0], v4[1], v4[2])
     }
 }
