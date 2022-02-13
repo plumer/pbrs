@@ -82,7 +82,6 @@ impl BBox {
     }
 
     pub fn intersect(&self, r: &Ray) -> bool {
-
         let (dirx, diry, dirz) = r.dir.as_triple();
         let (ox, oy, oz) = r.origin.as_triple();
 
@@ -134,25 +133,5 @@ pub fn union(b0: BBox, b1: BBox) -> BBox {
     BBox {
         min: b0.min.min(b1.min),
         max: b0.max.max(b1.max),
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::bvh::BBox;
-    use crate::ray::Ray;
-    use math::hcm::{point3, vec3};
-    #[test]
-    fn stable_box_test() {
-        let bbox = BBox::new(
-            point3(-17.027893, 16.054487, 3.048435),
-            point3(-16.821342, 23.935837, 12.119018),
-        );
-        let ray = Ray::new(
-            point3(0.0, 23.0, 30.0),
-            vec3(-0.82937318, -0.08858252, -0.87960643),
-        );
-
-        assert!(bbox.intersect(&ray));
     }
 }
