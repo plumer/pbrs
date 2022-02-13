@@ -53,7 +53,7 @@ impl BBox {
 
     #[allow(dead_code)]
     pub fn all_corners(&self) -> [Point3; 8] {
-        let mut res = [Point3::origin(); 8];
+        let mut res = [Point3::ORIGIN; 8];
 
         for i in 0..8 {
             for axis in 0..3 {

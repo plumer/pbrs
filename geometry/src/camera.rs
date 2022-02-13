@@ -23,13 +23,13 @@ impl Camera {
         let half_horizontal = half_vertical * aspect_ratio;
 
         Camera {
-            center: hcm::Point3::origin(),
+            center: hcm::Point3::ORIGIN,
             a: hcm::Vec3::new(half_horizontal / (width / 2) as f32, 0.0, 0.0),
             b: hcm::Vec3::new(0.0, -half_vertical / (height / 2) as f32, 0.0),
             c: hcm::Vec3::new(-half_horizontal, half_vertical, 1.0),
             width,
             height,
-            orientation: hcm::Mat3::identity(),
+            orientation: hcm::Mat3::IDENTITY,
         }
     }
 
@@ -39,7 +39,7 @@ impl Camera {
         let right = (up.cross(forward)).hat(); // new x-axis, equals to cross(y, z)
         let up = forward.cross(right); // adjusted y-axis, equals to cross(z, x)
 
-        self.orientation = hcm::Mat3::from_vectors(right, up, forward);
+        self.orientation = hcm::Mat3::from_cols(right, up, forward);
         self.center = from;
     }
 
@@ -49,7 +49,7 @@ impl Camera {
         let up = forward.cross(right); // adjusted y-axis, equals to cross(z, x)
 
         Self {
-            orientation: hcm::Mat3::from_vectors(right, up, forward),
+            orientation: hcm::Mat3::from_cols(right, up, forward),
             center: from,
             ..self
         }

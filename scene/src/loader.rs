@@ -275,7 +275,7 @@ impl SceneLoader {
         match implementation {
             "sphere" => {
                 let radius = parameters.lookup_f32("float radius").unwrap_or(1.0);
-                Arc::new(shape::Sphere::new(hcm::Point3::origin(), radius))
+                Arc::new(shape::Sphere::new(hcm::Point3::ORIGIN, radius))
             }
             "plymesh" => {
                 let ply_file_name = parameters
@@ -353,7 +353,7 @@ impl SceneLoader {
     ) -> (Vec<Box<dyn ShapeSample>>, Vec<Arc<dyn Shape>>) {
         if shape_impl == "sphere" {
             let radius = args.lookup_f32("float radius").unwrap_or(1.0);
-            let sphere = shape::Sphere::new(hcm::Point3::origin(), radius);
+            let sphere = shape::Sphere::new(hcm::Point3::ORIGIN, radius);
             (vec![Box::new(sphere.clone())], vec![Arc::new(sphere)])
         } else if shape_impl == "plymesh" {
             let ply_file_name = args
@@ -394,7 +394,7 @@ impl SceneLoader {
     fn parse_light(light_impl: String, mut args: ast::ParameterSet) -> DeltaLight {
         if light_impl == "distant" {
             let from = match args.extract_substr("from") {
-                None => hcm::Point3::origin(),
+                None => hcm::Point3::ORIGIN,
                 Some((_key, ArgValue::Numbers(num))) => hcm::Point3::new(num[0], num[1], num[2]),
                 _ => panic!("Can't parse 3d point/vector"),
             };
@@ -415,7 +415,7 @@ impl SceneLoader {
             light::DeltaLight::distant(f32::INFINITY, to - from, emit_radiance)
         } else if light_impl == "point" {
             let position = match args.extract_substr("from") {
-                None => hcm::Point3::origin(),
+                None => hcm::Point3::ORIGIN,
                 Some((_key, ArgValue::Numbers(num))) => hcm::Point3::new(num[0], num[1], num[2]),
                 _ => panic!("Can't parse 3d point/vector"),
             };

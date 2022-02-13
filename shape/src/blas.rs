@@ -233,8 +233,8 @@ pub struct TriangleMeshRaw {
 impl Vertex {
     pub fn zero() -> Self {
         Vertex {
-            pos: Point3::origin(),
-            normal: Vec3::zero(),
+            pos: Point3::ORIGIN,
+            normal: Vec3::ZERO,
             uv: (0.0, 0.0),
         }
     }

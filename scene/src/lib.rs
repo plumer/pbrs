@@ -85,7 +85,7 @@ impl Scene {
             let u = (phi * FRAC_1_PI * 0.5 + 1.0).fract();
             let cos_theta = ray.dir.y / ray.dir.norm();
             let v = cos_theta.acos() / PI;
-            env_map.value((u, v), math::hcm::Point3::origin())
+            env_map.value((u, v), math::hcm::Point3::ORIGIN)
         } else {
             Color::black()
         }

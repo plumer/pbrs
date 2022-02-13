@@ -66,24 +66,16 @@ impl fmt::Display for Point3 {
 }
 
 impl Vec3 {
-    pub fn new(x: f32, y: f32, z: f32) -> Vec3 {
+    pub const fn new(x: f32, y: f32, z: f32) -> Vec3 {
         Vec3 { x, y, z }
     }
     pub fn as_triple(self) -> (f32, f32, f32) {
         (self.x, self.y, self.z)
     }
-    pub fn xbase() -> Vec3 {
-        Self::new(1.0, 0.0, 0.0)
-    }
-    pub fn ybase() -> Vec3 {
-        Self::new(0.0, 1.0, 0.0)
-    }
-    pub fn zbase() -> Vec3 {
-        Self::new(0.0, 0.0, 1.0)
-    }
-    pub fn zero() -> Vec3 {
-        Self::new(0.0, 0.0, 0.0)
-    }
+    pub const X: Vec3 = Self::new(1.0, 0.0, 0.0);
+    pub const Y: Vec3 = Self::new(0.0, 1.0, 0.0);
+    pub const Z: Vec3 = Self::new(0.0, 0.0, 1.0);
+    pub const ZERO: Vec3 = Self::new(0.0, 0.0, 0.0);
 
     pub fn dot(self, v: Vec3) -> f32 {
         self.x * v.x + self.y * v.y + self.z * v.z
@@ -130,7 +122,7 @@ impl Vec3 {
             -self
         }
     }
-    
+
     /// Projects `self` onto `other`. Both vectors can be arbitrary finite length.
     /// ```
     /// let a = math::hcm::vec3(1.0, 2.5, 0.0);
@@ -242,12 +234,10 @@ impl Div<f32> for Vec3 {
 
 // Implementation of Points
 impl Point3 {
-    pub fn new(x: f32, y: f32, z: f32) -> Point3 {
+    pub const fn new(x: f32, y: f32, z: f32) -> Point3 {
         Point3 { x, y, z }
     }
-    pub fn origin() -> Point3 {
-        Point3::new(0.0, 0.0, 0.0)
-    }
+    pub const ORIGIN: Point3 = Point3::new(0.0, 0.0, 0.0);
     pub fn as_triple(self) -> (f32, f32, f32) {
         (self.x, self.y, self.z)
     }
@@ -346,12 +336,14 @@ impl fmt::Display for Vec4 {
 }
 
 impl Vec4 {
-    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Vec4 {
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Vec4 {
         Vec4 { x, y, z, w }
     }
-    pub fn zero() -> Vec4 {
-        Vec4::new(0.0, 0.0, 0.0, 0.0)
-    }
+    pub const ZERO: Vec4 = Vec4::new(0.0, 0.0, 0.0, 0.0);
+    pub const X: Vec4 = Vec4::new(1.0, 0.0, 0.0, 0.0);
+    pub const Y: Vec4 = Vec4::new(0.0, 1.0, 0.0, 0.0);
+    pub const Z: Vec4 = Vec4::new(0.0, 0.0, 1.0, 0.0);
+    pub const W: Vec4 = Vec4::new(0.0, 0.0, 0.0, 1.0);
 }
 
 impl From<Vec3> for Vec4 {
@@ -459,30 +451,24 @@ pub struct Mat3 {
 
 #[allow(dead_code)]
 impl Mat3 {
-    pub fn zero() -> Self {
-        Self {
-            cols: [Vec3::zero(); 3],
-        }
-    }
-    pub fn identity() -> Self {
-        let mut mat = Self::zero();
-        for i in 0..3 {
-            mat.cols[i][i] = 1.0
-        }
-        mat
-    }
-    pub fn from_vectors(v0: Vec3, v1: Vec3, v2: Vec3) -> Self {
+    pub const ZERO: Self = Self {
+        cols: [Vec3::ZERO; 3],
+    };
+    pub const IDENTITY: Self = Self {
+        cols: [Vec3::X, Vec3::Y, Vec3::Z],
+    };
+    pub fn from_cols(v0: Vec3, v1: Vec3, v2: Vec3) -> Self {
         Self { cols: [v0, v1, v2] }
     }
     pub fn nonuniform_scale(s: Vec3) -> Self {
-        let mut mat = Self::identity();
+        let mut mat = Self::IDENTITY;
         mat.cols[0][0] = s[0];
         mat.cols[1][1] = s[1];
         mat.cols[2][2] = s[2];
         mat
     }
     pub fn scaler(s: f32) -> Self {
-        let mut mat = Self::identity();
+        let mut mat = Self::IDENTITY;
         mat.cols[0][0] = s;
         mat.cols[1][1] = s;
         mat.cols[2][2] = s;
@@ -493,7 +479,7 @@ impl Mat3 {
         let rot_y = Vec3::new(0.0, cos_t, sin_t);
         let rot_z = Vec3::new(0.0, -sin_t, cos_t);
 
-        Mat3::from_vectors(Vec3::xbase(), rot_y, rot_z)
+        Mat3::from_cols(Vec3::X, rot_y, rot_z)
     }
 
     pub fn rotater_y(angle: crate::Angle) -> Self {
@@ -501,7 +487,7 @@ impl Mat3 {
         let rot_x = Vec3::new(cos_t, 0.0, -sin_t);
         let rot_z = Vec3::new(sin_t, 0.0, cos_t);
 
-        Mat3::from_vectors(rot_x, Vec3::ybase(), rot_z)
+        Mat3::from_cols(rot_x, Vec3::Y, rot_z)
     }
 
     pub fn rotater_z(angle: crate::Angle) -> Self {
@@ -509,13 +495,13 @@ impl Mat3 {
         let rot_x = Vec3::new(cos_t, sin_t, 0.0);
         let rot_y = Vec3::new(-sin_t, cos_t, 0.0);
 
-        Mat3::from_vectors(rot_x, rot_y, Vec3::zbase())
+        Mat3::from_cols(rot_x, rot_y, Vec3::Z)
     }
     pub fn rotater(axis: Vec3, angle: crate::Angle) -> Self {
-        let mut mat = Self::identity();
+        let mut mat = Self::IDENTITY;
         let (sin_t, cos_t) = angle.sin_cos();
         for i in 0..3 {
-            let mut base = Vec3::zero();
+            let mut base = Vec3::ZERO;
             base[i] = 1.0;
             let vc = base.dot(axis) * axis / axis.dot(axis);
             let v1 = base - vc;
@@ -525,7 +511,7 @@ impl Mat3 {
         mat
     }
     pub fn transpose(&self) -> Self {
-        let mut mat = Self::zero();
+        let mut mat = Self::ZERO;
         for i in 0..3 {
             for j in 0..3 {
                 mat.cols[i][j] = self.cols[j][i];
@@ -541,7 +527,7 @@ impl Mat3 {
 impl Mul for Mat3 {
     type Output = Mat3;
     fn mul(self, m: Self) -> Mat3 {
-        let mut mat = Mat3::zero();
+        let mut mat = Mat3::ZERO;
         for c in 0..3 {
             // TODO verify the correctness
             mat.cols[c] = mat.cols[c] + self * m.cols[c];
@@ -560,7 +546,7 @@ impl Mul<Vec3> for Mat3 {
 impl Sub for Mat3 {
     type Output = Mat3;
     fn sub(self, rhs: Mat3) -> Self::Output {
-        Self::from_vectors(
+        Self::from_cols(
             self.cols[0] - rhs.cols[0],
             self.cols[1] - rhs.cols[1],
             self.cols[2] - rhs.cols[2],
@@ -578,42 +564,36 @@ pub struct Mat4 {
 
 #[allow(dead_code)]
 impl Mat4 {
-    pub fn zero() -> Mat4 {
-        Mat4 {
-            cols: [Vec4::zero(); 4],
-        }
-    }
-    pub fn identity() -> Mat4 {
-        let mut mat = Self::zero();
-        for i in 0..4 {
-            mat.cols[i][i] = 1.0
-        }
-        mat
-    }
+    pub const ZERO: Mat4 = Mat4 {
+        cols: [Vec4::ZERO; 4],
+    };
+    pub const IDENTITY: Mat4 = Mat4 {
+        cols: [Vec4::X, Vec4::Y, Vec4::Z, Vec4::W],
+    };
     pub fn translater(t: Vec3) -> Mat4 {
-        let mut mat = Self::identity();
+        let mut mat = Self::IDENTITY;
         mat.cols[3] = Vec4::new(t.x, t.y, t.z, 1.0);
         mat
     }
     pub fn nonuniform_scale(s: Vec3) -> Mat4 {
-        let mut mat = Self::identity();
+        let mut mat = Self::IDENTITY;
         mat.cols[0][0] = s[0];
         mat.cols[1][1] = s[1];
         mat.cols[2][2] = s[2];
         mat
     }
     pub fn scaler(s: f32) -> Mat4 {
-        let mut mat = Self::identity();
+        let mut mat = Self::IDENTITY;
         mat.cols[0][0] = s;
         mat.cols[1][1] = s;
         mat.cols[2][2] = s;
         mat
     }
     pub fn rotater(axis: Vec3, angle: crate::Angle) -> Mat4 {
-        let mut mat = Self::identity();
+        let mut mat = Self::IDENTITY;
         let (sin_t, cos_t) = angle.sin_cos();
         for i in 0..3 {
-            let mut base = Vec3::zero();
+            let mut base = Vec3::ZERO;
             base[i] = 1.0;
             let vc = base.dot(axis) * axis / axis.dot(axis);
             let v1 = base - vc;
@@ -623,7 +603,7 @@ impl Mat4 {
         mat
     }
     pub fn transpose(&self) -> Mat4 {
-        let mut mat = Self::zero();
+        let mut mat = Self::ZERO;
         for i in 0..4 {
             for j in 0..4 {
                 mat.cols[i][j] = self.cols[j][i];
@@ -632,7 +612,7 @@ impl Mat4 {
         mat
     }
     pub fn orientation(&self) -> Mat3 {
-        Mat3::from_vectors(
+        Mat3::from_cols(
             self.cols[0].into(),
             self.cols[1].into(),
             self.cols[2].into(),
@@ -650,7 +630,7 @@ impl Mul<Vec4> for Mat4 {
 impl Mul for Mat4 {
     type Output = Mat4;
     fn mul(self, m: Self) -> Mat4 {
-        let mut mat = Mat4::zero();
+        let mut mat = Mat4::ZERO;
         for c in 0..4 {
             // TODO verify the correctness and implement AddAssign trait.
             mat.cols[c] = mat.cols[c] + self * m.cols[c];
@@ -690,16 +670,16 @@ pub fn normalize(x: f32, y: f32, z: f32) -> Vec3 {
 /// use math::hcm::{Vec3, Mat3, make_coord_system};
 /// let v0 = Vec3::new(0.3, 0.4, -0.6).hat();
 /// let (v1, v2) = make_coord_system(v0);
-/// 
-/// let basis = Mat3::from_vectors(v0, v1, v2);
+///
+/// let basis = Mat3::from_cols(v0, v1, v2);
 /// // basis * basis^T should be identity.
-/// let diff_to_eye = basis * basis.transpose() - Mat3::identity();
+/// let diff_to_eye = basis * basis.transpose() - Mat3::IDENTITY;
 /// assert!(diff_to_eye.frobenius_norm_squared() < f32::EPSILON);
 /// ```
 pub fn make_coord_system(v: Vec3) -> (Vec3, Vec3) {
     let i0 = v.abs_min_dimension();
     let (i1, i2) = ((i0 + 1) % 3, (i0 + 2) % 3);
-    let mut v1 = Vec3::zero();
+    let mut v1 = Vec3::ZERO;
     // v = [x, y, z] -> [x, 0, z], v1 = [-z, 0, x]
     v1[i1] = v[i2];
     v1[i2] = -v[i1];
@@ -774,7 +754,7 @@ mod test {
     type Vec3 = super::Vec3;
     #[test]
     fn test_reflect() {
-        let normal = Vec3::ybase();
+        let normal = Vec3::Y;
         let wi = Vec3::new(2.0, 1.0, 0.5);
         let wo = Vec3::new(-2.0, 1.0, -0.5);
         let reflect_wi = super::reflect(normal, wi);
@@ -783,7 +763,7 @@ mod test {
     }
     #[test]
     fn test_refract() {
-        let normal = Vec3::ybase() * 6.0;
+        let normal = Vec3::Y * 6.0;
         let wi = Vec3::new(1.0, 1.0, 0.0).hat();
         let wo = Vec3::new(-0.5, -0.5 * 3.0f32.sqrt(), 0.0);
         let refract_wo = super::refract(normal, wi, 0.5f32.sqrt());

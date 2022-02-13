@@ -33,29 +33,29 @@ impl RigidBodyTransform {
         }
     }
     pub fn identity() -> Self {
-        Self::build(Mat3::identity(), Vec3::zero())
+        Self::build(Mat3::IDENTITY, Vec3::ZERO)
     }
 
     pub fn translater(t: Vec3) -> Self {
-        Self::build(Mat3::identity(), t)
+        Self::build(Mat3::IDENTITY, t)
     }
 
     // rotation: [1, 0] -> [cosT, sinT], [0, 1] -> [-sinT, cosT]
 
     pub fn rotater_x(angle: Angle) -> Self {
-        Self::build(Mat3::rotater_x(angle), Vec3::zero())
+        Self::build(Mat3::rotater_x(angle), Vec3::ZERO)
     }
 
     pub fn rotater_y(angle: Angle) -> Self {
-        Self::build(Mat3::rotater_y(angle), Vec3::zero())
+        Self::build(Mat3::rotater_y(angle), Vec3::ZERO)
     }
 
     pub fn rotater_z(angle: Angle) -> Self {
-        Self::build(Mat3::rotater_z(angle), Vec3::zero())
+        Self::build(Mat3::rotater_z(angle), Vec3::ZERO)
     }
 
     pub fn rotater(axis: Vec3, angle: Angle) -> Self {
-        Self::build(Mat3::rotater(axis, angle), Vec3::zero())
+        Self::build(Mat3::rotater(axis, angle), Vec3::ZERO)
     }
 
     pub fn inverse(&self) -> Self {
@@ -133,8 +133,8 @@ impl std::fmt::Display for AffineTransform {
 impl AffineTransform {
     pub fn identity() -> Self {
         Self {
-            forward: Mat4::identity(),
-            inverse: Mat4::identity(),
+            forward: Mat4::IDENTITY,
+            inverse: Mat4::IDENTITY,
         }
     }
     pub fn translater(t: Vec3) -> Self {
@@ -172,13 +172,13 @@ impl AffineTransform {
 
     /// Applies rotation onto the transform, and returns Rotate(angle) * self.
     pub fn rotate_x(self, angle: Angle) -> Self {
-        Self::rotater(Vec3::xbase(), angle) * self
+        Self::rotater(Vec3::X, angle) * self
     }
     pub fn rotate_y(self, angle: Angle) -> Self {
-        Self::rotater(Vec3::ybase(), angle) * self
+        Self::rotater(Vec3::Y, angle) * self
     }
     pub fn rotate_z(self, angle: Angle) -> Self {
-        Self::rotater(Vec3::zbase(), angle) * self
+        Self::rotater(Vec3::Z, angle) * self
     }
 }
 
@@ -400,7 +400,7 @@ mod test {
         let expected_identity = inv * trans;
 
         assert_le!(
-            (expected_identity.rotation - super::Mat3::identity()).frobenius_norm_squared(),
+            (expected_identity.rotation - super::Mat3::IDENTITY).frobenius_norm_squared(),
             f32::EPSILON
         );
         assert_le!(expected_identity.translation.norm_squared(), f32::EPSILON);

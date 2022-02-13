@@ -372,7 +372,7 @@ fn compute_normals(positions: &Vec<hcm::Point3>, indices: &Vec<i32>) -> Vec<hcm:
     let num_triangles = indices.len() / 3;
     assert_eq!(num_triangles * 3, indices.len());
     let mut normals = Vec::new();
-    normals.resize(positions.len(), hcm::Vec3::zero());
+    normals.resize(positions.len(), hcm::Vec3::ZERO);
     indices.chunks_exact(3).for_each(|ijk| {
         if let [i, j, k] = ijk {
             let p0 = positions[*i as usize];

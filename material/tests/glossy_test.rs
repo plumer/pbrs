@@ -8,9 +8,9 @@ use shape::Interaction;
 fn glossy_test() {
     let glossy = material::Glossy::new(Color::new(0.5, 0.6, 0.8), 0.02);
     let mut bxdfs = glossy.bxdfs_at(&Interaction::rayless(
-        Point3::origin(),
+        Point3::ORIGIN,
         (0.0, 0.0),
-        Vec3::zbase(),
+        Vec3::Z,
     ));
     assert_eq!(bxdfs.len(), 1);
     let bxdf = bxdfs.pop().unwrap();

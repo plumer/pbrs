@@ -8,7 +8,7 @@ use shape::{Interaction, Sphere};
 #[test]
 fn test_sphere_sample_pdf_integrate() {
     let s = Sphere::from_raw((5.0, 6.0, 12.0), 2.0);
-    let p = Interaction::rayless(Point3::new(0.0, 0.0, 0.0), (0.0, 0.0), Vec3::zbase());
+    let p = Interaction::rayless(Point3::new(0.0, 0.0, 0.0), (0.0, 0.0), Vec3::Z);
 
     let pdf_integral = integrate_sphere_pdf(&s, &p);
     assert!(
@@ -21,7 +21,7 @@ fn test_sphere_sample_pdf_integrate() {
 #[test]
 fn observe_sphere_sample_towards() {
     use shape::Shape;
-    let s = Sphere::new(Point3::origin(), 1.5);
+    let s = Sphere::new(Point3::ORIGIN, 1.5);
     let target = Interaction::rayless(point3(0.0, 3.0, 0.0), (0.0, 0.0), vec3(0.6, -0.8, 0.0));
     if true {
         let s = Sphere::new(point3(9.44999981, 20.0, -8.0), 0.2);
@@ -29,7 +29,7 @@ fn observe_sphere_sample_towards() {
             point3(-18.3287563, 19.3762169, 0.0),
             56.0,
             (0.0417810902, 0.968810856),
-            -math::hcm::Vec3::zbase(),
+            -math::hcm::Vec3::Z,
             vec3(0.327299207, -0.203146726, -1.0),
         )
         .with_dpdu(vec3(0.0, -1.0, 0.0));

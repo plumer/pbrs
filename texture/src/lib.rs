@@ -64,7 +64,7 @@ pub struct Perlin {
 
 impl Perlin {
     pub fn new() -> Perlin {
-        let mut rand_vec = [Vec3::xbase(); PERLIN_NUM_POINTS];
+        let mut rand_vec = [Vec3::X; PERLIN_NUM_POINTS];
         for v in rand_vec.iter_mut() {
             *v = uniform_random_sphere();
         }
@@ -105,7 +105,7 @@ impl Perlin {
         let v = v * v * (3.0 - 2.0 * v);
         let w = w * w * (3.0 - 2.0 * w);
 
-        let mut c = [[[Vec3::zero(); 2]; 2]; 2];
+        let mut c = [[[Vec3::ZERO; 2]; 2]; 2];
         for di in 0..2 {
             for dj in 0..2 {
                 for dk in 0..2 {

@@ -225,7 +225,7 @@ impl Shape for Sphere {
         // In case both x and y are zero, use (1, 0, 0).
         let dpdu = Vec3::new(-normal.y, normal.x, 0.0)
             .try_hat()
-            .unwrap_or(Vec3::xbase());
+            .unwrap_or(Vec3::X);
 
         assert!(
             pos.distance_to(self.center) >= self.radius,
@@ -333,9 +333,9 @@ impl Shape for QuadXY {
             let v = (y - ymin) / self.y_interval.length();
 
             let pos = Point3::new(x, y, self.z);
-            let normal = Vec3::zbase() * -r.dir.z.signum();
+            let normal = Vec3::Z * -r.dir.z.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::xbase()))
+            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::X))
         } else {
             None
         }
@@ -375,9 +375,9 @@ impl Shape for QuadXZ {
             let v = (z - self.z_interval.min) / self.z_interval.length();
 
             let pos = Point3::new(x, self.y, z);
-            let normal = Vec3::ybase() * -r.dir.y.signum();
+            let normal = Vec3::Y * -r.dir.y.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::xbase()))
+            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::X))
         } else {
             None
         }
@@ -417,9 +417,9 @@ impl Shape for QuadYZ {
             let v = (z - self.z_interval.min) / self.z_interval.length();
 
             let pos = Point3::new(self.x, y, z);
-            let normal = Vec3::xbase() * -r.dir.x.signum();
+            let normal = Vec3::X * -r.dir.x.signum();
 
-            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::ybase()))
+            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::Y))
         } else {
             None
         }
@@ -505,9 +505,9 @@ impl Shape for Cuboid {
         );
         let mut hit_pos = r.position_at(t);
         hit_pos[axis] = axis_value;
-        let mut normal = Vec3::zero();
+        let mut normal = Vec3::ZERO;
         normal[axis] = r.dir[axis].signum() * -1.0;
-        let mut tangent = Vec3::zero();
+        let mut tangent = Vec3::ZERO;
         let tangent_axis = (axis + 1) % 3;
         tangent[tangent_axis] = 1.0;
         Some(Interaction::new(hit_pos, t, (0.5, 0.5), normal, -r.dir).with_dpdu(tangent))

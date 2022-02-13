@@ -47,7 +47,7 @@ impl Omega {
         Self(Vec3::new(x, y, z).hat())
     }
     pub fn normal() -> Self {
-        Self(Vec3::zbase())
+        Self(Vec3::Z)
     }
     pub fn cos_theta(self) -> f32 {
         self.0.z
@@ -438,9 +438,9 @@ impl Specular {
         // Computes the normal for computing the refraction. It is flipped to the side forming an
         // acute angle with `wo`.
         let (eta_i, eta_t, normal) = if wo.cos_theta() > 0.0 {
-            (eta_front, eta_back, Vec3::zbase())
+            (eta_front, eta_back, Vec3::Z)
         } else {
-            (eta_back, eta_front, -Vec3::zbase())
+            (eta_back, eta_front, -Vec3::Z)
         };
 
         match Omega::refract(Omega(normal), wo, eta_i / eta_t) {

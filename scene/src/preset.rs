@@ -56,7 +56,7 @@ pub fn mixed_spheres() -> Scene {
     camera.look_at(
         Point3::new(13.0, 2.0, 3.0),
         Point3::new(0.0, 0.0, 0.0),
-        Vec3::ybase(),
+        Vec3::Y,
     );
 
     let mut spheres = vec![
@@ -126,8 +126,8 @@ pub fn two_perlin_spheres() -> Scene {
     let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
     cam.look_at(
         Point3::new(13.0, 2.0, -3.0),
-        Point3::origin(),
-        Vec3::ybase(),
+        Point3::ORIGIN,
+        Vec3::Y,
     );
 
     Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
@@ -137,14 +137,14 @@ pub fn earth() -> Scene {
     let earth_tex = Arc::new(tex::Image::from_file("assets/earthmap.png").unwrap());
     let earth_mtl = Arc::new(material::Lambertian::textured(earth_tex));
 
-    let globe = Arc::new(Sphere::new(Point3::origin(), 2.0));
+    let globe = Arc::new(Sphere::new(Point3::ORIGIN, 2.0));
     let instances = vec![Box::new(Instance::new(globe, earth_mtl))];
 
     let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
     cam.look_at(
         Point3::new(13.0, 2.0, -3.0),
-        Point3::origin(),
-        Vec3::ybase(),
+        Point3::ORIGIN,
+        Vec3::Y,
     );
 
     Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
@@ -182,7 +182,7 @@ pub fn quad_light() -> Scene {
     cam.look_at(
         Point3::new(26.0, 3.0, -6.0),
         Point3::new(0.0, 2.0, 0.0),
-        Vec3::ybase(),
+        Vec3::Y,
     );
 
     Scene::new(*tlas::build_bvh(instances), cam)
@@ -233,11 +233,11 @@ pub fn cornell_box() -> Scene {
         Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white ceiling
         Arc::new(shape::QuadXY::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white back
         Arc::new(shape::Cuboid::from_points(
-            Point3::origin(),
+            Point3::ORIGIN,
             Point3::new(165.0, 165.0, 165.0),
         )),
         Arc::new(shape::Cuboid::from_points(
-            Point3::origin(),
+            Point3::ORIGIN,
             Point3::new(165.0, 330.0, 165.0),
         )),
         // Arc::new(Sphere::from_raw((250.0, 250.0, 250.0), 50.0))
@@ -266,7 +266,7 @@ pub fn cornell_box() -> Scene {
     cam.look_at(
         Point3::new(278.0, 278.0, -800.0),
         Point3::new(278.0, 278.0, 0.0),
-        Vec3::ybase(),
+        Vec3::Y,
     );
 
     Scene::new(*tlas::build_bvh(instances), cam).with_lights(vec![], area_lights)
@@ -364,7 +364,7 @@ pub fn plates() -> Scene {
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
     let camera = Camera::new((1000, 800), math::Angle::pi() * 0.19)
-        .looking_at(camera_pos, camera_pos + Vec3::zbase(), Vec3::ybase())
+        .looking_at(camera_pos, camera_pos + Vec3::Z, Vec3::Y)
         // .translate(vec3(-0.4 * r, 0.0, 0.0))
         ;
 
@@ -446,7 +446,7 @@ pub fn everything() -> Scene {
     cam.look_at(
         Point3::new(478.0, 278.0, -600.0),
         Point3::new(278.0, 278.0, 0.0),
-        Vec3::ybase(),
+        Vec3::Y,
     );
 
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
@@ -457,7 +457,7 @@ pub fn everything() -> Scene {
 }
 
 pub fn env_mapped() -> Scene {
-    let sphere = Sphere::new(Point3::origin(), 2.0);
+    let sphere = Sphere::new(Point3::ORIGIN, 2.0);
     let sphere_mtl = mtl::Mirror::new(Color::white());
     let mut instances = vec![Box::new(Instance::from_raw(sphere, sphere_mtl))];
     // TODO: add more spheres with different materials
@@ -470,8 +470,8 @@ pub fn env_mapped() -> Scene {
     }
     let camera = Camera::new((1280, 800), math::new_deg(60.0)).looking_at(
         point3(0.0, 0.0, -24.0),
-        Point3::origin(),
-        Vec3::ybase(),
+        Point3::ORIGIN,
+        Vec3::Y,
     );
 
     let earth_map = tex::Image::from_file("assets/venice_dawn_1_2k.png").unwrap();

@@ -23,7 +23,7 @@ impl<'a> BSDF<'a> {
         assert!(normal.dot(tangent).abs() < 1e-4);
         assert!(tangent.dot(bitangent).abs() < 1e-4);
         let res = Self {
-            frame: hcm::Mat3::from_vectors(tangent, bitangent, normal),
+            frame: hcm::Mat3::from_cols(tangent, bitangent, normal),
             bxdfs: &[],
         };
         assert!(res.has_valid_frame());
@@ -66,7 +66,7 @@ impl<'a> BSDF<'a> {
         let mut bxdfs = self.bxdfs.iter().collect::<Vec<_>>();
         if bxdfs.is_empty() {
             // No BxDFs are available in this BSDF object.
-            return (Color::black(), hcm::Vec3::zero(), Prob::Mass(0.0));
+            return (Color::black(), hcm::Vec3::ZERO, Prob::Mass(0.0));
         }
         // Picks a BxDF from the available diffuse ones, randomly using u.
         //     0         1        2        3        4    ...         n-2       n-1
@@ -159,9 +159,9 @@ mod test {
 
         let normal = hcm::vec3(-0.6, 0.5, 0.2).hat();
         let (dpdu, dpdv) = hcm::make_coord_system(normal);
-        let frame = hcm::Mat3::from_vectors(dpdu, dpdv, normal);
+        let frame = hcm::Mat3::from_cols(dpdu, dpdv, normal);
         assert!(
-            (frame * frame.transpose() - hcm::Mat3::identity()).frobenius_norm_squared() < 1e-6
+            (frame * frame.transpose() - hcm::Mat3::IDENTITY).frobenius_norm_squared() < 1e-6
         );
 
         let isect = Interaction::rayless(hcm::Point3::new(3.0, 2.5, 2.0), (0.2, 0.8), normal)

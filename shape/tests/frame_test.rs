@@ -28,8 +28,8 @@ fn custom_frame_test() {
         normal, dpdv, normal.dot(dpdv)
     );
 
-    let frame = hcm::Mat3::from_vectors(dpdu, dpdv, normal);
-    assert!((frame * frame.transpose() - hcm::Mat3::identity()).frobenius_norm_squared() < 1e-6);
+    let frame = hcm::Mat3::from_cols(dpdu, dpdv, normal);
+    assert!((frame * frame.transpose() - hcm::Mat3::IDENTITY).frobenius_norm_squared() < 1e-6);
 
     let isect = Interaction::rayless(
         hcm::Point3::new(3.0, 2.5, 2.0),

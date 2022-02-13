@@ -246,7 +246,7 @@ impl ShapeSample for shape::Sphere {
         let normal_object_space =
             hcm::spherical_direction(sin_alpha, cos_alpha, math::new_rad(phi));
         let (wcx, wcy) = hcm::make_coord_system(-wc.hat());
-        let normal_world_space = hcm::Mat3::from_vectors(wcx, wcy, -wc.hat()) * normal_object_space;
+        let normal_world_space = hcm::Mat3::from_cols(wcx, wcy, -wc.hat()) * normal_object_space;
         let point_on_sphere = normal_world_space * self.radius() + self.center();
 
         // TODO: the following assertion would fail for corner-case u-values (something very close
@@ -322,7 +322,7 @@ impl ShapeSample for shape::QuadXY {
     fn sample(&self, rnd2: (f32, f32)) -> Interaction {
         let (u, v) = rnd2;
         let pos = hcm::Point3::new(self.x_interval.lerp(u), self.y_interval.lerp(v), self.z);
-        let normal = hcm::Vec3::zbase();
+        let normal = hcm::Vec3::Z;
         Interaction::rayless(pos, rnd2, normal)
     }
 
@@ -342,7 +342,7 @@ impl ShapeSample for shape::QuadXZ {
     fn sample(&self, rnd2: (f32, f32)) -> Interaction {
         let (u, v) = rnd2;
         let pos = hcm::Point3::new(self.x_interval.lerp(u), self.y, self.z_interval.lerp(v));
-        let normal = hcm::Vec3::ybase();
+        let normal = hcm::Vec3::Y;
         Interaction::rayless(pos, rnd2, normal)
     }
 
@@ -362,7 +362,7 @@ impl ShapeSample for shape::QuadYZ {
     fn sample(&self, rnd2: (f32, f32)) -> Interaction {
         let (u, v) = rnd2;
         let pos = hcm::Point3::new(self.x, self.y_interval.lerp(u), self.z_interval.lerp(v));
-        let normal = hcm::Vec3::xbase();
+        let normal = hcm::Vec3::X;
         Interaction::rayless(pos, rnd2, normal)
     }
 

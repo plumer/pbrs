@@ -28,13 +28,13 @@ impl Interaction {
             uv,
             normal,
             wo,
-            tbn_frame: Mat3::zero(),
+            tbn_frame: Mat3::ZERO,
         }
     }
 
     /// Makes a new `Interaction` without recording incoming ray information.
     pub fn rayless(pos: Point3, uv: (f32, f32), normal: Vec3) -> Self {
-        Self::new(pos, 0.0, uv, normal, Vec3::zero())
+        Self::new(pos, 0.0, uv, normal, Vec3::ZERO)
     }
 
     pub fn tangent(&self) -> Vec3 {
@@ -55,7 +55,7 @@ impl Interaction {
         let det = dpdu.cross(bitangent).dot(normal);
         assert!((det - 1.0).abs() < 1e-4, "{}", det);
         Self {
-            tbn_frame: Mat3::from_vectors(dpdu, bitangent, normal),
+            tbn_frame: Mat3::from_cols(dpdu, bitangent, normal),
             ..self
         }
     }
