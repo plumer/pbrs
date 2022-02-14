@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 itertools = "0.10.3"
+glam = "0.20"

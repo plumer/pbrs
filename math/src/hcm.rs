@@ -12,6 +12,8 @@ pub fn point3(x: f32, y: f32, z: f32) -> Point3 {
     Point3::new(x, y, z)
 }
 
+pub use glam::Vec4;
+
 /// Represents a 3D vector. Each component is a `f32` number.
 /// Components can be accessed using `v.x` `v.y` `v.z`,
 /// or indices `v[i]` where i is 0, 1, or 2.
@@ -71,6 +73,9 @@ impl Vec3 {
     }
     pub fn as_triple(self) -> (f32, f32, f32) {
         (self.x, self.y, self.z)
+    }
+    pub fn as_vec4(self) -> Vec4 {
+        Vec4::new(self.x, self.y, self.z, 0.0)
     }
     pub const X: Vec3 = Self::new(1.0, 0.0, 0.0);
     pub const Y: Vec3 = Self::new(0.0, 1.0, 0.0);
@@ -260,6 +265,9 @@ impl Point3 {
     pub fn has_nan(self) -> bool {
         self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
+    pub fn as_vec4(self) -> Vec4 {
+        Vec4::new(self.x, self.y, self.z, 1.0)
+    }
 }
 
 impl Add<Vec3> for Point3 {
@@ -317,46 +325,6 @@ impl From<Point3> for Vec3 {
     }
 }
 
-/// 4-element vector. Supported operations:
-/// - `v+v` `v-v` `v*s` `v/s` where `s` is `f32`.
-/// - Convertible from `Vec3` and `Point3`, with homogeneous coordinate added properly.
-/// -------------------------------------------------------------------------------------------------
-#[derive(Debug, Clone, Copy)]
-pub struct Vec4 {
-    x: f32,
-    y: f32,
-    z: f32,
-    w: f32,
-}
-
-impl fmt::Display for Vec4 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {}, {}, {})", self.x, self.y, self.z, self.w)
-    }
-}
-
-impl Vec4 {
-    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Vec4 {
-        Vec4 { x, y, z, w }
-    }
-    pub const ZERO: Vec4 = Vec4::new(0.0, 0.0, 0.0, 0.0);
-    pub const X: Vec4 = Vec4::new(1.0, 0.0, 0.0, 0.0);
-    pub const Y: Vec4 = Vec4::new(0.0, 1.0, 0.0, 0.0);
-    pub const Z: Vec4 = Vec4::new(0.0, 0.0, 1.0, 0.0);
-    pub const W: Vec4 = Vec4::new(0.0, 0.0, 0.0, 1.0);
-}
-
-impl From<Vec3> for Vec4 {
-    fn from(v3: Vec3) -> Self {
-        Vec4::new(v3.x, v3.y, v3.z, 0.0)
-    }
-}
-
-impl From<Point3> for Vec4 {
-    fn from(v3: Point3) -> Self {
-        Vec4::new(v3.x, v3.y, v3.z, 1.0)
-    }
-}
 
 impl From<Vec4> for Vec3 {
     fn from(v4: Vec4) -> Self {
@@ -374,70 +342,6 @@ impl TryFrom<Vec4> for Point3 {
         } else {
             let w = value.w;
             Ok(Point3::new(value.x / w, value.y / w, value.z / w))
-        }
-    }
-}
-
-impl Add for Vec4 {
-    type Output = Vec4;
-    fn add(self, rhs: Self) -> Self {
-        Self::new(
-            self.x + rhs.x,
-            self.y + rhs.y,
-            self.z + rhs.z,
-            self.w + rhs.w,
-        )
-    }
-}
-
-impl Sub for Vec4 {
-    type Output = Vec4;
-    fn sub(self, rhs: Self) -> Self {
-        Self::new(
-            self.x - rhs.x,
-            self.y - rhs.y,
-            self.z - rhs.z,
-            self.w - rhs.w,
-        )
-    }
-}
-
-impl Mul<f32> for Vec4 {
-    type Output = Vec4;
-    fn mul(self, s: f32) -> Self {
-        Self::new(self.x * s, self.y * s, self.z * s, self.w * s)
-    }
-}
-
-impl Div<f32> for Vec4 {
-    type Output = Vec4;
-    fn div(self, divisor: f32) -> Self {
-        let s = 1.0 / divisor;
-        Self::new(self.x * s, self.y * s, self.z * s, self.w * s)
-    }
-}
-
-impl Index<usize> for Vec4 {
-    type Output = f32;
-    fn index(&self, i: usize) -> &f32 {
-        match i {
-            0 => &self.x,
-            1 => &self.y,
-            2 => &self.z,
-            3 => &self.w,
-            _ => panic!("invalid index"),
-        }
-    }
-}
-
-impl IndexMut<usize> for Vec4 {
-    fn index_mut(&mut self, i: usize) -> &mut f32 {
-        match i {
-            0 => &mut self.x,
-            1 => &mut self.y,
-            2 => &mut self.z,
-            3 => &mut self.w,
-            _ => panic!("invalid index"),
         }
     }
 }
@@ -598,7 +502,7 @@ impl Mat4 {
             let vc = base.dot(axis) * axis / axis.dot(axis);
             let v1 = base - vc;
             let v2 = v1.cross(axis.hat());
-            mat.cols[i] = Vec4::from(vc + v1 * cos_t + v2 * sin_t);
+            mat.cols[i] = (vc + v1 * cos_t + v2 * sin_t).as_vec4();
         }
         mat
     }
@@ -650,7 +554,7 @@ impl Mul<Vec3> for Mat4 {
 impl Mul<Point3> for Mat4 {
     type Output = Point3;
     fn mul(self, p: Point3) -> Self::Output {
-        let v4 = self * Vec4::from(p);
+        let v4 = self * p.as_vec4();
         if v4.w == 1.0 {
             Point3::new(v4.x, v4.y, v4.z)
         } else {

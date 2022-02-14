@@ -1,9 +1,10 @@
+use std::convert::TryFrom;
 use std::{ops::Mul, sync::Arc};
 
 use geometry::bvh::BBox;
 use geometry::ray::Ray;
 use material::Material;
-use math::hcm::{Mat3, Mat4, Point3, Vec3, Vec4};
+use math::hcm::{Mat3, Mat4, Point3, Vec3};
 use math::Angle;
 use shape::Interaction;
 use shape::Shape;
@@ -333,16 +334,17 @@ impl Transform<Interaction> for RigidBodyTransform {
 
 impl Transform<Vec3> for AffineTransform {
     fn apply(&self, x: Vec3) -> Vec3 {
-        let x4 = Vec4::from(x);
+        let x4 = x.as_vec4();
         (self.forward * x4).into()
     }
 }
 impl Transform<Point3> for AffineTransform {
     fn apply(&self, p: Point3) -> Point3 {
-        let v4 = Vec4::from(p);
+        let v4 = p.as_vec4();
         let v4 = self.forward * v4;
         assert_eq!(v4[3], 1.0, "v4 = {v4}, forward = {self}",);
-        Point3::new(v4[0], v4[1], v4[2])
+        // Point3::new(v4[0], v4[1], v4[2])
+        Point3::try_from(v4).unwrap()
     }
 }
 impl Transform<Ray> for AffineTransform {
