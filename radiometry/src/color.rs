@@ -113,6 +113,9 @@ impl Color {
             (self.b - other.b).max(0.0),
         )
     }
+    pub fn luminance(&self) -> f32 {
+        XYZ::from_color(*self).y
+    }
 }
 
 impl std::ops::Add for Color {

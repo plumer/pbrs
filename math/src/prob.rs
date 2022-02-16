@@ -34,4 +34,10 @@ impl Prob {
             0.0
         }
     }
+    pub fn is_zero(self) -> bool {
+        match self {
+            Self::Mass(mass) => mass == 0.0,
+            Self::Density(density) => density == 0.0,
+        }
+    }
 }
