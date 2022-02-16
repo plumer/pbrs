@@ -97,14 +97,24 @@ impl BvhNode {
     }
 
     pub fn occludes(&self, ray: &Ray) -> bool {
-        let ray = ray.clone();
-        if !self.bbox.intersect(&ray) {
-            return false;
+        let mut stack = Vec::new();
+
+        stack.reserve(64);
+        stack.push(self);
+        while let Some(node) = stack.pop() {
+            if node.bbox.intersect(ray) {
+                continue;
+            }
+            match &node.content {
+                BvhNodeContent::Leaf(inst) if inst.occludes(ray) => return true,
+                BvhNodeContent::Children([left, right]) => {
+                    stack.push(left);
+                    stack.push(right);
+                }
+                _ => (),
+            }
         }
-        match &self.content {
-            BvhNodeContent::Leaf(inst) => inst.occludes(&ray),
-            BvhNodeContent::Children([left, right]) => left.occludes(&ray) || right.occludes(&ray),
-        }
+        return false;
     }
 }
 

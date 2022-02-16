@@ -242,24 +242,20 @@ impl Instance {
     pub fn intersect(&self, ray: &Ray) -> Option<(Interaction, &Arc<dyn Material>)> {
         let inv_ray = self.transform.inverse().apply(*ray);
         assert!(inv_ray.dir.norm_squared() > 1e-3, "ray = {:?}", ray);
-        match self.shape.intersect(&inv_ray) {
-            None => None,
-            Some(hit) => {
-                assert!(
-                    !hit.pos.has_nan(),
-                    "shape {} intersect ray {ray} has nan",
-                    self.shape.summary(),
-                );
-                assert!(
-                    hit.has_valid_frame(),
-                    "hit doesn't have valid frame. shape = {}, tangent = {}, ray = {:.3}",
-                    self.shape.summary(),
-                    hit.tangent(),
-                    ray,
-                );
-                Some((self.transform.apply(hit), &self.mtl))
-            }
-        }
+        let hit = self.shape.intersect(&inv_ray)?;
+        assert!(
+            !hit.pos.has_nan(),
+            "shape {} intersect ray {ray} has nan",
+            self.shape.summary(),
+        );
+        assert!(
+            hit.has_valid_frame(),
+            "hit doesn't have valid frame. shape = {}, tangent = {}, ray = {:.3}",
+            self.shape.summary(),
+            hit.tangent(),
+            ray,
+        );
+        Some((self.transform.apply(hit), &self.mtl))
     }
     pub fn occludes(&self, ray: &Ray) -> bool {
         let inv_ray = self.transform.inverse().apply(*ray);

@@ -8,7 +8,7 @@ use partition::partition;
 use std::ops::Range;
 
 enum IsoBvhNodeContent {
-    Children([Box<IsoBvhNode>; 2]),
+    Children([Box<IsoBvhNode>; 2], usize),
     Leaf(Range<usize>),
 }
 
@@ -20,13 +20,13 @@ struct IsoBvhNode {
 impl IsoBvhNode {
     fn height(&self) -> usize {
         match &self.content {
-            Children([left, right]) => std::cmp::max(left.height(), right.height()) + 1,
+            Children([left, right], _) => std::cmp::max(left.height(), right.height()) + 1,
             Leaf(_) => 1,
         }
     }
     fn count(&self) -> usize {
         match &self.content {
-            Children([left, right]) => left.count() + right.count() + 1,
+            Children([left, right], _) => left.count() + right.count() + 1,
             Leaf(_) => 1,
         }
     }
@@ -414,7 +414,7 @@ where
 
     IsoBvhNode {
         bbox: bvh::union(left_child.bbox, right_child.bbox),
-        content: Children([Box::new(left_child), Box::new(right_child)]),
+        content: Children([Box::new(left_child), Box::new(right_child)], split_axis),
     }
 }
 
@@ -427,47 +427,50 @@ where
     if !tree.bbox.intersect(r) {
         return None;
     }
-    match &tree.content {
-        Leaf(range) => {
-            let mut hit: Option<Interaction> = None;
-            // Ranges are not `Copy`: https://github.com/rust-lang/rust/pull/27186
-            for shape in shapes[range.clone()].iter() {
-                match (shape_intersector(shape, r), hit) {
-                    (None, _) => (), // Doesn't update `hit` if no new interaction
-                    (Some(isect), None) => {
-                        assert!(isect.has_valid_frame());
-                        hit = Some(isect);
-                    }
-                    (Some(new_isect), Some(old_isect)) => {
-                        assert!(new_isect.has_valid_frame());
-                        if new_isect.ray_t < old_isect.ray_t {
-                            hit = Some(old_isect);
+
+    let mut node_stack = Vec::new();
+    node_stack.reserve(60);
+
+    node_stack.push(tree);
+
+    let mut outer_hit =
+        Interaction::new(Point3::ORIGIN, f32::INFINITY, (0.0, 0.0), Vec3::Z, Vec3::Z);
+    let mut ray = r.clone();
+    while let Some(node) = node_stack.pop() {
+        if !node.bbox.intersect(&ray) {
+            continue;
+        }
+        match &node.content {
+            Leaf(range) => {
+                // let mut hit: Option<Interaction> = None;
+                // Ranges are not `Copy`: https://github.com/rust-lang/rust/pull/27186
+                for shape in shapes[range.clone()].iter() {
+                    if let Some(new_isect) = shape_intersector(shape, &ray) {
+                        if new_isect.ray_t < outer_hit.ray_t {
+                            outer_hit = new_isect;
                         }
                     }
                 }
             }
-            hit
-        }
-        Children([left, right]) => {
-            let mut ray = r.clone();
-            let left_isect = intersect_bvh(shapes, &*left, &ray, shape_intersector);
-            if let Some(isect) = left_isect {
-                ray.set_extent(isect.ray_t);
-            }
-            let right_isect = intersect_bvh(shapes, &*right, &ray, shape_intersector);
-            match (left_isect, right_isect) {
-                (None, None) => None,
-                (Some(l), None) => Some(l),
-                (None, Some(r)) => Some(r),
-                (Some(l), Some(r)) => {
-                    if l.ray_t < r.ray_t {
-                        Some(l)
-                    } else {
-                        Some(r)
-                    }
+            Children([left, right], axis) => {
+                // which one is farther away?
+                if ray.dir[*axis] > 0.0 {
+                    // Ray roughly intersects left first.
+                    node_stack.push(right);
+                    node_stack.push(left);
+                } else {
+                    node_stack.push(left);
+                    node_stack.push(right);
                 }
             }
         }
+        ray.t_max = outer_hit.ray_t;
+    }
+
+    if outer_hit.ray_t < f32::INFINITY {
+        Some(outer_hit)
+    } else {
+        None
     }
 }
 
@@ -477,17 +480,36 @@ fn intersect_bvh_pred<S, F>(
 where
     F: Fn(&S, &Ray) -> bool + Copy,
 {
-    tree.bbox.intersect(r)
-        && match &tree.content {
-            Leaf(range) => shapes[range.clone()]
-                .iter()
-                .any(|shape| shape_intersect_pred(shape, r)),
+    let mut node_stack = Vec::new();
+    node_stack.push(tree);
 
-            Children([left, right]) => {
-                intersect_bvh_pred(shapes, &*left, r, shape_intersect_pred)
-                    || intersect_bvh_pred(shapes, &*right, r, shape_intersect_pred)
+    while let Some(node) = node_stack.pop() {
+        if !node.bbox.intersect(r) {
+            continue;
+        }
+        match &node.content {
+            Leaf(range) => {
+                if shapes[range.clone()]
+                    .iter()
+                    .any(|shape| shape_intersect_pred(shape, r))
+                {
+                    return true;
+                }
+            }
+            Children([left, right], axis) => {
+                if r.dir[*axis] > 0.0 {
+                    // Ray roughly intersects left first.
+                    node_stack.push(right);
+                    node_stack.push(left);
+                } else {
+                    node_stack.push(left);
+                    node_stack.push(right);
+                }
             }
         }
+    }
+
+    return false;
 }
 
 #[test]
