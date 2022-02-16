@@ -1,9 +1,10 @@
 use std::f32::consts::PI;
 
+use geometry::Interaction;
 use light::ShapeSample;
 use math::float::Float;
 use math::hcm::{point3, vec3, Point3, Vec3};
-use shape::{Interaction, Sphere};
+use shape::Sphere;
 
 #[test]
 fn test_sphere_sample_pdf_integrate() {

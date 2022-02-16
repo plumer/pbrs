@@ -1,4 +1,4 @@
-use geometry::ray::Ray;
+use crate::ray::Ray;
 use math::hcm::{Mat3, Point3, Vec3};
 use std::fmt::{Display, Formatter, Result};
 

@@ -5,3 +5,8 @@ pub mod ray;
 pub mod bxdf;
 pub mod microfacet;
 pub mod fourier;
+pub mod transform;
+pub mod interaction;
+
+pub use interaction::Interaction;
+pub use transform::{AffineTransform, RigidBodyTransform, InstanceTransform};

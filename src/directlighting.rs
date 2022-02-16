@@ -4,7 +4,7 @@ use geometry::ray;
 use math::{float::Float, prob::Prob};
 use radiometry::color::Color;
 use rand::Rng;
-use shape::Interaction;
+use geometry::Interaction;
 
 use crate::bsdf::BSDF;
 use light::{DeltaLight, DiffuseAreaLight, Light};

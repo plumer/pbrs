@@ -2,7 +2,7 @@ use geometry::bxdf::{BxDF, BXDF, Omega};
 use math::prob::Prob;
 use math::{assert_lt, hcm};
 use radiometry::color::Color;
-use shape::Interaction;
+use geometry::Interaction;
 
 /// bsdf.rs
 ///
@@ -156,7 +156,7 @@ mod test {
     use math::hcm;
     use math::prob::Prob;
     use radiometry::color::Color;
-    use shape::Interaction;
+    use geometry::Interaction;
     #[test]
 
     fn mf_refl_test() {

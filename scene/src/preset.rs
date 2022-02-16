@@ -252,10 +252,10 @@ pub fn cornell_box() -> Scene {
         .zip(mtl_seq.into_iter())
         .map(|(shape, mtl)| Box::new(Instance::new(shape, mtl)))
         .collect();
-    instances[6].transform = tlas::instance::identity()
+    instances[6].transform = geometry::transform::identity()
         .rotate_y(math::new_deg(15.0))
         .translate(Vec3::new(265.0, 0.0, 105.0));
-    instances[7].transform = tlas::instance::identity()
+    instances[7].transform = geometry::transform::identity()
         .rotate_y(math::new_deg(-18.0))
         .translate(Vec3::new(130.0, 0.0, 225.0));
 
@@ -437,7 +437,7 @@ pub fn everything() -> Scene {
         .map(|_| Sphere::from_raw((rand_165(), rand_165(), rand_165()), 10.0))
         .collect();
     let ping_pong_balls = shape::IsoBlas::build(ping_pong_balls);
-    let pp_trans = tlas::instance::identity()
+    let pp_trans = geometry::transform::identity()
         .rotate_y(math::new_deg(15.0))
         .translate(Vec3::new(-100.0, 270.0, 395.0));
     instances.push(Instance::from_raw(ping_pong_balls, matte_white).with_transform(pp_trans));

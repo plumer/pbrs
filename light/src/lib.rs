@@ -1,10 +1,11 @@
 use std::f32::consts::{self, PI};
 
 use geometry::ray::Ray;
+use geometry::Interaction;
 use math::prob::Prob;
 use math::{float::Float, hcm};
 use radiometry::color::Color;
-use shape::{self, Interaction, Shape};
+use shape::{self, Shape};
 
 pub type EnvLight = fn(Ray) -> Color;
 

@@ -1,6 +1,6 @@
 use geometry::ray;
 use math::hcm::{self, Point3, Vec3};
-use shape::Interaction;
+use geometry::Interaction;
 use shape::Shape;
 
 #[test]

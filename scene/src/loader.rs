@@ -17,12 +17,12 @@ use scene_parser::{
 };
 use shape::{self, IsolatedTriangle, Shape};
 use texture::{self as tex, Texture};
-use tlas::instance::AffineTransform;
+use geometry::AffineTransform;
 
 pub struct SceneLoader {
     root_dir: std::path::PathBuf,
     // ctm_stack: Vec<hcm::Mat4>,
-    ctm_stack: Vec<tlas::instance::InstanceTransform>,
+    ctm_stack: Vec<geometry::InstanceTransform>,
     current_mtl: Option<Arc<dyn Material>>,
     current_arealight_luminance: Option<Color>,
     reverse_orientation_stack: Vec<bool>,
@@ -751,9 +751,9 @@ impl SceneLoader {
         }
     }
     #[allow(dead_code)]
-    fn parse_rbtransform(t: ast::Transform) -> tlas::instance::RigidBodyTransform {
+    fn parse_rbtransform(t: ast::Transform) -> geometry::RigidBodyTransform {
         use ast::Transform;
-        use tlas::instance::RigidBodyTransform as RBTrans;
+        use geometry::RigidBodyTransform as RBTrans;
         match t {
             Transform::Identity => RBTrans::identity(),
             Transform::Translate(v) => RBTrans::translater(v),

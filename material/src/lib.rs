@@ -1,10 +1,10 @@
 use geometry::bxdf::{self, Fresnel, BXDF};
 use geometry::fourier::{FourierBSDF, FourierTable};
 use geometry::microfacet::MicrofacetDistrib;
+use geometry::Interaction;
 use geometry::{microfacet, ray::Ray};
 use math::hcm::{self, Vec3};
 use radiometry::color::Color;
-use shape::Interaction;
 use std::sync::Arc;
 use texture::{self, *};
 
@@ -413,8 +413,9 @@ impl Material for Substrate {
         if diffuse.is_black() && specular.is_black() {
             vec![]
         } else {
-            let distrib = MicrofacetDistrib::beckmann(self.alpha, self.alpha);
-            vec![bxdf::FresnelBlend::new(diffuse, specular, distrib).into()]
+            // let distrib = MicrofacetDistrib::beckmann(self.alpha, self.alpha);
+            // vec![bxdf::FresnelBlend::new(diffuse, specular, distrib).into()]
+            vec![bxdf::DiffuseReflect::lambertian(diffuse).into()]
         }
     }
     fn summary(&self) -> String {
@@ -455,13 +456,11 @@ impl Fourier {
 }
 
 impl<'a> crate::Material for Fourier {
-    fn scatter(
-        &self, _wi: math::hcm::Vec3, _isect: &shape::Interaction,
-    ) -> (geometry::ray::Ray, Color) {
+    fn scatter(&self, _wi: math::hcm::Vec3, _isect: &Interaction) -> (geometry::ray::Ray, Color) {
         todo!()
     }
 
-    fn bxdfs_at(&self, _isect: &shape::Interaction) -> Vec<BXDF> {
+    fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
         let fourier_bsdf = FourierBSDF { table: &self.table };
         vec![fourier_bsdf.into()]
     }
@@ -479,13 +478,13 @@ fn schlick(cosine: f32, ref_index: f32) -> f32 {
 
 #[cfg(test)]
 mod test {
-    use geometry::bxdf::{Omega, BxDF};
+    use geometry::bxdf::{BxDF, Omega};
+    use geometry::Interaction;
     use math::{
         float::Float,
         hcm::{Point3, Vec3},
     };
     use radiometry::color::Color;
-    use shape::Interaction;
 
     use super::{Lambertian, Material};
 

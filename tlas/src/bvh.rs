@@ -4,8 +4,8 @@ use std::sync::Arc;
 use crate::instance::Instance;
 use geometry::bvh::{self, BBox};
 use geometry::ray::Ray;
+use geometry::Interaction;
 use material::Material;
-use shape::Interaction;
 
 #[derive(Debug)]
 enum BvhNodeContent {
