@@ -557,7 +557,9 @@ pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option
     let b0 = (p - p1).cross(p - p2).dot(normal);
     let b1 = (p - p2).cross(p - p0).dot(normal);
     if b0.is_nan() || b1.is_nan() || b2.is_nan() {
-        panic!("some Nans: {}, {}, {}", b0, b1, b2);
+        eprintln!("some Nans: {}, {}, {}", b0, b1, b2);
+        eprintln!("points = [{p0}, {p1}, {p2}], normal = {normal}");
+        return None;
     }
     let (b0, b1, b2) = match (b0 > 0.0, b1 > 0.0, b2 > 0.0) {
         (true, true, true) | (false, false, false) => {

@@ -192,7 +192,12 @@ impl TriangleMesh {
                 p1 - p0
             };
             let dpdu = (dpdu - dpdu.projected_onto(bclerp_normal)).hat();
-            assert!(dpdu.dot(bclerp_normal).abs() < 1e-4);
+            assert!(
+                dpdu.dot(bclerp_normal).abs() < 1e-3,
+                "dpdu({:.5}) still not perp with normal({:.5})",
+                dpdu,
+                bclerp_normal
+            );
             Some(
                 Interaction::new(isect.pos, isect.ray_t, bclerp_uv, bclerp_normal, isect.wo)
                     .with_dpdu(dpdu),

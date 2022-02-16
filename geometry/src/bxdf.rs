@@ -1,7 +1,7 @@
 use std::f32::consts::FRAC_1_PI;
 
 use crate::microfacet::{self as mf, MicrofacetDistrib};
-use math::float::Float;
+use math::float::{Fallback, Float};
 use math::hcm::Vec3;
 use math::prob::Prob;
 use radiometry::color::Color;
@@ -100,7 +100,10 @@ impl Omega {
         //    v0 dot v1
         // ---------------
         // ||v0|| * ||v1||
-        (x0 * x1 + y0 * y1) / ((x0 * x0 + y0 * y0) * (x1 * x1 + y1 * y1)).sqrt()
+        let res = (x0 * x1 + y0 * y1) / ((x0 * x0 + y0 * y0) * (x1 * x1 + y1 * y1)).sqrt();
+        let res = res.filter_or(f32::is_finite, 0.0);
+        assert!(res.is_finite());
+        res
     }
 
     /// Returns true if 2 vectors are on the same side of the surface.
@@ -239,7 +242,7 @@ pub fn cos_hemisphere_pdf(w: Omega) -> f32 {
 pub trait BxDF {
     /// Evaluates the BSDF function at given in-out angles. Note that specular BSDFs always return
     /// 0. Use [`sample()`] in those cases instead.
-    fn eval(&self, wo: Omega, wi: Omega) -> Color;  
+    fn eval(&self, wo: Omega, wi: Omega) -> Color;
 
     /// Produces a possible incident direction given the outgoing direction, returning the
     /// probability density of the resulting direction and consumes a 2D random variable
@@ -272,7 +275,7 @@ pub enum BXDF<'a> {
 #[allow(dead_code)]
 fn dummy<'a>() -> Vec<BXDF<'a>> {
     let l = DiffuseReflect::lambertian(Color::white());
-    let b : BXDF = BXDF::DiffuseReflect(l.clone());
+    let b: BXDF = BXDF::DiffuseReflect(l.clone());
     let b2 = BXDF::from(l);
     b.prob(Omega::normal(), Omega::normal());
     b2.eval(Omega::normal(), Omega::normal());

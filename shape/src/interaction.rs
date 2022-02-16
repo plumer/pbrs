@@ -44,9 +44,9 @@ impl Interaction {
     /// Builds the tangent-bitangent-normal frame with the given tangent and existing normal.
     pub fn with_dpdu(self, dpdu: Vec3) -> Interaction {
         assert!(
-            self.normal.dot(dpdu).abs() < 1e-4,
-            "normal({}) and tangent ({}) not perp",
-            self.normal, dpdu
+            self.normal.dot(dpdu).abs() < 1e-3,
+            "normal({:.4}) and tangent ({:.4}) not perp, absdot = {}",
+            self.normal, dpdu, self.normal.dot(dpdu)
         );
         let normal = self.normal.hat();
         let bitangent = (normal.cross(dpdu)).hat();

@@ -302,7 +302,13 @@ impl<'a> BxDF for FourierBSDF<'a> {
         let mu_i = -wi.cos_theta();
         let mu_o = wo.cos_theta();
         let cos_phi = wo.cos_dphi(-wi).clamp(-1.0, 1.0);
-        assert!(cos_phi.inside((-1.0, 1.0)));
+        assert!(
+            cos_phi.inside((-1.0, 1.0)),
+            "cos_phi = {}, wo = {}, wi = {}",
+            cos_phi,
+            wo.0,
+            wi.0
+        );
 
         let wt_offset_i = self.table.get_weights_and_offset(mu_i);
         let wt_offset_o = self.table.get_weights_and_offset(mu_o);
