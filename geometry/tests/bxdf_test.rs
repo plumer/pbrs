@@ -123,7 +123,7 @@ fn test_one_diffuse_brdf(brdf: &bxdf::DiffuseReflect, albedo: Color) {
 
     let pdf_hemisphere_integral = riemann_integral_pdf_2d(brdf);
     assert!(
-        (pdf_hemisphere_integral - 1.0).abs() < 1e-3,
+        (pdf_hemisphere_integral - 1.0).abs() < 4e-3,
         "2D Hemisphere pdf doesn't integrate to 1.0 ({} instead)",
         pdf_hemisphere_integral
     );
@@ -157,7 +157,7 @@ fn riemann_integral_hemi_pdf_i<BSDF: BxDF>(bsdf: &BSDF, wo: Omega, count: i32) -
 
 fn riemann_integral_pdf_2d<BSDF: BxDF>(bsdf: &BSDF) -> f32 {
     let mut pdf_integral = 0.0;
-    const N: i32 = 50;
+    const N: i32 = 20;
     let (thetas, d_theta) = linspace((0.0, std::f32::consts::FRAC_PI_2), N);
     let (phis, d_phi) = linspace((0.0, std::f32::consts::PI * 2.0), N * 4);
 

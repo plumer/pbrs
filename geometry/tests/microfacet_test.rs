@@ -16,7 +16,7 @@ fn diff_area_validate() {
     for mf in [beck_mf, trowbridge_mf].iter() {
         let projected_area = integrate_differental_area(*mf);
         println!("Differential projected area = {}", projected_area);
-        assert!((projected_area - 1.0).abs() < 1e-3);
+        assert!((projected_area - 1.0).abs() < 4e-3);
         let w = Omega::new(0.48, 0.64, 0.6);
         let masked_area = integrate_masking(*mf, w);
         println!("Differential masked area = {}", masked_area);
@@ -102,7 +102,7 @@ fn mc_integrate_wo_wh(mf: &mf::MicrofacetDistrib) -> f32 {
 
 /// Integrates the differential area distribution function - `d()` - over the hemisphere.
 fn integrate_differental_area(mf_distrib: mf::MicrofacetDistrib) -> f32 {
-    const N: i32 = 100;
+    const N: i32 = 50;
     let mut integral_area = 0.0;
     let (thetas, d_theta) = linspace((0.0, std::f32::consts::FRAC_PI_2), N);
     let (phis, d_phi) = linspace((0.0, std::f32::consts::PI * 2.0), N * 4);
