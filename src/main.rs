@@ -202,6 +202,16 @@ fn main() {
             .collect()
     };
 
+    exr::prelude::write_rgb_file(
+        "test.exr",
+        width as usize,
+        height as usize, // write an image with 2048x2048 pixels
+        |x, y| {
+            let c = image_map[y * width as usize + x];
+            (c.r, c.g, c.b)
+        },
+    )
+    .unwrap();
     // Collects image data as a huge array of `Color`.
     let image_data: Vec<_> = image_map
         .iter()
