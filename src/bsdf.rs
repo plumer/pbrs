@@ -102,6 +102,16 @@ impl<'a> BSDF<'a> {
             Prob::Density(overall_pdf),
         )
     }
+    pub fn sample_specular(&self, wo_world: hcm::Vec3) -> Option<(Color, hcm::Vec3, Prob)> {
+        let wo = self.world_to_local(wo_world);
+        for bxdf in self.bxdfs {
+            if let BXDF::Specular(spec_bxdf) = bxdf {
+                let (f, wi, pr) = spec_bxdf.sample(wo, (0.0, 0.0));
+                return Some((f, self.local_to_world(wi), pr));
+            }
+        }
+        return None;
+    }
     pub fn world_to_local(&self, world: hcm::Vec3) -> Omega {
         let cols = self.frame.cols;
         assert!(self.has_valid_frame());

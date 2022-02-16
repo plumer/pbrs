@@ -11,7 +11,10 @@ use light::{DeltaLight, DiffuseAreaLight, Light};
 use material::Material;
 use scene::Scene;
 
-pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32) -> Color {
+pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, depth: i32) -> Color {
+    if depth <= 0 {
+        return Color::black();
+    }
     if let Some((hit, mtl)) = scene.tlas.intersect(&mut ray) {
         // Computes scattering functions for surface interaction.
         // ------------------------------------------------------
@@ -24,7 +27,19 @@ pub fn direct_lighting_integrator(scene: &Scene, mut ray: ray::Ray, _depth: i32)
         if !mtl.emission().is_black() {
             mtl.emission()
         } else {
-            uniform_sample_one_light(&hit, mtl.deref(), scene, false)
+            let direct = uniform_sample_one_light(&hit, mtl.deref(), scene, false);
+            let bxdfs = mtl.bxdfs_at(&hit);
+            let bsdf = BSDF::new_frame(&hit).with_bxdfs(&bxdfs);
+            let spec_refl = if let Some((f, wi, pr)) = bsdf.sample_specular(hit.wo) {
+                assert!(matches!(pr, Prob::Mass(_)));
+                let refl_ray = hit.spawn_ray(wi);
+                let spec_refl = direct_lighting_debug_integrator(scene, refl_ray, depth - 1);
+                spec_refl * f * pr.mass().weak_recip()
+            } else {
+                Color::black()
+            };
+
+            direct + spec_refl
         }
     } else {
         scene.eval_env_light(ray)
