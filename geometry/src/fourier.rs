@@ -326,9 +326,9 @@ impl<'a> BxDF for FourierBSDF<'a> {
         for (b, a) in (0..4).cartesian_product(0..4) {
             let weight = weights_i[a] * weights_o[b];
             if weight != 0.0 {
-                let (ap, m) = self
-                    .table
-                    .get_ak(offset_i as usize + a, offset_o as usize + b);
+                let offset_i = (offset_i + a as isize) as usize;
+                let offset_o = (offset_o + b as isize) as usize;
+                let (ap, m) = self.table.get_ak(offset_i, offset_o);
                 m_max = m_max.max(m);
                 for c in 0..self.table.n_channels {
                     for k in 0..m {
@@ -454,9 +454,9 @@ impl<'a> BxDF for FourierBSDF<'a> {
             if weight == 0.0 {
                 continue;
             }
-            let (coeffs, order) = self
-                .table
-                .get_ak(offset_i as usize + i, offset_o as usize + o);
+            let offset_i = (offset_i + i as isize) as usize;
+            let offset_o = (offset_o + o as isize) as usize;
+            let (coeffs, order) = self.table.get_ak(offset_i, offset_o);
             order_max = order_max.max(order);
             (0..order).for_each(|k| ak[k] += coeffs[k] * weight);
         }
@@ -477,7 +477,6 @@ impl<'a> BxDF for FourierBSDF<'a> {
         Prob::Density(y.try_divide(rho).unwrap_or(0.0))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
