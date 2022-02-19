@@ -38,6 +38,19 @@ pub fn write_image(file_name: &str, data: &[u8], (width, height): (u32, u32)) {
     writer.write_image_data(&data).unwrap();
 }
 
+pub fn write_exr(file_name: &str, colors: &[Color], (width, height): (u32, u32)) {
+    exr::prelude::write_rgb_file(
+        file_name,
+        width as usize,
+        height as usize, // write an image with 2048x2048 pixels
+        |x, y| {
+            let c = colors[y * width as usize + x];
+            (c.r, c.g, c.b)
+        },
+    )
+    .unwrap();
+}
+
 #[allow(unreachable_code)]
 fn main() {
     env_logger::init();
@@ -224,13 +237,13 @@ fn main() {
 
     // Builds the file name using scene name and SPP, and writes the resulting image to a file.
     let output_file_name = format!(
-        "{}-{}-{}spp.png",
+        "{}-{}-{}spp.exr",
         scene_name,
         options.integrator.to_str(),
         msaa.pow(2)
     );
     println!("Image written to {}", output_file_name);
-    write_image(&output_file_name, &image_data, scene.camera.resolution());
+    write_exr(&output_file_name, &image_map, scene.camera.resolution());
 }
 
 // Functions that computes the radiance along a ray. One for computing the radiance correctly and
