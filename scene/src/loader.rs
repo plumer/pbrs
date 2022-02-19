@@ -161,19 +161,24 @@ impl SceneLoader {
                 if let Some(luminance) = self.current_arealight_luminance {
                     // Creates an area light and an instance for each shape.
                     let (samplable_shapes, shapes) = self.parse_samplable_shape(&shape_impl, args);
+                    let transform = self.ctm_stack.last().unwrap().clone();
                     self.area_lights.extend(
                         samplable_shapes
                             .into_iter()
-                            .map(|shape| light::DiffuseAreaLight::new(luminance.clone(), shape)),
+                            .map(|shape| light::DiffuseAreaLight::new(luminance, shape, transform)),
                     );
-                    // The material for the object instance is either the current set material or
-                    // the dummy one.
-                    let mtl = self.current_mtl.clone().unwrap_or(dummy_area_light_mtl);
-                    self.instances.extend(
-                        shapes
-                            .into_iter()
-                            .map(|shape| tlas::instance::Instance::new(shape, mtl.clone())),
-                    );
+                    // The material for the object instance is set to DiffuseLight of the same
+                    // luminance.
+                    if let Some(mtl) = &self.current_mtl {
+                        let mtl_desc = mtl.summary();
+                        if !mtl_desc.contains("DiffuseLight") {
+                            warn!("Using diffuse light instead of current material {mtl_desc}");
+                        }
+                    }
+                    let mtl = Arc::new(mtl::DiffuseLight::new(luminance));
+                    self.instances.extend(shapes.into_iter().map(|shape| {
+                        tlas::instance::Instance::new(shape, mtl.clone()).with_transform(transform)
+                    }));
                 } else if let Some(mtl) = &self.current_mtl {
                     let shape = self.parse_shape(&shape_impl, args);
                     let inst = tlas::instance::Instance::new(shape, mtl.clone())
