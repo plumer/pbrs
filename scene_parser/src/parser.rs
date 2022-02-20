@@ -307,9 +307,11 @@ impl Parser {
                     )
                 }
             }
+            Token::KwCoordSysTransform => {
+                Transform::CoordSys(self.get_next_quoted_string())
+            }
             Token::KwTransform
             | Token::KwConcatTransform
-            | Token::KwCoordSysTransform
             | Token::KwCoordinateSystem => unimplemented!("sorry"),
             _ => panic!(
                 "unexpected token {:?}, {:?}",

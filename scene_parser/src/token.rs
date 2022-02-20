@@ -163,6 +163,7 @@ impl Token {
                 | Self::KwObjectInstance
                 | Self::KwNamedMedium
                 | Self::KwMakeNamedMedium
+                | Self::KwReverseOrientation
         ) || self.starts_transform()
     }
 

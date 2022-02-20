@@ -67,7 +67,7 @@ pub enum Transform {
     Scale(Vec3),
     Rotate(Vec3, Angle),
     LookAt(Point3, Point3, Vec3),
-    // CoordSys,
+    CoordSys(String),
     // Matrix4x4(Mat4),
     // CoordSysTransform,
     // ConcatMatrix4x4(Mat4),
@@ -85,7 +85,7 @@ pub enum SceneWideOption {
 }
 
 #[allow(dead_code)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum WorldItem {
     Transform(Transform),
     Shape(String, ParameterSet),
@@ -147,6 +147,7 @@ impl fmt::Display for Transform {
             Transform::Scale(s) => write!(f, " Scale({})", s),
             Transform::Rotate(axis, angle) => write!(f, "Rotate({}, {})", axis, angle),
             Transform::LookAt(e, t, u) => write!(f, "LookAt({} -> {} ^ {})", e, t, u),
+            Transform::CoordSys(name) => write!(f, "CoordSys(\'{name}\')"),
         }
     }
 }

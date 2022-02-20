@@ -280,6 +280,13 @@ impl std::ops::Mul<f32> for Angle {
     }
 }
 
+impl std::ops::Neg for Angle {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Angle::new_rad(-self.radian)
+    }
+}
+
 impl std::fmt::Display for Angle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:.2}deg", self.to_deg())

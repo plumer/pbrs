@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::plyloader;
 use geometry::camera::Camera;
+use geometry::AffineTransform;
 use light::{self, DiffuseAreaLight};
 use light::{DeltaLight, ShapeSample};
 use material::{self as mtl, Material};
@@ -17,7 +18,6 @@ use scene_parser::{
 };
 use shape::{self, IsolatedTriangle, Shape};
 use texture::{self as tex, Texture};
-use geometry::AffineTransform;
 
 pub struct SceneLoader {
     root_dir: std::path::PathBuf,
@@ -744,15 +744,21 @@ impl SceneLoader {
 
     // Static functions
     // ---------------------------------------------------------------------------------------------
-    #[allow(dead_code)]
     fn parse_transform(t: ast::Transform) -> AffineTransform {
         use ast::Transform;
         match t {
             Transform::Identity => AffineTransform::identity(),
             Transform::Translate(v) => AffineTransform::translater(v),
             Transform::Scale(s) => AffineTransform::scaler(s),
-            Transform::Rotate(axis, angle) => AffineTransform::rotater(axis, angle),
+            Transform::Rotate(axis, angle) => {
+                // The rotate-around-arbitrary-axis transformation implemented in pbrt-v3 is in fact
+                // its inverse (the bases of the rotation matrix are incorrectly stored in row-major
+                // order), so to replicate this behavior, the inverse rotation (negated angle) is
+                // used instead.
+                AffineTransform::rotater(axis, -angle)
+            }
             Transform::LookAt(_, _, _) => panic!("unsupported lookat in modeling step"),
+            Transform::CoordSys(name) => unimplemented!("coordsys({name})"),
         }
     }
     #[allow(dead_code)]
@@ -766,8 +772,10 @@ impl SceneLoader {
                 error!("scaling of {} unsupported", s);
                 RBTrans::identity()
             }
-            Transform::Rotate(axis, angle) => RBTrans::rotater(axis, angle),
+            // See parse_transform() for explanation of the negated angle.
+            Transform::Rotate(axis, angle) => RBTrans::rotater(axis, -angle),
             Transform::LookAt(..) => panic!("unsupported lookat in modeling step"),
+            Transform::CoordSys(name) => unimplemented!("coordsys({name})"),
         }
     }
 }

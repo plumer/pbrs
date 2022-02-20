@@ -113,16 +113,18 @@ impl std::fmt::Display for AffineTransform {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let m = &self.forward;
+        let precision = f.precision().unwrap_or(2);
         write!(
             f,
-            "\n|{:5.2} {:5.2} {:5.2} {:5.2}|\
-             \n|{:5.2} {:5.2} {:5.2} {:5.2}|\
-             \n|{:5.2} {:5.2} {:5.2} {:5.2}|\
-             \n|{:5.2} {:5.2} {:5.2} {:5.2}|\n",
+            "\n|{:5.p$} {:5.p$} {:5.p$} {:5.p$}|\
+             \n|{:5.p$} {:5.p$} {:5.p$} {:5.p$}|\
+             \n|{:5.p$} {:5.p$} {:5.p$} {:5.p$}|\
+             \n|{:5.p$} {:5.p$} {:5.p$} {:5.p$}|\n",
             m.cols[0][0], m.cols[1][0], m.cols[2][0], m.cols[3][0],
             m.cols[0][1], m.cols[1][1], m.cols[2][1], m.cols[3][1],
             m.cols[0][2], m.cols[1][2], m.cols[2][2], m.cols[3][2],
-            m.cols[0][3], m.cols[1][3], m.cols[2][3], m.cols[3][3]
+            m.cols[0][3], m.cols[1][3], m.cols[2][3], m.cols[3][3],
+            p = precision
         )
     }
 }
