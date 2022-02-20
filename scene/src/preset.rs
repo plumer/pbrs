@@ -1,5 +1,6 @@
 use geometry::camera::Camera;
 use geometry::ray;
+use light::SamplableShape;
 use math::hcm::{point3, vec3, Point3, Vec3};
 use radiometry::color::Color;
 
@@ -53,11 +54,7 @@ pub fn dusk(r: ray::Ray) -> Color {
 #[allow(unused_mut)]
 pub fn mixed_spheres() -> Scene {
     let mut camera = Camera::new((WIDTH, HEIGHT), math::new_deg(25.0));
-    camera.look_at(
-        Point3::new(13.0, 2.0, 3.0),
-        Point3::new(0.0, 0.0, 0.0),
-        Vec3::Y,
-    );
+    camera.look_at(point3(13.0, 2.0, 3.0), point3(0.0, 0.0, 0.0), Vec3::Y);
 
     let mut spheres = vec![
         Sphere::from_raw((0.0, -1000.0, 1.0), 1000.0),
@@ -77,9 +74,9 @@ pub fn mixed_spheres() -> Scene {
     //     for b in -11..11 {
     //         let choose_mtl = rand_f32();
     //         let center =
-    //             Point3::new(a as f32, 0.2, b as f32) + 0.9 * Vec3::new(rand_f32(), 0.0, rand_f32());
+    //             point3(a as f32, 0.2, b as f32) + 0.9 * Vec3::new(rand_f32(), 0.0, rand_f32());
 
-    //         if (center - Point3::new(4.0, 0.2, 0.0)).norm() > 0.9 {
+    //         if (center - point3(4.0, 0.2, 0.0)).norm() > 0.9 {
     //             spheres.push(Sphere::new(center, 0.2));
     //             let mtl: Arc<dyn mtl::Material> = if choose_mtl < 0.8 {
     //                 let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
@@ -124,11 +121,7 @@ pub fn two_perlin_spheres() -> Scene {
         .map(|sphere| Box::new(Instance::new(sphere, mtl.clone())))
         .collect();
     let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
-    cam.look_at(
-        Point3::new(13.0, 2.0, -3.0),
-        Point3::ORIGIN,
-        Vec3::Y,
-    );
+    cam.look_at(point3(13.0, 2.0, -3.0), Point3::ORIGIN, Vec3::Y);
 
     Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
 }
@@ -141,11 +134,7 @@ pub fn earth() -> Scene {
     let instances = vec![Box::new(Instance::new(globe, earth_mtl))];
 
     let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
-    cam.look_at(
-        Point3::new(13.0, 2.0, -3.0),
-        Point3::ORIGIN,
-        Vec3::Y,
-    );
+    cam.look_at(point3(13.0, 2.0, -3.0), Point3::ORIGIN, Vec3::Y);
 
     Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
 }
@@ -167,23 +156,19 @@ pub fn quad_light() -> Scene {
         .map(|sphere| Box::new(Instance::new(sphere, mtl.clone())))
         .collect();
 
-    let light_quad = shape::QuadXY::from_raw((3.0, 5.0), (1.0, 3.0), 2.1);
+    let light_quad = shape::ParallelQuad::new_xy((3.0, 5.0), (1.0, 3.0), 2.1);
     let light_sphere = Sphere::from_raw((0.0, 7.0, 0.0), 2.0);
     instances.extend(vec![
-        Box::new(Instance::new(Arc::new(light_quad.clone()), light.clone())),
-        Box::new(Instance::new(Arc::new(light_sphere.clone()), light.clone())),
+        Box::new(Instance::new(Arc::new(light_quad), light.clone())),
+        Box::new(Instance::new(Arc::new(light_sphere), light.clone())),
     ]);
     let area_lights = vec![
-        light::DiffuseAreaLight::new(light_power, Box::new(light_quad.clone())),
-        light::DiffuseAreaLight::new(light_power, Box::new(light_sphere.clone())),
+        light::DiffuseAreaLight::new(light_power, SamplableShape::from(light_quad)),
+        light::DiffuseAreaLight::new(light_power, SamplableShape::from(light_sphere)),
     ];
 
     let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
-    cam.look_at(
-        Point3::new(26.0, 3.0, -6.0),
-        Point3::new(0.0, 2.0, 0.0),
-        Vec3::Y,
-    );
+    cam.look_at(point3(26.0, 3.0, -6.0), point3(0.0, 2.0, 0.0), Vec3::Y);
 
     Scene::new(*tlas::build_bvh(instances), cam)
         .with_env_light(dark_room)
@@ -191,7 +176,7 @@ pub fn quad_light() -> Scene {
 }
 
 pub fn quad() -> Scene {
-    let xy_quad = shape::QuadXY::from_raw((-0.5, 0.5), (-0.3, 0.6), 2.5);
+    let xy_quad = shape::ParallelQuad::new_xy((-0.5, 0.5), (-0.3, 0.6), 2.5);
     let lam = Arc::new(mtl::Lambertian::solid(Color::new(0.2, 0.3, 0.7)));
     let instances = vec![Box::new(Instance::new(Arc::new(xy_quad), lam))];
 
@@ -201,6 +186,7 @@ pub fn quad() -> Scene {
 }
 
 pub fn cornell_box() -> Scene {
+    use shape::ParallelQuad as Quad;
     let red = mtl::Lambertian::solid(Color::new(0.65, 0.05, 0.05));
     let white = mtl::Lambertian::solid(Color::gray(0.73));
     let green = mtl::Lambertian::solid(Color::new(0.12, 0.45, 0.15));
@@ -214,31 +200,23 @@ pub fn cornell_box() -> Scene {
 
     let area_lights = vec![light::DiffuseAreaLight::new(
         light_color,
-        Box::new(shape::QuadXZ::from_raw(
-            (213.0, 343.0),
-            (227.0, 332.0),
-            554.0,
-        )),
+        SamplableShape::Quad(Quad::new_xz((213.0, 343.0), 554.0, (227.0, 332.0))),
     )];
 
     let shapes: Vec<Arc<dyn shape::Shape>> = vec![
-        Arc::new(shape::QuadYZ::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // green
-        Arc::new(shape::QuadYZ::from_raw((0.0, 555.0), (0.0, 555.0), 0.0)),   // red
-        Arc::new(shape::QuadXZ::from_raw(
-            (213.0, 343.0),
-            (227.0, 332.0),
-            554.0,
-        )), // light
-        Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 0.0)),   // white floor
-        Arc::new(shape::QuadXZ::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white ceiling
-        Arc::new(shape::QuadXY::from_raw((0.0, 555.0), (0.0, 555.0), 555.0)), // white back
+        Arc::new(Quad::new_yz(555.0, (0.0, 555.0), (0.0, 555.0))), // green
+        Arc::new(Quad::new_yz(0.0, (0.0, 555.0), (0.0, 555.0))),   // red
+        Arc::new(Quad::new_xz((213.0, 343.0), 554.0, (227.0, 332.0))), // light
+        Arc::new(Quad::new_xz((0.0, 555.0), 0.0, (0.0, 555.0))),   // white floor
+        Arc::new(Quad::new_xz((0.0, 555.0), 555.0, (0.0, 555.0))), // white ceiling
+        Arc::new(Quad::new_xy((0.0, 555.0), (0.0, 555.0), 555.0)), // white back
         Arc::new(shape::Cuboid::from_points(
             Point3::ORIGIN,
-            Point3::new(165.0, 165.0, 165.0),
+            point3(165.0, 165.0, 165.0),
         )),
         Arc::new(shape::Cuboid::from_points(
             Point3::ORIGIN,
-            Point3::new(165.0, 330.0, 165.0),
+            point3(165.0, 330.0, 165.0),
         )),
         // Arc::new(Sphere::from_raw((250.0, 250.0, 250.0), 50.0))
     ];
@@ -264,8 +242,8 @@ pub fn cornell_box() -> Scene {
 
     let mut cam = Camera::new((600, 600), math::new_deg(40.0));
     cam.look_at(
-        Point3::new(278.0, 278.0, -800.0),
-        Point3::new(278.0, 278.0, 0.0),
+        point3(278.0, 278.0, -800.0),
+        point3(278.0, 278.0, 0.0),
         Vec3::Y,
     );
 
@@ -276,8 +254,8 @@ pub fn plates() -> Scene {
     let mut instances = vec![];
     let r = 20.0;
     // Builds the background.
-    let wall = shape::QuadXY::from_raw((-r, r), (0.0, r), 0.0);
-    let floor = shape::QuadXZ::from_raw((-r, r), (-r, 0.0), 0.0);
+    let wall = shape::ParallelQuad::new_xy((-r, r), (0.0, r), 0.0);
+    let floor = shape::ParallelQuad::new_xz((-r, r), 0.0, (-r, 0.0));
     let matte = mtl::Lambertian::solid(Color::gray(0.4));
 
     let wall_instance = Instance::from_raw(wall, matte.clone());
@@ -351,7 +329,7 @@ pub fn plates() -> Scene {
             light_spheres
                 .clone()
                 .zip(light_colors.iter())
-                .map(|(s, c)| light::DiffuseAreaLight::new(*c, Box::new(s))),
+                .map(|(s, c)| light::DiffuseAreaLight::new(*c, SamplableShape::from(s))),
         );
         instances.extend(
             light_spheres
@@ -390,8 +368,8 @@ pub fn everything() -> Scene {
 
             instances.push(Instance::new(
                 Arc::new(shape::Cuboid::from_points(
-                    Point3::new(x0, 0.0, z0),
-                    Point3::new(x1, y1, z1),
+                    point3(x0, 0.0, z0),
+                    point3(x1, y1, z1),
                 )),
                 ground.clone(),
             ));
@@ -399,10 +377,10 @@ pub fn everything() -> Scene {
     }
 
     let light = mtl::DiffuseLight::new(Color::gray(7.0));
-    let light_quad = shape::QuadXZ::from_raw((123.0, 423.0), (147.0, 412.0), 554.0);
+    let light_quad = shape::ParallelQuad::new_xz((123.0, 423.0), 554.0, (147.0, 412.0));
     let area_lights = vec![light::DiffuseAreaLight::new(
         Color::gray(7.0),
-        Box::new(light_quad.clone()),
+        SamplableShape::Quad(light_quad),
     )];
 
     instances.push(Instance::from_raw(light_quad, light));
@@ -444,8 +422,8 @@ pub fn everything() -> Scene {
 
     let mut cam = Camera::new((800, 800), math::new_deg(40.0));
     cam.look_at(
-        Point3::new(478.0, 278.0, -600.0),
-        Point3::new(278.0, 278.0, 0.0),
+        point3(478.0, 278.0, -600.0),
+        point3(278.0, 278.0, 0.0),
         Vec3::Y,
     );
 

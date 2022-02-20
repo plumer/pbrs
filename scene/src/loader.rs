@@ -7,8 +7,7 @@ use std::sync::Arc;
 use crate::plyloader;
 use geometry::camera::Camera;
 use geometry::AffineTransform;
-use light::{self, DiffuseAreaLight};
-use light::{DeltaLight, ShapeSample};
+use light::{self, DeltaLight, DiffuseAreaLight, SamplableShape};
 use material::{self as mtl, Material};
 use math::hcm;
 use radiometry::color::Color;
@@ -355,11 +354,11 @@ impl SceneLoader {
     /// deploying it to reduce memory footprint. https://github.com/rust-lang/rust/issues/65991
     fn parse_samplable_shape(
         &self, shape_impl: &String, args: ast::ParameterSet,
-    ) -> (Vec<Box<dyn ShapeSample>>, Vec<Arc<dyn Shape>>) {
+    ) -> (Vec<SamplableShape>, Vec<Arc<dyn Shape>>) {
         if shape_impl == "sphere" {
             let radius = args.lookup_f32("float radius").unwrap_or(1.0);
             let sphere = shape::Sphere::new(hcm::Point3::ORIGIN, radius);
-            (vec![Box::new(sphere.clone())], vec![Arc::new(sphere)])
+            (vec![SamplableShape::Sphere(sphere)], vec![Arc::new(sphere)])
         } else if shape_impl == "plymesh" {
             let ply_file_name = args
                 .lookup_string("string filename")
@@ -384,7 +383,7 @@ impl SceneLoader {
             (
                 triangles
                     .iter()
-                    .map(|t| Box::new(t.clone()) as Box<dyn ShapeSample>)
+                    .map(|t| SamplableShape::Triangle(*t))
                     .collect(),
                 triangles
                     .into_iter()

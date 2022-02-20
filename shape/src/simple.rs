@@ -1,12 +1,12 @@
 use geometry::bvh::BBox;
-use math::float::{self, Interval};
-use math::hcm::{Point3, Vec3};
+use math::float::{self, Inside, Interval};
+use math::hcm::{point3, vec3, Point3, Vec3};
 use std::f32::consts::{FRAC_1_PI, PI};
 
 use crate::{Interaction, Shape};
 use geometry::ray::Ray;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Sphere {
     center: Point3,
     radius: f32,
@@ -65,69 +65,102 @@ impl Disk {
     }
 }
 
-#[derive(Clone)]
-pub struct QuadXY {
-    pub x_interval: Interval,
-    pub y_interval: Interval,
-    pub z: f32,
+#[derive(Debug, Clone, Copy)]
+pub struct ParallelQuad {
+    pub origin: Point3,
+    pub side_u: Vec3,
+    pub side_v: Vec3,
 }
 
-impl QuadXY {
-    pub fn from_raw(x_interval: (f32, f32), y_interval: (f32, f32), z: f32) -> Self {
-        let (x0, x1) = x_interval;
-        let (y0, y1) = y_interval;
+impl ParallelQuad {
+    pub fn new_xy(x_range: (f32, f32), y_range: (f32, f32), z: f32) -> Self {
+        let (x0, x1) = x_range;
+        let (y0, y1) = y_range;
         Self {
-            x_interval: Interval::new(x0, x1),
-            y_interval: Interval::new(y0, y1),
-            z,
+            origin: point3(x0, y0, z),
+            side_u: vec3(x1 - x0, 0.0, 0.0),
+            side_v: vec3(0.0, y1 - y0, 0.0),
         }
     }
-
-    #[allow(dead_code)]
-    pub fn new(x_interval: Interval, y_interval: Interval, z: f32) -> Self {
+    pub fn new_xz(x_range: (f32, f32), y: f32, z_range: (f32, f32)) -> Self {
+        let (x0, x1) = x_range;
+        let (z0, z1) = z_range;
         Self {
-            x_interval,
-            y_interval,
-            z,
+            origin: point3(x0, y, z0),
+            side_u: vec3(x1 - x0, 0.0, 0.0),
+            side_v: vec3(0.0, 0.0, z1 - z0),
         }
     }
-}
-
-#[derive(Clone)]
-pub struct QuadXZ {
-    pub x_interval: Interval,
-    pub z_interval: Interval,
-    pub y: f32,
-}
-
-impl QuadXZ {
-    pub fn from_raw(x_interval: (f32, f32), z_interval: (f32, f32), y: f32) -> Self {
-        let (x0, x1) = x_interval;
-        let (z0, z1) = z_interval;
+    pub fn new_yz(x: f32, y_range: (f32, f32), z_range: (f32, f32)) -> Self {
+        let (z0, z1) = z_range;
+        let (y0, y1) = y_range;
         Self {
-            x_interval: Interval::new(x0, x1),
-            z_interval: Interval::new(z0, z1),
-            y,
+            origin: point3(x, y0, z0),
+            side_u: vec3(0.0, 0.0, z1 - z0),
+            side_v: vec3(0.0, y1 - y0, 0.0),
         }
     }
 }
 
-#[derive(Clone)]
-pub struct QuadYZ {
-    pub y_interval: Interval,
-    pub z_interval: Interval,
-    pub x: f32,
-}
+impl Shape for ParallelQuad {
+    fn bbox(&self) -> BBox {
+        let bu = BBox::new(self.origin, self.origin + self.side_u);
+        let bv = BBox::new(
+            self.origin + self.side_v,
+            self.origin + self.side_u + self.side_v,
+        );
+        geometry::bvh::union(bu, bv)
+    }
+    fn summary(&self) -> String {
+        format!(
+            "Parallelogram({:.3} + u{:.3} + v{:.3}",
+            self.origin, self.side_u, self.side_v
+        )
+    }
+    fn intersect(&self, r: &Ray) -> Option<Interaction> {
+        let normal = self.side_u.cross(self.side_v).facing(r.dir);
+        // Let p be the point on the plane containing the quad, then
+        // (p - origin) dot normal = 0
+        // With p = r.o + r.d * t, (r.o + t * r.d - self.origin) dot normal = 0
+        // (r.o - self.origin) dot normal + t * r.d dot normal = 0
+        let t = (self.origin - r.origin).dot(normal) / r.dir.dot(normal);
+        let t = r.truncated_t(t)?;
+        let coarse_hit = r.position_at(t);
+        // p - o = au + bv = d
+        // cross(a, a)*u + cross(a, b)*v = cross(a, d) where cross(a, a) = 0.
+        //     cross(a, d)           cross(b, d)
+        // v = -----------,      u = -----------
+        //     cross(a, b)           cross(b, a)
+        let (a, b, d) = (self.side_u, self.side_v, coarse_hit - self.origin);
 
-impl QuadYZ {
-    pub fn from_raw(y_interval: (f32, f32), z_interval: (f32, f32), x: f32) -> Self {
-        let (y0, y1) = y_interval;
-        let (z0, z1) = z_interval;
-        Self {
-            y_interval: Interval::new(y0, y1),
-            z_interval: Interval::new(z0, z1),
-            x,
-        }
+        let v = a.cross(d).norm() / a.cross(b).norm();
+        let u = b.cross(d).norm() / b.cross(a).norm();
+        (v.inside((0.0, 1.0)) && u.inside((0.0, 1.0))).then(|| {
+            let accurate_hit = self.origin + u * a + b * v;
+            assert!(
+                accurate_hit.distance_to(coarse_hit) < 1e-3,
+                "hit pos = {:.3}(coarse) / {:.3}(accurate), self = {:?}, uv = {:?}",
+                coarse_hit,
+                accurate_hit,
+                self,
+                (u, v)
+            );
+            Interaction::new(accurate_hit, t, (u, v), normal.hat(), -r.dir).with_dpdu(self.side_u)
+        })
+    }
+    fn occludes(&self, r: &Ray) -> bool {
+        let normal = self.side_u.cross(self.side_v);
+        let t = r.dir.dot(normal) / (self.origin - r.origin).dot(normal);
+        let t = match r.truncated_t(t) {
+            None => return false,
+            Some(t) => t,
+        };
+        let coarse_hit = r.position_at(t);
+        let (a, b, d) = (self.side_u, self.side_v, coarse_hit - self.origin);
+
+        let v = a.cross(d).norm() / a.cross(b).norm();
+        let u = b.cross(d).norm() / b.cross(a).norm();
+        v.inside((0.0, 1.0)) && u.inside((0.0, 1.0))
     }
 }
 
@@ -285,6 +318,7 @@ impl Shape for Disk {
         //        (o + td - c) dot n = (o-c) dot n + t d dot n = 0
         //        (c - o) dot n = t * d dot n
         let t = (self.center - r.origin).dot(self.normal) / r.dir.dot(self.normal);
+        let t = r.truncated_t(t)?;
         let isect_point = r.position_at(t);
         (isect_point.squared_distance_to(self.center) <= self.radial.norm_squared()).then(|| {
             let cp = isect_point - self.center;
@@ -304,134 +338,6 @@ impl Shape for Disk {
         let t = (self.center - r.origin).dot(self.normal) / r.dir.dot(self.normal);
         let isect_point = r.position_at(t);
         isect_point.squared_distance_to(self.center) <= self.radial.norm_squared()
-    }
-}
-
-impl Shape for QuadXY {
-    fn summary(&self) -> String {
-        let (xmin, xmax) = self.x_interval.as_pair();
-        let (ymin, ymax) = self.y_interval.as_pair();
-        format!("QuadXY{{[{}, {}]x[{}, {}]}}", xmin, xmax, ymin, ymax)
-    }
-    fn bbox(&self) -> BBox {
-        let (xmin, xmax) = self.x_interval.as_pair();
-        let (ymin, ymax) = self.y_interval.as_pair();
-        BBox::new(
-            Point3::new(xmin, ymin, self.z - f32::EPSILON),
-            Point3::new(xmax, ymax, self.z + f32::EPSILON),
-        )
-    }
-
-    fn intersect(&self, r: &Ray) -> Option<Interaction> {
-        let t = (self.z - r.origin.z) / r.dir.z;
-        let t = r.truncated_t(t)?;
-        let Point3 { x, y, .. } = r.origin + t * r.dir;
-        if self.x_interval.contains(x) && self.y_interval.contains(y) {
-            let (xmin, _) = self.x_interval.as_pair();
-            let (ymin, _) = self.y_interval.as_pair();
-            let u = (x - xmin) / self.x_interval.length();
-            let v = (y - ymin) / self.y_interval.length();
-
-            let pos = Point3::new(x, y, self.z);
-            let normal = Vec3::Z * -r.dir.z.signum();
-
-            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::X))
-        } else {
-            None
-        }
-    }
-
-    fn occludes(&self, r: &Ray) -> bool {
-        let t = (self.z - r.origin.z) / r.dir.z;
-        if let Some(t) = r.truncated_t(t) {
-            let (x, y, _) = r.position_at(t).as_triple();
-            self.x_interval.contains(x) && self.y_interval.contains(y)
-        } else {
-            false
-        }
-    }
-}
-
-impl Shape for QuadXZ {
-    fn summary(&self) -> String {
-        let (xmin, xmax) = self.x_interval.as_pair();
-        let (zmin, zmax) = self.z_interval.as_pair();
-        format!("QuadXZ{{[{}, {}]x[{}, {}]}}", xmin, xmax, zmin, zmax)
-    }
-    fn bbox(&self) -> BBox {
-        let (xmin, xmax) = self.x_interval.as_pair();
-        let (zmin, zmax) = self.z_interval.as_pair();
-        BBox::new(
-            Point3::new(xmin, self.y * float::ONE_MINUS_EPSILON, zmin),
-            Point3::new(xmax, self.y * float::ONE_PLUS_EPSILON, zmax),
-        )
-    }
-    fn intersect(&self, r: &Ray) -> Option<Interaction> {
-        let t = (self.y - r.origin.y) / r.dir.y;
-        let t = r.truncated_t(t)?;
-        let Point3 { x, y: _, z } = r.position_at(t);
-        if self.x_interval.contains(x) && self.z_interval.contains(z) {
-            let u = (x - self.x_interval.min) / self.x_interval.length();
-            let v = (z - self.z_interval.min) / self.z_interval.length();
-
-            let pos = Point3::new(x, self.y, z);
-            let normal = Vec3::Y * -r.dir.y.signum();
-
-            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::X))
-        } else {
-            None
-        }
-    }
-    fn occludes(&self, r: &Ray) -> bool {
-        let t = (self.y - r.origin.y) / r.dir.y;
-        if let Some(t) = r.truncated_t(t) {
-            let (x, _, z) = r.position_at(t).as_triple();
-            self.x_interval.contains(x) && self.z_interval.contains(z)
-        } else {
-            false
-        }
-    }
-}
-
-impl Shape for QuadYZ {
-    fn summary(&self) -> String {
-        let (zmin, zmax) = self.z_interval.as_pair();
-        let (ymin, ymax) = self.y_interval.as_pair();
-        format!("QuadXY{{[{}, {}]x[{}, {}]}}", ymin, ymax, zmin, zmax)
-    }
-    fn bbox(&self) -> BBox {
-        let (ymin, ymax) = self.y_interval.as_pair();
-        let (zmin, zmax) = self.z_interval.as_pair();
-
-        BBox::new(
-            Point3::new(self.x * float::ONE_MINUS_EPSILON, ymin, zmin),
-            Point3::new(self.x * float::ONE_PLUS_EPSILON, ymax, zmax),
-        )
-    }
-    fn intersect(&self, r: &Ray) -> Option<Interaction> {
-        let t = (self.x - r.origin.x) / r.dir.x;
-        let t = r.truncated_t(t)?;
-        let Point3 { x: _, y, z } = r.position_at(t);
-        if self.y_interval.contains(y) && self.z_interval.contains(z) {
-            let u = (y - self.y_interval.min) / self.y_interval.length();
-            let v = (z - self.z_interval.min) / self.z_interval.length();
-
-            let pos = Point3::new(self.x, y, z);
-            let normal = Vec3::X * -r.dir.x.signum();
-
-            Some(Interaction::new(pos, t, (u, v), normal, -r.dir).with_dpdu(Vec3::Y))
-        } else {
-            None
-        }
-    }
-    fn occludes(&self, r: &Ray) -> bool {
-        let t = (self.x - r.origin.x) / r.dir.x;
-        if let Some(t) = r.truncated_t(t) {
-            let (_, y, z) = r.position_at(t).as_triple();
-            self.y_interval.contains(y) && self.z_interval.contains(z)
-        } else {
-            false
-        }
     }
 }
 

@@ -325,7 +325,6 @@ impl From<Point3> for Vec3 {
     }
 }
 
-
 impl From<Vec4> for Vec3 {
     fn from(v4: Vec4) -> Self {
         Vec3::new(v4.x, v4.y, v4.z)
