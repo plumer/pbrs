@@ -447,6 +447,13 @@ impl Mul<Vec3> for Mat3 {
     }
 }
 
+impl Mul<f32> for Mat3 {
+    type Output = Mat3;
+    fn mul(self, f: f32) -> Mat3 {
+        Self::from_cols(self.cols[0] * f, self.cols[1] * f, self.cols[2] * f)
+    }
+}
+
 impl Sub for Mat3 {
     type Output = Mat3;
     fn sub(self, rhs: Mat3) -> Self::Output {
