@@ -12,12 +12,6 @@ pub use sample_shape::{SamplableShape, ShapeSample};
 
 pub type EnvLight = fn(Ray) -> Color;
 
-fn spawn_ray_to(p0: &Interaction, p1: hcm::Point3) -> Ray {
-    let mut r = p0.spawn_ray(p1 - p0.pos);
-    r.t_max = p1.distance_to(p0.pos) / r.dir.norm_squared();
-    r
-}
-
 pub trait Light {
     /// Computes the radiance that the light emits to a given point regardless of occlusion.
     /// - Returns the incident direction, the probability that the incident direction gets sampled,
@@ -77,7 +71,7 @@ impl Light for DeltaLight {
             Self::Point {position, intensity} => {
                 let radiance = intensity * position.squared_distance_to(target.pos).weak_recip();
                 let wi = (position - target.pos).hat();
-                let visibility_ray = spawn_ray_to(target, position);
+                let visibility_ray = target.spawn_limited_ray_to(position);
                 (radiance, wi, Prob::Mass(1.0), visibility_ray)
             }
             Self::Distant {world_radius, casting_dir, radiance} => {
@@ -173,7 +167,7 @@ impl Light for DiffuseAreaLight {
             radiance,
             wi,
             Prob::Density(pdf),
-            spawn_ray_to(target, point_on_light.pos),
+            target.spawn_limited_ray_to(point_on_light.pos),
         )
     }
 
