@@ -39,7 +39,7 @@ pub enum DeltaLight {
     },
     Distant {
         world_radius: f32,
-        incident_direction: hcm::Vec3,
+        casting_dir: hcm::Vec3,
         radiance: Color,
     },
 }
@@ -58,16 +58,17 @@ impl DeltaLight {
     ///
     /// The `world_radius` is the radius of the bounding sphere of the entire scene. It is used for
     /// computing a visibility tester ray. If not sure, use `f32::INFINITY` for the radius.
-    pub fn distant(world_radius: f32, incident_direction: hcm::Vec3, radiance: Color) -> Self {
+    ///
+    /// - `casting_dir` = target - light source (e.g., earth's position - sun's position)
+    pub fn distant(world_radius: f32, casting_dir: hcm::Vec3, radiance: Color) -> Self {
         Self::Distant {
             world_radius,
-            incident_direction,
+            casting_dir,
             radiance,
         }
     }
 }
 
-#[rustfmt::skip]
 impl Light for DeltaLight {
     fn sample_incident_radiance(
         &self, target: &Interaction, _u: (f32, f32),
@@ -79,15 +80,19 @@ impl Light for DeltaLight {
                 let visibility_ray = spawn_ray_to(target, position);
                 (radiance, wi, Prob::Mass(1.0), visibility_ray)
             }
-            Self::Distant {world_radius, incident_direction, radiance} => {
-                let outside_world = target.pos + world_radius * 2.0 * incident_direction;
-                let visibility_ray = spawn_ray_to(target, outside_world);
-                (
-                    radiance,
-                    incident_direction,
-                    Prob::Mass(1.0),
-                    visibility_ray,
-                )
+            Self::Distant {world_radius, casting_dir, radiance} => {
+                assert!(world_radius > 0.0);
+                let outside_world = target.pos - world_radius * 2.0 * casting_dir;
+                let visibility_ray = target.spawn_limited_ray_to(outside_world);
+                let dummy = visibility_ray.position_at(visibility_ray.t_max);
+                assert!(
+                    dummy.distance_to(outside_world) < casting_dir.norm() * world_radius * 0.01,
+                    "ray's end point = {dummy}, expected = {}, distance = {}, threshold dist = {}",
+                    outside_world,
+                    dummy.distance_to(outside_world),
+                    casting_dir.norm() * world_radius * 0.01
+                );
+                (radiance, -casting_dir, Prob::Mass(1.0), visibility_ray)
             }
         }
     }
