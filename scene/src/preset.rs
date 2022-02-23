@@ -103,7 +103,7 @@ pub fn mixed_spheres() -> Scene {
 
     let boxed_instances: Vec<Box<Instance>> =
         instances.iter().map(|x| Box::from(x.clone())).collect();
-    Scene::new(*tlas::build_bvh(boxed_instances), camera).with_env_light(blue_sky)
+    Scene::new(*tlas::build_bvh(boxed_instances), camera).with_fn_env_light(blue_sky)
 }
 
 pub fn two_perlin_spheres() -> Scene {
@@ -123,7 +123,7 @@ pub fn two_perlin_spheres() -> Scene {
     let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
     cam.look_at(point3(13.0, 2.0, -3.0), Point3::ORIGIN, Vec3::Y);
 
-    Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam).with_fn_env_light(blue_sky)
 }
 
 pub fn earth() -> Scene {
@@ -136,7 +136,7 @@ pub fn earth() -> Scene {
     let mut cam = Camera::new((WIDTH, HEIGHT), math::new_deg(20.0));
     cam.look_at(point3(13.0, 2.0, -3.0), Point3::ORIGIN, Vec3::Y);
 
-    Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam).with_fn_env_light(blue_sky)
 }
 
 pub fn quad_light() -> Scene {
@@ -171,7 +171,7 @@ pub fn quad_light() -> Scene {
     cam.look_at(point3(26.0, 3.0, -6.0), point3(0.0, 2.0, 0.0), Vec3::Y);
 
     Scene::new(*tlas::build_bvh(instances), cam)
-        .with_env_light(dark_room)
+        .with_fn_env_light(dark_room)
         .with_lights(vec![], area_lights)
 }
 
@@ -182,7 +182,7 @@ pub fn quad() -> Scene {
 
     let cam = Camera::new((WIDTH, HEIGHT), math::new_deg(45.0));
 
-    Scene::new(*tlas::build_bvh(instances), cam).with_env_light(blue_sky)
+    Scene::new(*tlas::build_bvh(instances), cam).with_fn_env_light(blue_sky)
 }
 
 pub fn cornell_box() -> Scene {
@@ -430,7 +430,7 @@ pub fn everything() -> Scene {
     let instances: Vec<_> = instances.into_iter().map(|i| Box::new(i)).collect();
 
     Scene::new(*tlas::build_bvh(instances), cam)
-        .with_env_light(dark_room)
+        .with_fn_env_light(dark_room)
         .with_lights(vec![], area_lights)
 }
 
@@ -454,7 +454,7 @@ pub fn env_mapped() -> Scene {
 
     let earth_map = tex::Image::from_file("assets/venice_dawn_1_2k.png").unwrap();
 
-    Scene::new(*tlas::build_bvh(instances), camera).with_env_map(earth_map)
+    Scene::new(*tlas::build_bvh(instances), camera).with_env_map(earth_map, Color::ONE)
 }
 
 pub fn silver_fresnel() -> (Color, Color) {

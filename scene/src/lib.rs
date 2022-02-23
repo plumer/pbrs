@@ -9,6 +9,12 @@ use light::{DeltaLight, DiffuseAreaLight};
 use radiometry::color::Color;
 use texture::Texture;
 
+pub enum EnvLight {
+    Fn(light::EnvLight),
+    Image(texture::Image, Color),
+    Constant(Color),
+}
+
 #[allow(dead_code)]
 pub struct Scene {
     // texture_descriptors: Vec<Box<dyn Texture>>,
@@ -22,8 +28,7 @@ pub struct Scene {
     pub tlas: tlas::bvh::BvhNode,
     pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
-    env_light: Option<light::EnvLight>,
-    env_map: Option<texture::Image>,
+    env_light: EnvLight,
     pub camera: Camera,
 }
 
@@ -31,10 +36,9 @@ impl Scene {
     pub fn new(tlas: tlas::bvh::BvhNode, camera: Camera) -> Self {
         Self {
             tlas,
-            env_light: None,
-            env_map: None,
             delta_lights: vec![],
             area_lights: vec![],
+            env_light: EnvLight::Constant(Color::black()),
             camera,
         }
     }
@@ -47,47 +51,68 @@ impl Scene {
             .map(|i| Box::new(i))
             .collect::<Vec<_>>();
         let tlas = *tlas::build_bvh(boxed_instances);
-        Self {
-            tlas,
-            env_light: None,
-            env_map: loader.env_map,
-            delta_lights: loader.delta_lights,
-            area_lights: loader.area_lights,
-            camera,
+        let mut delta_lights = loader.delta_lights;
+        for distant_light in delta_lights.iter_mut() {
+            if let light::DeltaLight::Distant { world_radius, .. } = distant_light {
+                *world_radius = tlas.bbox().diag().norm() * 0.5;
+            }
         }
+        let mut new_scene = Self::new(tlas, camera).with_lights(delta_lights, loader.area_lights);
+        new_scene.env_light = loader.env_light;
+        new_scene
     }
 
-    pub fn with_env_light(self, env_light: light::EnvLight) -> Self {
-        assert!(self.env_map.is_none());
+    pub fn with_fn_env_light(self, fn_env_light: light::EnvLight) -> Self {
+        if matches!(self.env_light, EnvLight::Image(..)) {
+            log::warn!("Discarding existing image map environment light");
+        }
         Self {
-            env_light: Some(env_light),
+            env_light: EnvLight::Fn(fn_env_light),
             ..self
         }
     }
-    pub fn with_env_map(self, env_map: texture::Image) -> Self {
-        assert!(self.env_light.is_none());
+
+    pub fn with_const_env_light(self, color: Color) -> Self {
+        if matches!(self.env_light, EnvLight::Image(..) | EnvLight::Fn(_)) {
+            eprintln!("Discarding the existing environment light");
+        }
+
         Self {
-            env_map: Some(env_map),
+            env_light: EnvLight::Constant(color),
+            ..self
+        }
+    }
+
+    pub fn with_env_map(self, env_map: texture::Image, scale_factor: Color) -> Self {
+        if matches!(self.env_light, EnvLight::Fn(_)) {
+            log::warn!("Discarding existing environment light function");
+        }
+        Self {
+            env_light: EnvLight::Image(env_map, scale_factor),
             ..self
         }
     }
 
     pub fn has_env_light(&self) -> bool {
-        self.env_light.is_some() || self.env_map.is_some()
+        match self.env_light {
+            EnvLight::Fn(_) => true,
+            EnvLight::Image(..) => true,
+            EnvLight::Constant(c) => !c.is_black(),
+        }
     }
 
     /// Evaluates environment light on the given ray, or black if no environment lights are set.
     pub fn eval_env_light(&self, ray: Ray) -> Color {
-        if let Some(env_light) = &self.env_light {
-            env_light(ray)
-        } else if let Some(env_map) = &self.env_map {
-            let phi = ray.dir.z.atan2(ray.dir.x);
-            let u = (phi * FRAC_1_PI * 0.5 + 1.0).fract();
-            let cos_theta = ray.dir.y / ray.dir.norm();
-            let v = cos_theta.acos() / PI;
-            env_map.value((u, v), math::hcm::Point3::ORIGIN)
-        } else {
-            Color::black()
+        match &self.env_light {
+            EnvLight::Fn(f) => f(ray),
+            EnvLight::Image(env_map, scale_factor) => {
+                let phi = ray.dir.z.atan2(ray.dir.x);
+                let u = (phi * FRAC_1_PI * 0.5 + 1.0).fract();
+                let cos_theta = ray.dir.y / ray.dir.norm();
+                let v = cos_theta.acos() / PI;
+                env_map.value((u, v), math::hcm::Point3::ORIGIN) * *scale_factor
+            }
+            EnvLight::Constant(c) => *c,
         }
     }
     pub fn with_lights(

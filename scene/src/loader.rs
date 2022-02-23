@@ -32,7 +32,7 @@ pub struct SceneLoader {
     pub camera: Option<Camera>,
     pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
-    pub env_map: Option<texture::Image>,
+    pub env_light: crate::EnvLight,
 }
 
 #[allow(dead_code)]
@@ -70,7 +70,7 @@ impl SceneLoader {
             camera: None,
             delta_lights: vec![],
             area_lights: vec![],
-            env_map: None,
+            env_light: crate::EnvLight::Constant(Color::black()),
         }
     }
 
@@ -241,13 +241,27 @@ impl SceneLoader {
             WorldItem::Light(light_impl, mut args) => {
                 if light_impl == "infinite" {
                     println!("args = {:?}", args);
-                    let map_name= args.extract_string("string mapname").expect("mapname");
-                    let map_path = self.resolve_relative_path(&map_name);
-                    self.env_map = tex::Image::from_file(&map_path).ok();
-                    if self.env_map.is_none() {
-                        eprintln!("can't read map from {}", map_path);
+                    let multiplier = args.extract_substr("L").map(|(key, args)| {
+                        if let ArgValue::Numbers(nums) = args {
+                            let spectrum_type = key.split(' ').next().unwrap();
+                            Self::parse_constant_color(spectrum_type, nums)
+                        } else {
+                            unimplemented!("Unrecognized luminance in infinite light: {:?}", args);
+                        }
+                    });
+                    let map_image = args.extract_string("string mapname").map(|map_name| {
+                        let map_path = self.resolve_relative_path(&map_name);
+                        tex::Image::from_file(&map_path).expect("can't read image")
+                    });
+                    if let Some(image) = map_image {
+                        self.env_light =
+                            crate::EnvLight::Image(image, multiplier.unwrap_or(Color::ONE));
+                    } else if let Some(color) = multiplier {
+                        self.env_light = crate::EnvLight::Constant(color);
+                    } else {
+                        panic!("can't process the infinite light");
                     }
-                } else {   
+                } else {
                     let delta_light = Self::parse_light(light_impl, args);
                     self.delta_lights.push(delta_light);
                 }
