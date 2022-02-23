@@ -55,8 +55,9 @@ impl Display for Ray {
         let precision = f.precision().unwrap_or(2);
         write!(
             f,
-            "{:.precision$} + t{:.precision$}",
+            "{:.precision$} + [0, {:.precision$}){:.precision$}",
             self.origin,
+            self.t_max,
             self.dir,
             precision = precision
         )

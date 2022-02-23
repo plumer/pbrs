@@ -17,6 +17,12 @@ pub struct BvhNode {
     content: BvhNodeContent,
 }
 
+impl BvhNode {
+    pub fn bbox(&self) -> BBox {
+        self.bbox
+    }
+}
+
 impl Debug for BvhNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let content_string = match &self.content {

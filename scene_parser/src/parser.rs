@@ -152,6 +152,10 @@ impl Parser {
                 self.goto_next();
                 WorldItem::MaterialInstance(self.get_next_quoted_string())
             }
+            Token::KwReverseOrientation => {
+                self.goto_next();
+                WorldItem::ReverseOrientation
+            }
             _ => self.raise_syntax_error(
                 format!("invalid token for starting an item: {:?}", self.peek).as_str(),
             ),
