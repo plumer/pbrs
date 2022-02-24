@@ -211,20 +211,17 @@ impl Shape for Sphere {
         // (td + o - c)^2 = radius^2
         // t^2 d^2 + (o-c)^2 + 2t d * (o-c) = radius^2
         // delta = 4(d*(o-c))^2 - 4d^2((o-c)^2 - radius^2)
-        let Ray { origin, dir, .. } = r.clone();
 
-        let dir = dir.hat();
-
-        let f = origin - self.center; // vector connecting the sphere center to ray origin.
-        let q = f.dot(dir) * dir; // r.o + q gives the point closest to sphere center.
-        let delta = self.radius * self.radius - (f - q).norm_squared();
+        let f = r.origin - self.center; // vector connecting the sphere center to ray origin.
+        let a = r.dir.norm_squared();
+        let b_prime = -f.dot(r.dir);
+        let delta = self.radius * self.radius - (f + b_prime / a * r.dir).norm_squared();
         let (t_low, t_high) = if delta < 0.0 {
             return None;
         } else {
             let c = f.norm_squared() - self.radius * self.radius;
-            let neg_b = -dir.dot(f);
-            let t0 = neg_b + neg_b.signum() * delta.sqrt();
-            let t1 = c / t0;
+            let q = b_prime + b_prime.signum() * (delta*a).sqrt();
+            let (t0, t1) = (c / q, q / a);
             if t0 < t1 {
                 (t0, t1)
             } else {
@@ -242,7 +239,7 @@ impl Shape for Sphere {
         // print!("{:?}", best_t);
         let ray_t = best_t?;
 
-        let pos = origin + dir * ray_t;
+        let pos = r.position_at(ray_t);
         let normal = (pos - self.center).hat();
         // When ray intersects from inside, the reflected ray should be spawn from inside.
         let pos = self.center + normal * self.radius * 1.00001;
@@ -275,24 +272,20 @@ impl Shape for Sphere {
         // (td + o - c)^2 = radius^2
         // t^2 d^2 + (o-c)^2 + 2t d * (o-c) = radius^2
         // delta = 4(d*(o-c))^2 - 4d^2((o-c)^2 - radius^2)
-        let Ray { origin, dir, .. } = r.clone();
 
-        let dir = dir.hat();
-
-        let f = origin - self.center; // vector connecting the sphere center to ray origin.
-        let q = f.dot(dir) * dir; // r.o + q gives the point closest to sphere center.
-        let delta = self.radius.powi(2) - (f - q).norm_squared();
-        let (t_low, t_high) = if delta < 0.0 {
+        let f = r.origin - self.center; // vector connecting the sphere center to ray origin.
+        let a = r.dir.norm_squared();
+        let b_prime = -f.dot(r.dir);
+        let delta = self.radius * self.radius - (f + b_prime / a * r.dir).norm_squared();
+        let (t0, t1) = if delta < 0.0 {
             return false;
         } else {
-            let c = f.norm_squared() - self.radius.powi(2);
-            let neg_b = -dir.dot(f);
-            let t0 = neg_b + neg_b.signum() * delta.sqrt();
-            let t1 = c / t0;
-            (t0, t1)
+            let c = f.norm_squared() - self.radius * self.radius;
+            let q = b_prime + b_prime.signum() * (delta*a).sqrt();
+            (c / q, q / a)
         };
         // Keeps only the roots that are within [0, r.t_max).
-        let (root1, root2) = (r.truncated_t(t_low), r.truncated_t(t_high));
+        let (root1, root2) = (r.truncated_t(t0), r.truncated_t(t1));
         root1.is_some() || root2.is_some()
     }
 }

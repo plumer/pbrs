@@ -62,36 +62,42 @@ pub fn mixed_spheres() -> Scene {
         Sphere::from_raw((-4.0, 1.0, 0.0), 1.0),
         Sphere::from_raw((4.0, 1.0, 0.0), 1.0),
     ];
-
+    let (real, imag) = gold_fresnel();
     let mut mtls: Vec<Arc<dyn mtl::Material>> = vec![
         Arc::new(mtl::Lambertian::solid(Color::new(0.5, 0.5, 0.5))),
         Arc::new(mtl::Dielectric::new(1.5)),
         Arc::new(mtl::Lambertian::solid(Color::new(0.4, 0.2, 0.1))),
-        Arc::new(mtl::Metal::new(Color::new(0.7, 0.6, 0.5), 0.0)),
+        Arc::new(mtl::Metal::from_ior(real, imag, 0.0)),
     ];
 
-    // for a in -11..11 {
-    //     for b in -11..11 {
-    //         let choose_mtl = rand_f32();
-    //         let center =
-    //             point3(a as f32, 0.2, b as f32) + 0.9 * Vec3::new(rand_f32(), 0.0, rand_f32());
+    let metal_iors = [
+        gold_fresnel(),
+        silver_fresnel(),
+        copper_fresnel(),
+        aluminium_fresnel(),
+    ];
 
-    //         if (center - point3(4.0, 0.2, 0.0)).norm() > 0.9 {
-    //             spheres.push(Sphere::new(center, 0.2));
-    //             let mtl: Arc<dyn mtl::Material> = if choose_mtl < 0.8 {
-    //                 let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
-    //                 Arc::new(mtl::Lambertian::solid(albedo))
-    //             } else if choose_mtl < 0.95 {
-    //                 let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
-    //                 let albedo = (albedo + Color::white()) * 0.5;
-    //                 Arc::new(mtl::Metal::new(albedo, rand_f32() * 0.5))
-    //             } else {
-    //                 Arc::new(mtl::Dielectric::new(1.4))
-    //             };
-    //             mtls.push(mtl);
-    //         }
-    //     }
-    // }
+    for a in -11..11 {
+        for b in -11..11 {
+            let choose_mtl = rand_f32();
+            let center = point3(a as f32, 0.2 + rand_f32().powi(3) * 0.1, b as f32)
+                + 0.9 * Vec3::new(rand_f32(), 0.0, rand_f32());
+
+            if (center - point3(4.0, 0.2, 0.0)).norm() > 0.9 {
+                spheres.push(Sphere::new(center, 0.2));
+                let mtl: Arc<dyn mtl::Material> = if choose_mtl < 0.8 {
+                    let albedo = Color::new(rand_f32(), rand_f32(), rand_f32());
+                    Arc::new(mtl::Lambertian::solid(albedo))
+                } else if choose_mtl < 0.95 {
+                    let (real, imag) = metal_iors[(rand::random::<u8>() % 4) as usize];
+                    Arc::new(mtl::Metal::from_ior(real, imag, rand_f32() * 0.5))
+                } else {
+                    Arc::new(mtl::Dielectric::new(1.4))
+                };
+                mtls.push(mtl);
+            }
+        }
+    }
 
     let spheres: Vec<_> = spheres.into_iter().map(|s| Arc::new(s)).collect();
 
@@ -390,7 +396,8 @@ pub fn everything() -> Scene {
     instances.push(Instance::from_raw(glass_ball, glass_mtl));
 
     let metal_ball = Sphere::from_raw((0.0, 150.0, 145.0), 50.0);
-    let metal_mtl = mtl::Metal::new(Color::new(0.8, 0.8, 0.9), 1.0);
+    let (real, imag) = silver_fresnel();
+    let metal_mtl = mtl::Metal::from_ior(real, imag, 1.0);
     // instances.push(Instance::new(Arc::new(metal_ball), Arc::new(metal_mtl)));
     instances.push(Instance::from_raw(metal_ball, metal_mtl));
 

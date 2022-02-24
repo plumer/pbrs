@@ -1,6 +1,9 @@
 use geometry::ray;
+use geometry::ray::Ray;
 use geometry::Interaction;
-use math::hcm::{self, Point3, Vec3};
+use math::assert_le;
+use math::float::Float;
+use math::hcm::{self, point3, vec3, Point3, Vec3};
 use shape::Shape;
 
 #[test]
@@ -46,4 +49,37 @@ fn custom_frame_test() {
         dpdu
     );
     assert!((actual_normal - normal).norm_squared() < 1e-6);
+}
+
+#[test]
+fn sphere_test() {
+    let sphere = shape::Sphere::new(point3(3.0, 4.0, 5.0), 1.6);
+    let dir_0 = vec3(1.5, 2.0, 2.5);
+    for s in [0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0] {
+        let r = Ray::new(point3(0.1, 0.2, 0.1), dir_0 * s).with_extent(1.0 / s);
+        assert!(sphere.intersect(&r).is_none(), "ray = {:.5}", r);
+        assert!(!sphere.occludes(&r));
+    }
+
+    let dir_1 = vec3(3.0, 4.0, 5.0);
+    for s in [0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0] {
+        let r = Ray::new(point3(0.1, 0.2, 0.1), dir_1 * s).with_extent(1.0 / s);
+        assert!(sphere.intersect(&r).is_some(), "ray = {:.5}", r);
+        assert!(sphere.occludes(&r));
+        let isect_pos = sphere.intersect(&r).unwrap().pos;
+        let dist2 = isect_pos.squared_distance_to(sphere.center());
+        let radius2 = sphere.radius().powi(2);
+        assert_le!(dist2.dist_to(radius2), 1e-4);
+    }
+
+    let dir_2 = vec3(4.8, 6.4, 8.0);
+    for s in [0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0] {
+        let r = Ray::new(point3(0.1, 0.2, 0.1), dir_2 * s).with_extent(1.0 / s);
+        assert!(sphere.intersect(&r).is_some(), "ray = {:.5}", r);
+        assert!(sphere.occludes(&r));
+        let isect_pos = sphere.intersect(&r).unwrap().pos;
+        let dist2 = isect_pos.squared_distance_to(sphere.center());
+        let radius2 = sphere.radius().powi(2);
+        assert_le!(dist2.dist_to(radius2), 1e-4);
+    }
 }
