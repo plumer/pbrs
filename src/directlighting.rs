@@ -1,10 +1,10 @@
 use std::ops::Deref;
 
 use geometry::ray;
+use geometry::Interaction;
 use math::{float::Float, prob::Prob};
 use radiometry::color::Color;
 use rand::Rng;
-use geometry::Interaction;
 
 use crate::bsdf::BSDF;
 use light::{DeltaLight, DiffuseAreaLight, Light};
@@ -55,7 +55,7 @@ pub fn direct_lighting_debug_integrator(scene: &Scene, mut ray: ray::Ray, _depth
     }
 }
 
-fn uniform_sample_one_light(
+pub fn uniform_sample_one_light(
     hit: &Interaction, mtl: &dyn Material, scene: &Scene, _debug: bool,
 ) -> Color {
     let num_lights =
@@ -71,7 +71,7 @@ fn uniform_sample_one_light(
     let one_light_incident_radiance = match chosen_index {
         x if x < scene.delta_lights.len() => {
             let chosen_light = &scene.delta_lights[chosen_index];
-            estimate_direct_delta_light(hit, mtl, chosen_light, rnd2_light, scene)
+            estimate_direct_delta_light(hit, mtl, chosen_light, rnd2_light, scene, _debug)
         }
         x if x >= scene.delta_lights.len() && x < scene.area_lights.len() => {
             let chosen_light = &scene.area_lights[x - scene.delta_lights.len()];
@@ -100,7 +100,7 @@ fn uniform_sample_one_light(
 
 fn estimate_direct_delta_light(
     hit: &Interaction, mtl: &dyn Material, light: &DeltaLight, rnd2_light: (f32, f32),
-    scene: &Scene,
+    scene: &Scene, _debug: bool,
 ) -> Color {
     // Uses multiple-importance sampling technique to combine the contribution of 2 different
     // sampling strategies:
@@ -128,14 +128,16 @@ fn estimate_direct_delta_light(
     // Computes weight, estimated function value, and the probability.
     // Returns `None` on: 0 prob of bsdf, either Li or bsdf is black, or light is occluded.
     let by_light = || -> Option<(f32, Color, f32)> {
-        let (light_radiance, wi, light_pr, mut vis_test_ray) =
+        let (light_radiance, wi, light_pr, vis_test_ray) =
             light.sample_incident_radiance(hit, rnd2_light);
         let bsdf_value = bsdf.eval(hit.wo, wi) * hit.normal.dot(hit.wo).abs();
         if !light_pr.is_positive() || light_radiance.is_black() || bsdf_value.is_black() {
             return None;
         }
         let scatter_pdf = bsdf.pdf(hit.wo, wi);
-        scene.tlas.intersect(&mut vis_test_ray)?;
+        if scene.tlas.occludes(&vis_test_ray) {
+            return None;
+        }
         let (weight, pr) = match light_pr {
             Prob::Mass(pmf) => (1.0, pmf),
             Prob::Density(pdf) => (square_heuristic(1.0, pdf, 1.0, scatter_pdf), pdf),

@@ -1,6 +1,7 @@
 mod bsdf;
 mod cli_options;
 mod directlighting;
+mod pathintegrator;
 
 use io::Write;
 use itertools::Itertools;
@@ -143,7 +144,7 @@ fn main() {
 
     let integrator = match options.integrator {
         cli_options::Integrator::Direct => direct_lighting_integrator,
-        cli_options::Integrator::Path => path_integrator,
+        cli_options::Integrator::Path => pathintegrator::path_integrator,
     };
     let (width, height) = scene.camera.resolution();
 
