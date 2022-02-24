@@ -15,6 +15,7 @@ env_logger = "0.9"
 log = "0.4"
 itertools = "0.10.3"
 exr = "1.4.1"
+indicatif = "0.16.2"
 
 [dependencies.math]
 path = "math"

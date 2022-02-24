@@ -172,11 +172,9 @@ fn main() {
     }
 
     // Function lambda to render one row. It's going to be used in the main rendering process.
+    let progress_bar = indicatif::ProgressBar::new(height as u64);
+    progress_bar.set_style(indicatif::ProgressStyle::default_bar().progress_chars("++."));
     let render_one_row = |row| {
-        if (row % 10) == 0 {
-            print!("{} ", row);
-            io::stdout().flush().unwrap();
-        }
         let mut colors_for_row = vec![];
         for col in 0..width {
             let mut color_sum = Color::black();
@@ -195,6 +193,7 @@ fn main() {
             let color = color_sum.scale_down_by(msaa * msaa);
             colors_for_row.push(color);
         }
+        progress_bar.inc(1);
         colors_for_row
     };
 
@@ -215,23 +214,7 @@ fn main() {
             .flatten()
             .collect()
     };
-
-    exr::prelude::write_rgb_file(
-        "test.exr",
-        width as usize,
-        height as usize, // write an image with 2048x2048 pixels
-        |x, y| {
-            let c = image_map[y * width as usize + x];
-            (c.r, c.g, c.b)
-        },
-    )
-    .unwrap();
-    // Collects image data as a huge array of `Color`.
-    let image_data: Vec<_> = image_map
-        .iter()
-        .map(|color| color.gamma_encode().to_u8().to_vec())
-        .flatten()
-        .collect();
+    progress_bar.finish();
 
     let whole_render_time = Instant::now().duration_since(start_render);
     println!("whole render time = {:?}", whole_render_time);
