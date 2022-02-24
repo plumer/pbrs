@@ -486,36 +486,17 @@ fn intersect_bvh_pred<S, F>(
 where
     F: Fn(&S, &Ray) -> bool + Copy,
 {
-    let mut node_stack = Vec::new();
-    node_stack.push(tree);
+    tree.bbox.intersect(r)
+        && match &tree.content {
+            Leaf(range) => shapes[range.clone()]
+                .iter()
+                .any(|shape| shape_intersect_pred(shape, r)),
 
-    while let Some(node) = node_stack.pop() {
-        if !node.bbox.intersect(r) {
-            continue;
-        }
-        match &node.content {
-            Leaf(range) => {
-                if shapes[range.clone()]
-                    .iter()
-                    .any(|shape| shape_intersect_pred(shape, r))
-                {
-                    return true;
-                }
-            }
-            Children([left, right], axis) => {
-                if r.dir[*axis] > 0.0 {
-                    // Ray roughly intersects left first.
-                    node_stack.push(right);
-                    node_stack.push(left);
-                } else {
-                    node_stack.push(left);
-                    node_stack.push(right);
-                }
+            Children([left, right], _) => {
+                intersect_bvh_pred(shapes, &*left, r, shape_intersect_pred)
+                    || intersect_bvh_pred(shapes, &*right, r, shape_intersect_pred)
             }
         }
-    }
-
-    return false;
 }
 
 #[test]
