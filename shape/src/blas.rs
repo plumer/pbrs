@@ -163,47 +163,48 @@ impl TriangleMesh {
     fn intersect_triangle(&self, tri: &Triangle, r: &Ray) -> Option<Interaction> {
         let (i, k, j) = tri.indices;
         let (p0, p1, p2) = (self.positions[i], self.positions[j], self.positions[k]);
-        let hit = crate::intersect_triangle(p0, p1, p2, r);
-        if let Some(isect) = hit {
-            let (b0, b1, b2) = (1.0 - isect.uv.0 - isect.uv.1, isect.uv.0, isect.uv.1);
-            let hit_by_uv = p0 + (p1 - p0) * b1 + (p2 - p0) * b2;
-            assert!(hit_by_uv.squared_distance_to(isect.pos) < 1e-6);
-            // Interpolates the normal vector using existing uv coordinates.
-            let (n0, n1, n2) = (self.normals[i], self.normals[j], self.normals[k]);
-            let bclerp_normal = barycentric_lerp((n0, n1, n2), (b0, b1, b2))
-                .try_hat()
-                .unwrap_or(isect.normal)
-                .facing(r.dir);
-            // Interpolates the UV coordinate using existing uv coordinates.
-            let bclerp_uv = (
-                barycentric_lerp((self.uvs[i].0, self.uvs[j].0, self.uvs[k].0), (b0, b1, b2)),
-                barycentric_lerp((self.uvs[i].1, self.uvs[j].1, self.uvs[k].1), (b0, b1, b2)),
-            );
-            // Uses uv coordinates to solve the tangent.
-            let (u0, v0) = self.uvs[i];
-            let (u1, v1) = self.uvs[j];
-            let (u2, v2) = self.uvs[k];
-            let (u1, v1) = (u1 - u0, v1 - v0);
-            let (u2, v2) = (u2 - u0, v2 - v0);
-            let dpdu = ((p2 - p0) * v2 - (p1 - p0) * v1) / (u1 * v2 - u2 * v1);
-            let dpdu = if dpdu.norm_squared().is_finite() {
-                dpdu
-            } else {
-                p1 - p0
-            };
-            let dpdu = (dpdu - dpdu.projected_onto(bclerp_normal)).hat();
-            assert!(
-                dpdu.dot(bclerp_normal).abs() < 1e-3,
-                "dpdu({:.5}) still not perp with normal({:.5})",
+        let hit = crate::intersect_triangle(p0, p1, p2, r)?;
+
+        let (b0, b1, b2) = (1.0 - hit.uv.0 - hit.uv.1, hit.uv.0, hit.uv.1);
+        let hit_by_uv = p0 + (p1 - p0) * b1 + (p2 - p0) * b2;
+        assert!(hit_by_uv.squared_distance_to(hit.pos) < 1e-6);
+        // Interpolates the normal vector using existing uv coordinates.
+        let (n0, n1, n2) = (self.normals[i], self.normals[j], self.normals[k]);
+        let bclerp_normal = barycentric_lerp((n0, n1, n2), (b0, b1, b2))
+            .try_hat()
+            .unwrap_or(hit.normal)
+            .facing(r.dir);
+        // Interpolates the UV coordinate using existing uv coordinates.
+        let bclerp_uv = (
+            barycentric_lerp((self.uvs[i].0, self.uvs[j].0, self.uvs[k].0), (b0, b1, b2)),
+            barycentric_lerp((self.uvs[i].1, self.uvs[j].1, self.uvs[k].1), (b0, b1, b2)),
+        );
+        // Uses uv coordinates to solve the tangent.
+        let (u0, v0) = self.uvs[i];
+        let (u1, v1) = self.uvs[j];
+        let (u2, v2) = self.uvs[k];
+        let (u1, v1) = (u1 - u0, v1 - v0);
+        let (u2, v2) = (u2 - u0, v2 - v0);
+        let dpdu = ((p2 - p0) * v2 - (p1 - p0) * v1) / (u1 * v2 - u2 * v1);
+        let dpdu = if dpdu.norm_squared().is_finite() {
+            dpdu
+        } else {
+            p1 - p0
+        };
+        let dpdu = (dpdu - dpdu.projected_onto(bclerp_normal)).hat();
+        if dpdu.dot(bclerp_normal).abs() >= 1e-3 {
+            eprintln!(
+                "dpdu({:.5}) still not perp with normal({:.5}), dot product = {}",
                 dpdu,
-                bclerp_normal
+                bclerp_normal,
+                dpdu.dot(bclerp_normal)
             );
+            None
+        } else {
             Some(
-                Interaction::new(isect.pos, isect.ray_t, bclerp_uv, bclerp_normal, isect.wo)
+                Interaction::new(hit.pos, hit.ray_t, bclerp_uv, bclerp_normal, hit.wo)
                     .with_dpdu(dpdu),
             )
-        } else {
-            hit
         }
     }
     fn intersect_triangle_pred(&self, tri: &Triangle, r: &Ray) -> bool {

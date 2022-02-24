@@ -220,7 +220,7 @@ impl Shape for Sphere {
             return None;
         } else {
             let c = f.norm_squared() - self.radius * self.radius;
-            let q = b_prime + b_prime.signum() * (delta*a).sqrt();
+            let q = b_prime + b_prime.signum() * (delta * a).sqrt();
             let (t0, t1) = (c / q, q / a);
             if t0 < t1 {
                 (t0, t1)
@@ -281,7 +281,7 @@ impl Shape for Sphere {
             return false;
         } else {
             let c = f.norm_squared() - self.radius * self.radius;
-            let q = b_prime + b_prime.signum() * (delta*a).sqrt();
+            let q = b_prime + b_prime.signum() * (delta * a).sqrt();
             (c / q, q / a)
         };
         // Keeps only the roots that are within [0, r.t_max).
@@ -432,19 +432,12 @@ impl Shape for IsolatedTriangle {
     }
 }
 
-#[rustfmt::skip]
 /// Computes ray-triangle intersection.  The `uv` property of the resulting `Interaction` (if any)
 /// is computed such that `p = p0 + u*(p1-p0) + v*(p2-p0)` where `p` is the point of intersection.
 pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option<Interaction> {
-    let normal = (p0 - p1).cross(p2 - p1);
-    // TODO(zixun): remove triangles (index triplets) from plymeshes that have zero area.
-    if normal.is_zero() {
-        // Degenerate triangle.
-        return None;
-    }
-    let normal = normal.hat();
-    let normal = normal.dot(-r.dir).signum() * normal;
+    let normal = (p0 - p1).cross(p2 - p1).try_hat()?.facing(r.dir);
     assert!(normal.dot(r.dir) <= 0.0);
+
     // The equation for the plane of the triangle would be:
     // (p - p0).dot(normal) = 0. Plugging in the ray equation $p = o + td$, we have
     // (o + td - p0).dot(normal) = 0  =>  t*dot(d, normal) = dot(p0-o, normal)
@@ -477,18 +470,17 @@ pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option
         return None;
     }
     // Now an intersection is truly found.
-    // hit_pos = p0 * b0 +            p1 * b1 + p2 * b2 
+    // hit_pos = p0 * b0 +            p1 * b1 + p2 * b2
     //         = p0 * (1 - b1 - b2) + p1 * b1 + p2 * b2
     //         = p0 + (p1 - p0) * b1 + (p2 - p0) * b2
     Some(Interaction::new(hit_pos, t, (b1, b2), normal, -r.dir))
 }
 
 pub fn intersect_triangle_pred(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> bool {
-    let normal = (p0 - p1).cross(p2 - p1);
-    if normal.is_zero() {
-        return false;
-    }
-    let normal = normal.hat();
+    let normal = match (p0 - p1).cross(p2 - p1).try_hat() {
+        None => return false,
+        Some(n) => n,
+    };
     let t = normal.dot(p0 - r.origin) / normal.dot(r.dir);
     if let Some(t) = r.truncated_t(t) {
         let p = r.position_at(t);
