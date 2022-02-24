@@ -433,7 +433,11 @@ impl Material for Plastic {
     fn bxdfs_at(&self, _isect: &Interaction) -> Vec<BXDF> {
         use microfacet::MicrofacetDistrib as MFDistrib;
         let lambertian = bxdf::DiffuseReflect::lambertian(self.diffuse);
-        let alpha = MFDistrib::roughness_to_alpha(self.roughness);
+        let alpha = if self.remap_roughness {
+            MFDistrib::roughness_to_alpha(self.roughness)
+        } else {
+            self.roughness
+        };
         let trowbridge = MFDistrib::beckmann(alpha, alpha);
         let mf_refl =
             bxdf::MicrofacetReflection::new(self.specular, trowbridge, bxdf::Fresnel::Nop);

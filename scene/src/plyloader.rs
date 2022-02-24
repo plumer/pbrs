@@ -242,7 +242,7 @@ fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
         list_length_number_size,
         list_element_size,
     ) {
-        info!("num_vertices = {}, num_faces = {}, list_length_number_size = {}, list_element_size = {}",
+        log::trace!("num_vertices = {}, num_faces = {}, list_length_number_size = {}, list_element_size = {}",
                 num_vertices, num_faces, list_length_number_size, list_element_size);
         let mut vertex_buffer_u8 = Vec::new();
         vertex_buffer_u8.resize(

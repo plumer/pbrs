@@ -134,20 +134,12 @@ impl SceneLoader {
             self.traverse_world_item(world_item);
         }
         for instance in self.instances.iter_mut() {
-            info!(
-                "transform = {}, shape summary = {}, bbox = {}, mtl type = {}",
-                instance.transform,
-                instance.shape.summary(),
-                instance.bbox(),
-                instance.mtl.summary()
-            );
             instance.transform = world_transform * instance.transform;
         }
     }
 
     fn traverse_world_item(&mut self, item: ast::WorldItem) {
         use ast::WorldItem;
-        let dummy_area_light_mtl = Arc::new(mtl::Lambertian::solid(Color::black()));
         match item {
             WorldItem::Transform(t) => {
                 // Parses the transform from parameters and applies that onto the current transform.
@@ -160,12 +152,11 @@ impl SceneLoader {
                 if let Some(luminance) = self.current_arealight_luminance {
                     // Creates an area light and an instance for each shape.
                     let (samplable_shapes, shapes) = self.parse_samplable_shape(&shape_impl, args);
-                    let transform = self.ctm_stack.last().unwrap().clone();
-                    self.area_lights.extend(
-                        samplable_shapes
-                            .into_iter()
-                            .map(|shape| light::DiffuseAreaLight::new(luminance, shape, transform)),
-                    );
+                    let ctm = self.ctm_stack.last().unwrap().clone();
+                    self.area_lights
+                        .extend(samplable_shapes.into_iter().map(|shape| {
+                            light::DiffuseAreaLight::new(luminance, shape.transformed_by(ctm))
+                        }));
                     // The material for the object instance is set to DiffuseLight of the same
                     // luminance.
                     if let Some(mtl) = &self.current_mtl {
@@ -176,7 +167,7 @@ impl SceneLoader {
                     }
                     let mtl = Arc::new(mtl::DiffuseLight::new(luminance));
                     self.instances.extend(shapes.into_iter().map(|shape| {
-                        tlas::instance::Instance::new(shape, mtl.clone()).with_transform(transform)
+                        tlas::instance::Instance::new(shape, mtl.clone()).with_transform(ctm)
                     }));
                 } else if let Some(mtl) = &self.current_mtl {
                     let shape = self.parse_shape(&shape_impl, args);
@@ -230,9 +221,11 @@ impl SceneLoader {
                 }
             }
             WorldItem::Texture(tex_impl, tex_type, name, args) => {
-                if tex_type == "color" {
+                if tex_type == "color" || tex_type == "spectrum" {
                     let tex = self.parse_color_texture(tex_impl, args);
                     self.named_textures.insert(name, tex);
+                } else {
+                    log::error!("texture of type {tex_type}, args = {:?}", args);
                 }
             }
             WorldItem::MaterialInstance(name) => {
@@ -326,11 +319,12 @@ impl SceneLoader {
                     .map(|xyz| hcm::Point3::new(xyz[0], xyz[1], xyz[2]))
                     .collect();
 
-                let uv_raw = match parameters.extract("float uv") {
-                    None => vec![0.0; points.len() * 2],
-                    Some(ArgValue::Numbers(nums)) => nums,
-                    Some(wtf) => panic!("incorrect format for uv coords: {:?}", wtf),
-                };
+                let uv_raw =
+                    match (parameters.extract("float uv")).or(parameters.extract("float st")) {
+                        None => vec![0.0; points.len() * 2],
+                        Some(ArgValue::Numbers(nums)) => nums,
+                        Some(wtf) => panic!("incorrect format for uv coords: {:?}", wtf),
+                    };
                 let uvs: Vec<_> = uv_raw.chunks_exact(2).map(|uv| (uv[0], uv[1])).collect();
 
                 let indices_raw = match parameters.extract("integer indices") {
@@ -673,7 +667,9 @@ impl SceneLoader {
             let rough = if v_roughness == u_roughness {
                 u_roughness
             } else {
-                unimplemented!() // mtl::Roughness::UV((u_roughness, v_roughness))
+                error!("UV roughness not supported, using u only: {u_roughness}, {v_roughness}");
+                // mtl::Roughness::UV((u_roughness, v_roughness))
+                u_roughness
             };
             Arc::new(mtl::Substrate::new(kd, ks, rough, remap_roughness))
         } else if mtl_impl == "fourier" {
