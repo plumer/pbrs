@@ -123,6 +123,12 @@ impl BBox {
     }
 }
 
+impl std::iter::Sum for BBox {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::empty(), |b0, b1| union(b0, b1))
+    }
+}
+
 impl Display for BBox {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "box[{} -> {}]", self.min, self.max)

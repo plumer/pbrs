@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 use std::{
     fmt,
-    ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub},
+    ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub}, iter::Sum,
 };
 
 pub fn vec3(x: f32, y: f32, z: f32) -> Vec3 {
@@ -175,6 +175,11 @@ impl Add for Vec3 {
 impl AddAssign for Vec3 {
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
+    }
+}
+impl Sum for Vec3 {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Vec3::ZERO, |v, vi| v + vi)
     }
 }
 impl Add<Point3> for Vec3 {

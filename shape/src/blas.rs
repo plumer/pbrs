@@ -337,9 +337,7 @@ where
     F: Fn(&S) -> BBox + Copy,
 {
     if range.len() <= 4 {
-        let bbox = shapes[range.clone()]
-            .iter()
-            .fold(BBox::empty(), |b, shape| bvh::union(b, box_getter(shape)));
+        let bbox = shapes[range.clone()].iter().map(box_getter).sum::<BBox>();
         return IsoBvhNode {
             bbox,
             content: Leaf(range),
@@ -357,9 +355,7 @@ where
     if centroid_bbox.diag()[split_axis] < 1e-8 {
         eprintln!("Creating a tiny leaf node with {} shapes", range.len());
         return IsoBvhNode {
-            bbox: bboxes
-                .iter()
-                .fold(BBox::empty(), |b0, b1| bvh::union(b0, *b1)),
+            bbox: bboxes.iter().copied().sum::<BBox>(), // .fold(BBox::empty(), |b0, b1| bvh::union(b0, *b1))
             content: Leaf(range),
         };
     }
