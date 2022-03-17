@@ -3,10 +3,10 @@ use std::{
     io::{BufRead, Read},
 };
 
-use math::hcm;
-use shape::{TriangleMeshRaw, Vertex};
 use log::{error, info, warn};
+use math::hcm;
 use ply_rs::ply::*;
+use shape::{TriangleMeshRaw, Vertex};
 
 pub fn load_ply(path: &str) -> TriangleMeshRaw {
     return load_ply_self_housed(path).unwrap();
@@ -71,40 +71,49 @@ pub fn load_ply_external_lib(path: &str) -> TriangleMeshRaw {
         vertex_data.push(vertex);
     }
 
-    let mut triangle_indices = vec![];
+    let mut index_triples = vec![];
     let ref faces_raw = ply_mesh.payload["face"];
     for face_raw in faces_raw {
         if let Property::ListInt(indices) = &face_raw["vertex_indices"] {
-            triangle_indices.append(&mut indices.clone());
+            if let [i, j, k] = indices.as_slice() {
+                index_triples.push((*i as usize, *j as usize, *k as usize));
+            } else {
+                eprintln!("face index list not of length 3");
+            }
         }
     }
-    
-    let points_are_close = |p0: hcm::Point3, p1: hcm::Point3| { (p0 - p1).norm_squared() < 1e-6};
-    let vecs_are_close = |v0: hcm::Vec3, v1: hcm::Vec3| { (v0 - v1).norm_squared() < 1e-6};
 
-    match load_ply_self_housed(path) {
-        Ok(x) => {
-            info!("_load_ply ok");
-            assert_eq!(x.indices, triangle_indices, "indices are the same ?");
-            assert_eq!(x.vertices.len(), vertex_data.len(), "vertices are the same length?" );
-            x.vertices.iter().zip(vertex_data.iter()).enumerate().for_each(|(id, (vnew, vold))|{
-                if !points_are_close(vnew.pos, vold.pos) {
-                    error!("differ on #{} by position", id);
-                }
-                if !vecs_are_close(vnew.normal, vold.normal) {
-                    error!("differ on #{} by normal", id);
-                }
-                if vnew.uv.0 != vold.uv.0 || vnew.uv.1 != vold.uv.1{
-                    error!("differ on #{} by uv", id);
-                }
-            });
-        } 
-        Err(x) => error!("_load_ply error: {}", x.to_string()),
-    };
+    let points_are_close = |p0: hcm::Point3, p1: hcm::Point3| (p0 - p1).norm_squared() < 1e-6;
+    let vecs_are_close = |v0: hcm::Vec3, v1: hcm::Vec3| (v0 - v1).norm_squared() < 1e-6;
+
+    let self_housed = load_ply_self_housed(path);
+    if let Ok(x) = self_housed {
+        info!("_load_ply ok");
+        assert_eq!(x.index_triples, index_triples, "indices are the same ?");
+        assert_eq!(
+            x.vertices.len(),
+            vertex_data.len(),
+            "vertices are the same length?"
+        );
+        for (id, (vnew, vold)) in x.vertices.iter().zip(vertex_data.iter()).enumerate() {
+            if !points_are_close(vnew.pos, vold.pos) {
+                error!("differ on #{} by position", id);
+            }
+            if !vecs_are_close(vnew.normal, vold.normal) {
+                error!("differ on #{} by normal", id);
+            }
+            if vnew.uv.0 != vold.uv.0 || vnew.uv.1 != vold.uv.1 {
+                error!("differ on #{} by uv", id);
+            }
+        }
+    } else {
+        let e = self_housed.unwrap_err();
+        error!("_load_ply error: {}", e);
+    }
 
     TriangleMeshRaw {
         vertices: vertex_data,
-        indices: triangle_indices,
+        index_triples,
     }
 }
 
@@ -257,7 +266,7 @@ fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
             .collect::<Vec<_>>();
         // info!("Vertex buffer = {:?}", vertex_buffer);
 
-        let mut indices_list = Vec::new();
+        let mut index_triples = Vec::new();
         for _ in 0..num_faces {
             let mut list_length_u8 = Vec::new();
             list_length_u8.resize(list_length_number_size * std::mem::size_of::<u8>(), 0u8);
@@ -269,20 +278,20 @@ fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
             face_indices_bytes.resize(list_element_size * list_length as usize, 0u8);
             reader.read_exact(&mut face_indices_bytes).unwrap();
 
-            let mut face_indices: Vec<_> = face_indices_bytes
+            let face_indices: Vec<_> = face_indices_bytes
                 .chunks_exact(list_element_size)
                 .map(|bytes| bytes_to_uint(bytes, ply_format) as i32)
                 .collect();
-            if face_indices.len() > 3 {
-                for i in 1..(list_length - 1) as usize {
-                    indices_list.append(&mut vec![
-                        face_indices[0],
-                        face_indices[i],
-                        face_indices[i + 1],
-                    ]);
-                }
+            if let [i, j, k] = face_indices.as_slice() {
+                index_triples.push((*i as usize, *j as usize, *k as usize));
             } else {
-                indices_list.append(&mut face_indices);
+                for i in 1..(list_length - 1) as usize {
+                    index_triples.push((
+                        face_indices[0] as usize,
+                        face_indices[i] as usize,
+                        face_indices[i + 1] as usize,
+                    ));
+                }
             }
         }
 
@@ -360,7 +369,7 @@ fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
             })
             .collect();
         Ok(TriangleMeshRaw {
-            indices: indices_list,
+            index_triples,
             vertices,
         })
     } else {

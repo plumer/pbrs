@@ -299,9 +299,9 @@ impl SceneLoader {
                 let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
                 let tri_bvh = shape::TriangleMesh::build_from_raw(&mesh);
                 info!(
-                    "Triangle mesh with {} vertices and {} indices, bvh shape: {}",
+                    "Triangle mesh with {} vertices and {} triangles, bvh shape: {}",
                     mesh.vertices.len(),
-                    mesh.indices.len(),
+                    mesh.index_triples.len(),
                     tri_bvh.bvh_shape_summary()
                 );
                 Arc::new(tri_bvh)
@@ -332,7 +332,7 @@ impl SceneLoader {
                     Some(ArgValue::Numbers(nums)) => nums,
                     Some(arg) => panic!("incorrect format for indices: {:?}", arg),
                 };
-                let indices = indices_raw
+                let index_triples = indices_raw
                     .chunks_exact(3)
                     .map(|ijk| (ijk[0] as usize, ijk[1] as usize, ijk[2] as usize))
                     .collect::<Vec<_>>();
@@ -346,10 +346,8 @@ impl SceneLoader {
                     .chunks_exact(3)
                     .map(|xyz| hcm::Vec3::new(xyz[0], xyz[1], xyz[2]))
                     .collect::<Vec<_>>();
-
-                let tri_bvh = shape::TriangleMesh::from_soa(points, normals, uvs, indices);
-                info!("Triangle bvh summary: {}", tri_bvh.bvh_shape_summary());
-                Arc::new(tri_bvh)
+                    let tri_bvh = shape::TriangleMesh::from_soa(points, normals, uvs, index_triples);
+                    Arc::new(tri_bvh)
             }
             _ => unimplemented!("shape of {}", implementation),
         }
@@ -376,18 +374,15 @@ impl SceneLoader {
 
             let mesh = plyloader::load_ply(ply_file_path.to_str().unwrap());
             let mut triangles = Vec::new();
-            mesh.indices.chunks_exact(3).for_each(|ijk| {
-                if let [i, j, k] = ijk {
-                    let t = IsolatedTriangle::new(
-                        mesh.vertices[*i as usize].pos,
-                        mesh.vertices[*j as usize].pos,
-                        mesh.vertices[*k as usize].pos,
-                    );
-                    triangles.push(t);
-                } else {
-                    panic!("indices should be multiple of 3")
-                }
-            });
+            for ijk in mesh.index_triples.iter() {
+                let (i, j, k) = *ijk;
+                let t = IsolatedTriangle::new(
+                    mesh.vertices[i].pos,
+                    mesh.vertices[j].pos,
+                    mesh.vertices[k].pos,
+                );
+                triangles.push(t);
+            }
             (
                 triangles
                     .iter()

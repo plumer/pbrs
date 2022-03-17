@@ -71,14 +71,14 @@ where
 
 #[derive(Debug)]
 struct Triangle {
-    indices: (usize, usize, usize),
+    index_triple: (usize, usize, usize),
     bbox: BBox,
 }
 impl Triangle {
     fn new(indices: (usize, usize, usize), bbox: BBox) -> Self {
         let (i, j, k) = indices;
         Triangle {
-            indices: (i.into(), j.into(), k.into()),
+            index_triple: (i.into(), j.into(), k.into()),
             bbox,
         }
     }
@@ -96,12 +96,10 @@ pub struct TriangleMesh {
 
 impl TriangleMesh {
     pub fn build_from_raw(raw: &TriangleMeshRaw) -> Self {
-        assert_eq!(raw.indices.len() % 3, 0);
         let triangles = raw
-            .indices
-            .chunks_exact(3)
+            .index_triples.iter()
             .map(|ijk| {
-                let (i, j, k) = (ijk[0] as usize, ijk[1] as usize, ijk[2] as usize);
+                let (i, j, k) = *ijk;
                 let (p0, p1, p2) = (
                     raw.vertices[i].pos,
                     raw.vertices[j].pos,
@@ -161,7 +159,7 @@ impl TriangleMesh {
     }
 
     fn intersect_triangle(&self, tri: &Triangle, r: &Ray) -> Option<Interaction> {
-        let (i, k, j) = tri.indices;
+        let (i, k, j) = tri.index_triple;
         let (p0, p1, p2) = (self.positions[i], self.positions[j], self.positions[k]);
         let hit = crate::intersect_triangle(p0, p1, p2, r)?;
 
@@ -208,7 +206,7 @@ impl TriangleMesh {
         }
     }
     fn intersect_triangle_pred(&self, tri: &Triangle, r: &Ray) -> bool {
-        let (i, k, j) = tri.indices;
+        let (i, k, j) = tri.index_triple;
         crate::intersect_triangle_pred(self.positions[i], self.positions[j], self.positions[k], r)
     }
 
@@ -231,9 +229,10 @@ pub struct Vertex {
     pub uv: (f32, f32),
 }
 
+#[derive(Debug)]
 pub struct TriangleMeshRaw {
     pub vertices: Vec<Vertex>,
-    pub indices: Vec<i32>,
+    pub index_triples: Vec<(usize, usize, usize)>,
 }
 
 impl Vertex {
