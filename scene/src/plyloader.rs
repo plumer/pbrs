@@ -358,7 +358,7 @@ fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
             }
         }
         if normals.is_empty() {
-            normals = compute_normals(&positions, &indices_list);
+            normals = geometry::compute_normals(&positions, &index_triples);
         }
 
         let vertices: Vec<_> = (0..positions.len())
@@ -375,23 +375,4 @@ fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
     } else {
         wrong_data_error!("missing something")
     }
-}
-
-fn compute_normals(positions: &Vec<hcm::Point3>, indices: &Vec<i32>) -> Vec<hcm::Vec3> {
-    let num_triangles = indices.len() / 3;
-    assert_eq!(num_triangles * 3, indices.len());
-    let mut normals = Vec::new();
-    normals.resize(positions.len(), hcm::Vec3::ZERO);
-    indices.chunks_exact(3).for_each(|ijk| {
-        if let [i, j, k] = ijk {
-            let p0 = positions[*i as usize];
-            let p1 = positions[*j as usize];
-            let p2 = positions[*k as usize];
-            let n = (p1 - p0).cross(p2 - p0);
-            normals[*i as usize] += n;
-            normals[*j as usize] += n;
-            normals[*k as usize] += n;
-        }
-    });
-    normals.iter().map(|n| n.hat()).collect()
 }

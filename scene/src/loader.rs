@@ -346,8 +346,19 @@ impl SceneLoader {
                     .chunks_exact(3)
                     .map(|xyz| hcm::Vec3::new(xyz[0], xyz[1], xyz[2]))
                     .collect::<Vec<_>>();
+                if implementation == "loopsubdiv" {
+                    let subdivided = shape::loop_subdivide(&points, &index_triples);
+                    info!("using loop subdiv");
+                    let mut output_file = std::fs::File::create("a.obj").unwrap();
+                    output_file
+                        .write(subdivided.serialize_as_obj().as_bytes())
+                        .unwrap();
+                    Arc::new(subdivided)
+                } else {
                     let tri_bvh = shape::TriangleMesh::from_soa(points, normals, uvs, index_triples);
+                    info!("Triangle bvh summary: {}", tri_bvh.bvh_shape_summary());
                     Arc::new(tri_bvh)
+                }
             }
             _ => unimplemented!("shape of {}", implementation),
         }

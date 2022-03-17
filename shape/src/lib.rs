@@ -1,5 +1,6 @@
 mod blas;
 mod simple;
+mod subdivision;
 
 use geometry::bvh::BBox;
 use geometry::interaction::Interaction;
@@ -7,6 +8,7 @@ use geometry::ray::Ray;
 
 pub use blas::*;
 pub use simple::*;
+pub use subdivision::loop_subdivide;
 
 /// Represents the characteristics of a shape: has a bounding box, and can interact with a ray.
 /// - See `simple.rs` for basic shape implementations: `Sphere`, `Quad`, and `Cuboid`.
