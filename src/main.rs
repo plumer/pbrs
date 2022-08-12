@@ -3,11 +3,11 @@ mod cli_options;
 mod directlighting;
 mod pathintegrator;
 
-use io::Write;
+use std::io::Write;
 use itertools::Itertools;
 use log::*;
 use std::fs::File;
-use std::io::{self, BufWriter};
+use std::io::BufWriter;
 use std::time::Instant;
 
 use crate::directlighting::*;
@@ -54,7 +54,22 @@ pub fn write_exr(file_name: &str, colors: &[Color], (width, height): (u32, u32))
 
 #[allow(unreachable_code)]
 fn main() {
-    env_logger::init();
+    env_logger::builder()
+        .format(|buf, record| {
+            let ts = buf.timestamp().to_string();
+            let utc_time_str: String = ts.chars().skip_while(|&c| c != 'T').collect();
+            let colored_level = buf.default_styled_level(record.level());
+            writeln!(
+                buf,
+                "{} {}:{} {}] {}",
+                utc_time_str,
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
+                colored_level,
+                record.args()
+            )
+        }).filter_level(log::LevelFilter::Error)
+        .init();
 
     // Parses options from the command line arguments: input file or hard-coded scene name, choice
     // of integrator, etc.
@@ -234,6 +249,7 @@ fn main() {
 // another one for debugging purposes.
 // ------------------------------------------------------------------------------------------------
 
+#[allow(dead_code)]
 fn path_integrator(scene: &Scene, mut ray: ray::Ray, depth: i32) -> Color {
     if depth <= 0 {
         return Color::black();
