@@ -130,7 +130,7 @@ fn estimate_direct_delta_light(
     let by_light = || -> Option<(f32, Color, f32)> {
         let (light_radiance, wi, light_pr, vis_test_ray) =
             light.sample_incident_radiance(hit, rnd2_light);
-        let bsdf_value = bsdf.eval(hit.wo, wi) * hit.normal.dot(hit.wo).abs();
+        let bsdf_value = bsdf.eval(hit.wo, wi) * hit.normal.dot(wi).abs();
         if !light_pr.is_positive() || light_radiance.is_black() || bsdf_value.is_black() {
             return None;
         }
@@ -182,8 +182,8 @@ fn estimate_direct_area_light(
     assert!(light_pr.is_density());
     if light_pr.is_positive() && !light_radiance.is_black() {
         let light_pdf = light_pr.density();
-        // Evaluates f(wo, wi) * |cos(theta)|.
-        let bsdf_value = bsdf.eval(hit.wo, wi) * hit.normal.dot(hit.wo).abs();
+        // Evaluates f(wo, wi) * |cos(theta_i)|.
+        let bsdf_value = bsdf.eval(hit.wo, wi) * hit.normal.dot(wi).abs();
         let scatter_pdf = bsdf.pdf(hit.wo, wi);
         // Adds light's contribution to reflected radiance, if both BSDF value and Li are non-black,
         // and the incident ray isn't occluded. If-statement shortcut is used to avoid unnecessary
