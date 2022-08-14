@@ -1,4 +1,4 @@
-use math::hcm::{Point3, Vec3};
+ use math::hcm::{Point3, Vec3};
 use math::Angle;
 use std::collections::HashMap;
 use std::fmt;
@@ -22,6 +22,14 @@ impl ParameterSet {
             _ => None,
         }
         .map(|x| *x)
+    }
+
+    pub fn extract_f32(&mut self, key: &str) -> Option<f32> {
+        match self.0.remove(key)? {
+            ArgValue::Number(x) => Some(x),
+            ArgValue::Numbers(x) => x.first().copied(),
+            _ => None,
+        }
     }
 
     pub fn lookup_string(&self, key: &str) -> Option<String> {

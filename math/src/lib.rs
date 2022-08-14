@@ -19,6 +19,8 @@ pub mod prob;
 pub mod spline;
 pub use spline::CubicSpline;
 
+pub mod filter;
+
 pub use float::Angle;
 pub fn new_rad(rad: f32) -> float::Angle {
     float::Angle::new_rad(rad)

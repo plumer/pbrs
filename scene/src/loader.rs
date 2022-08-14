@@ -1,8 +1,9 @@
 use core::panic;
+
 use log::{error, info, warn};
-use std::{collections::HashMap, io::Write};
 use std::fs::File;
 use std::sync::Arc;
+use std::{collections::HashMap, io::Write};
 
 use crate::plyloader;
 use geometry::camera::Camera;
@@ -30,6 +31,7 @@ pub struct SceneLoader {
     named_materials: HashMap<String, Arc<dyn Material>>,
     pub instances: Vec<tlas::instance::Instance>,
     pub camera: Option<Camera>,
+    pub filter: math::filter::Filter,
     pub delta_lights: Vec<DeltaLight>,
     pub area_lights: Vec<DiffuseAreaLight>,
     pub env_light: crate::EnvLight,
@@ -68,6 +70,9 @@ impl SceneLoader {
             named_materials: HashMap::new(),
             instances: vec![],
             camera: None,
+            filter: math::filter::Filter::Box {
+                radius: math::filter::UV { u: 0.5, v: 0.5 },
+            },
             delta_lights: vec![],
             area_lights: vec![],
             env_light: crate::EnvLight::Constant(Color::black()),
@@ -80,13 +85,17 @@ impl SceneLoader {
         absolute_path_buf.to_str().unwrap().to_string()
     }
 
-    fn build_camera(scene_options: Vec<ast::SceneWideOption>) -> (Option<Camera>, AffineTransform) {
+    /// Use relevant scene-wide options to build a camera and return it.
+    /// Used scene-wide options will be consumed and others are left untouched in `scene_options`.
+    /// Returns `None` if any of `fov`, `xresolution` or `yresolution` is missing in the options.
+    fn build_camera(scene_options: &mut Vec<ast::SceneWideOption>) -> Option<Camera> {
         let mut fov = None;
         let mut w = None;
         let mut h = None;
         let mut pose = None;
-        let mut world_transform = AffineTransform::identity();
-        for scene_option in scene_options.into_iter() {
+        // Collects unused scene-wide options.
+        let mut remaining_options = vec![];
+        for scene_option in scene_options.drain(..) {
             match scene_option {
                 ast::SceneWideOption::Camera(camera_impl, mut args) => {
                     if camera_impl != "perspective" {
@@ -106,29 +115,43 @@ impl SceneLoader {
                     use ast::Transform;
                     match t {
                         Transform::LookAt(from, target, up) => pose = Some((from, target, up)),
+                        _ => remaining_options.push(ast::SceneWideOption::Transform(t)),
+                    };
+                }
+                _ => remaining_options.push(scene_option),
+            }
+        }
+        // Constructs the camera if all of fov, width, height are present.
+        let ((angle, width), height) = fov.zip(w).zip(h)?;
+        let mut camera = Camera::new((width as u32, height as u32), angle);
+
+        // Performs look-at transform is a pose is parsed from parameters.
+        if let Some((eye, target, up)) = pose {
+            camera.look_at(eye, target, up);
+        }
+        // Unused scene-wide options are returned back to the fn argument.
+        scene_options.extend(remaining_options);
+        Some(camera)
+    }
+
+    fn traverse_tree(&mut self, mut ast: ast::Scene) {
+        self.camera = Self::build_camera(&mut ast.options);
+        let mut world_transform = AffineTransform::identity();
+        for scene_option in ast.options.into_iter() {
+            match scene_option {
+                ast::SceneWideOption::Transform(t) => {
+                    match t {
+                        ast::Transform::LookAt(..) => log::error!("LookAt for non-camera"),
                         _ => world_transform = world_transform * Self::parse_transform(t),
                     };
+                }
+                ast::SceneWideOption::Filter(filter_impl, args) => {
+                    self.filter = Self::parse_filter(filter_impl, args);
                 }
                 _ => error!("unhandled scene-wide option {:?}", scene_option),
             }
         }
-        let mut camera: Camera;
-        match (fov, w, h) {
-            (Some(angle), Some(width), Some(height)) => {
-                camera = Camera::new((width as u32, height as u32), angle);
-            }
-            _ => return (None, world_transform),
-        }
-        match pose {
-            Some((eye, target, up)) => camera.look_at(eye, target, up),
-            _ => (),
-        }
-        (Some(camera), world_transform)
-    }
 
-    fn traverse_tree(&mut self, ast: ast::Scene) {
-        let (camera, world_transform) = Self::build_camera(ast.options);
-        self.camera = camera;
         let items: Vec<ast::WorldItem> = ast.items;
         for world_item in items.into_iter() {
             self.traverse_world_item(world_item);
@@ -355,7 +378,8 @@ impl SceneLoader {
                         .unwrap();
                     Arc::new(subdivided)
                 } else {
-                    let tri_bvh = shape::TriangleMesh::from_soa(points, normals, uvs, index_triples);
+                    let tri_bvh =
+                        shape::TriangleMesh::from_soa(points, normals, uvs, index_triples);
                     info!("Triangle bvh summary: {}", tri_bvh.bvh_shape_summary());
                     Arc::new(tri_bvh)
                 }
@@ -792,6 +816,42 @@ impl SceneLoader {
             Transform::LookAt(..) => panic!("unsupported lookat in modeling step"),
             Transform::CoordSys(name) => unimplemented!("coordsys({name})"),
         }
+    }
+
+    #[allow(non_snake_case)]
+    fn parse_filter(filter_impl: String, mut args: ParameterSet) -> math::filter::Filter {
+        use math::filter::{Filter, UV};
+        let default_radius = match filter_impl.as_str() {
+            "box" => 0.5,
+            "sinc" => 4.0,
+            _ => 2.0,
+        };
+        let xwidth = args.extract_f32("xwidth").unwrap_or(default_radius);
+        let ywidth = args.extract_f32("ywidth").unwrap_or(default_radius);
+        let radius = UV {
+            u: xwidth,
+            v: ywidth,
+        };
+
+        let filter = if filter_impl == "box" {
+            Filter::Box { radius }
+        } else if filter_impl == "gaussian" {
+            let alpha = args.extract_f32("alpha").unwrap_or(2.0);
+            Filter::Gaussian { radius, alpha }
+        } else if filter_impl == "mitchell" {
+            let B = args.extract_f32("B").unwrap_or(1.0 / 3.0);
+            let C = args.extract_f32("C").unwrap_or(1.0 / 3.0);
+            Filter::MitchellNetravali { radius, B, C }
+        } else if filter_impl == "sinc" {
+            let tau = args.extract_f32("tau").unwrap_or(3.0);
+            Filter::LanczosSinc { radius, tau }
+        } else {
+            panic!("Unhandled filter impl: {}", filter_impl)
+        };
+        if !args.0.is_empty() {
+            log::error!("Parameters left for parsing filter: {:?}", args);
+        }
+        filter
     }
 }
 
