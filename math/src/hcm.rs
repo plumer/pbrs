@@ -1,7 +1,8 @@
 use core::convert::TryFrom;
 use std::{
     fmt,
-    ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub}, iter::Sum,
+    iter::Sum,
+    ops::{Add, AddAssign, Div, Index, IndexMut, Mul, Neg, Sub},
 };
 
 pub fn vec3(x: f32, y: f32, z: f32) -> Vec3 {
@@ -32,11 +33,11 @@ pub struct Point3 {
     pub z: f32,
 }
 
-#[deprecated]
+#[deprecated = "use math::Angle instead"]
 #[derive(Debug, Clone, Copy)]
 pub struct Radian(pub f32);
 
-#[deprecated]
+#[deprecated = "use math::Angle instead"]
 #[derive(Debug, Clone, Copy)]
 pub struct Degree(pub f32);
 

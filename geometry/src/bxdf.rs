@@ -142,11 +142,7 @@ impl Omega {
 
     pub fn bisector(w0: Omega, w1: Omega) -> Option<Omega> {
         let mid = w0.0 + w1.0;
-        if mid.is_zero() {
-            None
-        } else {
-            Some(Omega(mid.hat()))
-        }
+        mid.try_hat().map(|v| Omega(v))
     }
 
     /// Flips the direction if it is opposite to the given normal.

@@ -151,9 +151,8 @@ impl Shape for ParallelQuad {
     fn occludes(&self, r: &Ray) -> bool {
         let normal = self.side_u.cross(self.side_v);
         let t = r.dir.dot(normal) / (self.origin - r.origin).dot(normal);
-        let t = match r.truncated_t(t) {
-            None => return false,
-            Some(t) => t,
+        let Some(t) = r.truncated_t(t) else {
+            return false;
         };
         let coarse_hit = r.position_at(t);
         let (a, b, d) = (self.side_u, self.side_v, coarse_hit - self.origin);
@@ -285,8 +284,7 @@ impl Shape for Sphere {
             (c / q, q / a)
         };
         // Keeps only the roots that are within [0, r.t_max).
-        let (root1, root2) = (r.truncated_t(t0), r.truncated_t(t1));
-        root1.is_some() || root2.is_some()
+        r.truncated_t(t0).and(r.truncated_t(t1)).is_some()
     }
 }
 
@@ -477,23 +475,21 @@ pub fn intersect_triangle(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> Option
 }
 
 pub fn intersect_triangle_pred(p0: Point3, p1: Point3, p2: Point3, r: &Ray) -> bool {
-    let normal = match (p0 - p1).cross(p2 - p1).try_hat() {
-        None => return false,
-        Some(n) => n,
+    let Some(normal) = (p0 - p1).cross(p2 - p1).try_hat() else {
+        return false;
     };
     let t = normal.dot(p0 - r.origin) / normal.dot(r.dir);
-    if let Some(t) = r.truncated_t(t) {
-        let p = r.position_at(t);
-        let b0 = (p - p0).cross(p - p1).dot(normal);
-        let b1 = (p - p1).cross(p - p2).dot(normal);
-        let b2 = (p - p2).cross(p - p0).dot(normal);
-        let has_nans = b0.is_nan() || b1.is_nan() || b2.is_nan();
-        assert!(!has_nans);
-        match (b0 > 0.0, b1 > 0.0, b2 > 0.0) {
-            (true, true, true) | (false, false, false) => true,
-            _ => false,
-        }
-    } else {
-        false
+    let Some(t) = r.truncated_t(t) else {
+        return false;
+    } ;
+    let p = r.position_at(t);
+    let b0 = (p - p0).cross(p - p1).dot(normal);
+    let b1 = (p - p1).cross(p - p2).dot(normal);
+    let b2 = (p - p2).cross(p - p0).dot(normal);
+    let has_nans = b0.is_nan() || b1.is_nan() || b2.is_nan();
+    assert!(!has_nans);
+    match (b0 > 0.0, b1 > 0.0, b2 > 0.0) {
+        (true, true, true) | (false, false, false) => true,
+        _ => false,
     }
 }

@@ -56,10 +56,10 @@ impl<'a> BSDF<'a> {
         self.bxdfs.iter().map(|b| b.prob(wo, wi).density()).sum()
     }
 
-    pub fn sample(&self, wo_world: hcm::Vec3, rnd2: (f32, f32)) -> (Color, hcm::Vec3, Prob) {
+    pub fn sample(&self, wo_world: hcm::Vec3, (u, v): (f32, f32)) -> (Color, hcm::Vec3, Prob) {
         // Chooses a bxdf to sample.
         assert_eq!(2.5 as i32, 2);
-        assert_lt!(rnd2.0, 1.0);
+        assert_lt!(u, 1.0);
 
         let wo = self.world_to_local(wo_world);
 
@@ -74,7 +74,6 @@ impl<'a> BSDF<'a> {
         // | <---------- u * n -------+---> |  |
         //                            + chosen +  chosen = floor(u * n)
         //                            |remap|     remapped u = fract(u * n)
-        let (u, v) = rnd2;
         let chosen_index = (u * bxdfs.len() as f32) as usize;
         let remapped_u = (u * bxdfs.len() as f32).fract();
         let rnd2 = (v, remapped_u);

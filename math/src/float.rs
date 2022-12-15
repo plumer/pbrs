@@ -233,7 +233,7 @@ pub struct Angle {
 }
 
 impl Angle {
-    pub fn new_rad(rad: f32) -> Self {
+    pub const fn new_rad(rad: f32) -> Self {
         Angle { radian: rad }
     }
     pub fn new_deg(deg: f32) -> Self {
@@ -246,6 +246,11 @@ impl Angle {
             radian: std::f32::consts::PI,
         }
     }
+    #[allow(non_upper_case_globals)]
+    pub const π: Angle = Angle::new_rad(std::f32::consts::PI);
+    #[allow(non_upper_case_globals)]
+    pub const HALF_π: Angle = Angle::new_rad(std::f32::consts::FRAC_PI_2);
+
     pub fn half_pi() -> Self {
         Self {
             radian: std::f32::consts::FRAC_PI_2,
