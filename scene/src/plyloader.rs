@@ -5,116 +5,10 @@ use std::{
 
 use log::{error, info, warn};
 use math::hcm;
-use ply_rs::ply::*;
 use shape::{TriangleMeshRaw, Vertex};
 
 pub fn load_ply(path: &str) -> TriangleMeshRaw {
     return load_ply_self_housed(path).unwrap();
-}
-
-#[allow(dead_code)]
-pub fn load_ply_external_lib(path: &str) -> TriangleMeshRaw {
-    let mut f = std::fs::File::open(path).unwrap();
-    let vertex_name_set = ["x", "y", "z", "nx", "ny", "nz", "u", "v"]
-        .iter()
-        .copied()
-        .collect::<HashSet<&'static str>>();
-
-    // create a parser
-    let p = ply_rs::parser::Parser::<ply_rs::ply::DefaultElement>::new();
-
-    // use the parser: read the entire file
-    let ply_mesh = p.read_ply(&mut f).unwrap();
-
-    let ref vertices_raw = ply_mesh.payload["vertex"];
-    let mut vertex_data = vec![];
-    for vertex_raw in vertices_raw {
-        let mut vertex = Vertex::zero();
-        if let Property::Float(f) = vertex_raw["x"] {
-            vertex.pos.x = f;
-        } else {
-            panic!("property x not formed correctly: {:?}", vertex_raw["x"]);
-        }
-        if let Property::Float(y) = vertex_raw["y"] {
-            vertex.pos.y = y;
-        }
-        if let Property::Float(z) = vertex_raw["z"] {
-            vertex.pos.z = z;
-        }
-        if let Property::Float(nx) = vertex_raw["nx"] {
-            vertex.normal.x = nx;
-        }
-        if let Property::Float(ny) = vertex_raw["ny"] {
-            vertex.normal.y = ny;
-        }
-        if let Property::Float(nz) = vertex_raw["nz"] {
-            vertex.normal.z = nz;
-        }
-        if vertex_raw.contains_key("u") {
-            if let Property::Float(u) = vertex_raw["u"] {
-                vertex.uv.0 = u;
-            }
-        }
-        if vertex_raw.contains_key("v") {
-            if let Property::Float(v) = vertex_raw["v"] {
-                vertex.uv.1 = v;
-            }
-        }
-
-        if vertex_raw
-            .keys()
-            .any(|k| vertex_name_set.contains(k.as_str()) == false)
-        {
-            eprintln!("unhandled vertex attribute {:?}", vertex_raw);
-        }
-
-        vertex_data.push(vertex);
-    }
-
-    let mut index_triples = vec![];
-    let ref faces_raw = ply_mesh.payload["face"];
-    for face_raw in faces_raw {
-        if let Property::ListInt(indices) = &face_raw["vertex_indices"] {
-            if let [i, j, k] = indices.as_slice() {
-                index_triples.push((*i as usize, *j as usize, *k as usize));
-            } else {
-                eprintln!("face index list not of length 3");
-            }
-        }
-    }
-
-    let points_are_close = |p0: hcm::Point3, p1: hcm::Point3| (p0 - p1).norm_squared() < 1e-6;
-    let vecs_are_close = |v0: hcm::Vec3, v1: hcm::Vec3| (v0 - v1).norm_squared() < 1e-6;
-
-    let self_housed = load_ply_self_housed(path);
-    if let Ok(x) = self_housed {
-        info!("_load_ply ok");
-        assert_eq!(x.index_triples, index_triples, "indices are the same ?");
-        assert_eq!(
-            x.vertices.len(),
-            vertex_data.len(),
-            "vertices are the same length?"
-        );
-        for (id, (vnew, vold)) in x.vertices.iter().zip(vertex_data.iter()).enumerate() {
-            if !points_are_close(vnew.pos, vold.pos) {
-                error!("differ on #{} by position", id);
-            }
-            if !vecs_are_close(vnew.normal, vold.normal) {
-                error!("differ on #{} by normal", id);
-            }
-            if vnew.uv.0 != vold.uv.0 || vnew.uv.1 != vold.uv.1 {
-                error!("differ on #{} by uv", id);
-            }
-        }
-    } else {
-        let e = self_housed.unwrap_err();
-        error!("_load_ply error: {}", e);
-    }
-
-    TriangleMeshRaw {
-        vertices: vertex_data,
-        index_triples,
-    }
 }
 
 fn get_type_size(name: &str) -> Option<usize> {
@@ -361,18 +255,110 @@ fn load_ply_self_housed(path: &str) -> std::io::Result<TriangleMeshRaw> {
             normals = geometry::compute_normals(&positions, &index_triples);
         }
 
-        let vertices: Vec<_> = (0..positions.len())
-            .map(|i| Vertex {
-                pos: positions[i],
-                normal: normals[i],
-                uv: if uvs.is_empty() { (0.0, 0.0) } else { uvs[i] },
-            })
-            .collect();
-        Ok(TriangleMeshRaw {
-            index_triples,
-            vertices,
-        })
-    } else {
-        wrong_data_error!("missing something")
-    }
-}
+
+// #[allow(dead_code)]
+// pub fn load_ply_external_lib(path: &str) -> TriangleMeshRaw {
+//     let mut f = std::fs::File::open(path).unwrap();
+//     let vertex_name_set = ["x", "y", "z", "nx", "ny", "nz", "u", "v"]
+//         .iter()
+//         .copied()
+//         .collect::<HashSet<&'static str>>();
+//     This piece of code is commented out in favor of removing crate `ply-rs`
+//     since it introduces a lot of crates.  However the source code is still
+//     retained in case the in-house implementation is found to be buggy.
+//     // create a parser
+//     let p = ply_rs::parser::Parser::<ply_rs::ply::DefaultElement>::new();
+//
+//     // use the parser: read the entire file
+//     let ply_mesh = p.read_ply(&mut f).unwrap();
+//
+//     let ref vertices_raw = ply_mesh.payload["vertex"];
+//     let mut vertex_data = vec![];
+//     for vertex_raw in vertices_raw {
+//         let mut vertex = Vertex::zero();
+//         if let Property::Float(f) = vertex_raw["x"] {
+//             vertex.pos.x = f;
+//         } else {
+//             panic!("property x not formed correctly: {:?}", vertex_raw["x"]);
+//         }
+//         if let Property::Float(y) = vertex_raw["y"] {
+//             vertex.pos.y = y;
+//         }
+//         if let Property::Float(z) = vertex_raw["z"] {
+//             vertex.pos.z = z;
+//         }
+//         if let Property::Float(nx) = vertex_raw["nx"] {
+//             vertex.normal.x = nx;
+//         }
+//         if let Property::Float(ny) = vertex_raw["ny"] {
+//             vertex.normal.y = ny;
+//         }
+//         if let Property::Float(nz) = vertex_raw["nz"] {
+//             vertex.normal.z = nz;
+//         }
+//         if vertex_raw.contains_key("u") {
+//             if let Property::Float(u) = vertex_raw["u"] {
+//                 vertex.uv.0 = u;
+//             }
+//         }
+//         if vertex_raw.contains_key("v") {
+//             if let Property::Float(v) = vertex_raw["v"] {
+//                 vertex.uv.1 = v;
+//             }
+//         }
+//
+//         if vertex_raw
+//             .keys()
+//             .any(|k| vertex_name_set.contains(k.as_str()) == false)
+//         {
+//             eprintln!("unhandled vertex attribute {:?}", vertex_raw);
+//         }
+//
+//         vertex_data.push(vertex);
+//     }
+//
+//     let mut index_triples = vec![];
+//     let ref faces_raw = ply_mesh.payload["face"];
+//     for face_raw in faces_raw {
+//         if let Property::ListInt(indices) = &face_raw["vertex_indices"] {
+//             if let [i, j, k] = indices.as_slice() {
+//                 index_triples.push((*i as usize, *j as usize, *k as usize));
+//             } else {
+//                 eprintln!("face index list not of length 3");
+//             }
+//         }
+//     }
+//
+//     let points_are_close = |p0: hcm::Point3, p1: hcm::Point3| (p0 - p1).norm_squared() < 1e-6;
+//     let vecs_are_close = |v0: hcm::Vec3, v1: hcm::Vec3| (v0 - v1).norm_squared() < 1e-6;
+//
+//     let self_housed = load_ply_self_housed(path);
+//     if let Ok(x) = self_housed {
+//         info!("_load_ply ok");
+//         assert_eq!(x.index_triples, index_triples, "indices are the same ?");
+//         assert_eq!(
+//             x.vertices.len(),
+//             vertex_data.len(),
+//             "vertices are the same length?"
+//         );
+//         for (id, (vnew, vold)) in x.vertices.iter().zip(vertex_data.iter()).enumerate() {
+//             if !points_are_close(vnew.pos, vold.pos) {
+//                 error!("differ on #{} by position", id);
+//             }
+//             if !vecs_are_close(vnew.normal, vold.normal) {
+//                 error!("differ on #{} by normal", id);
+//             }
+//             if vnew.uv.0 != vold.uv.0 || vnew.uv.1 != vold.uv.1 {
+//                 error!("differ on #{} by uv", id);
+//             }
+//         }
+//     } else {
+//         let e = self_housed.unwrap_err();
+//         error!("_load_ply error: {}", e);
+//     }
+//
+//     TriangleMeshRaw {
+//         vertices: vertex_data,
+//         index_triples,
+//     }
+// }
